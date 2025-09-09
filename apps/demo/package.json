@@ -12,7 +12,11 @@
     "build:staging": "cp .env.staging .env && next build",
     "build:production": "cp .env.production .env && next build",
     "start": "next start -p 3002",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage --coverageReporters='text-summary' --coverageThreshold='{\"global\":{\"branches\":100,\"functions\":100,\"lines\":100,\"statements\":100}}'",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@plinto/sdk": "workspace:*",

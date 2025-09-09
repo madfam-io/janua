@@ -199,9 +199,9 @@ export function PricingSection() {
                   <span className="text-gray-600 dark:text-gray-400 ml-2">
                     /month
                   </span>
-                  {isAnnual && plan.price.monthly > 0 && (
+                  {isAnnual && typeof plan.price.monthly === 'number' && plan.price.monthly > 0 && typeof plan.price.annual === 'number' && (
                     <div className="text-sm text-gray-500 mt-1">
-                      <span className="line-through">${plan.price.monthly}</span>
+                      <span className="line-through">${plan.price.monthly * 12}</span>
                       <span className="ml-2 text-green-600 dark:text-green-400">
                         Save ${(plan.price.monthly - plan.price.annual) * 12}/year
                       </span>

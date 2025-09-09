@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { Menu, X, ArrowRight, ChevronDown } from 'lucide-react'
 import { Button } from '@plinto/ui'
 import Link from 'next/link'
+import Image from 'next/image'
 
 const navigation = [
   {
@@ -64,9 +65,13 @@ export function Navigation() {
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">P</span>
-              </div>
+              <Image 
+                src="/images/plinto-logo.png" 
+                alt="Plinto Logo" 
+                width={32} 
+                height={32}
+                className="w-8 h-8 object-contain"
+              />
               <span className="text-xl font-bold text-gray-900 dark:text-white">
                 Plinto
               </span>

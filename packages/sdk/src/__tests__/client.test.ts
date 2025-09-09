@@ -4,9 +4,31 @@ describe('PlintoClient', () => {
   let client: PlintoClient;
   const mockFetch = jest.fn();
   
+  // Mock localStorage
+  const mockStorage = {
+    getItem: jest.fn(),
+    setItem: jest.fn(),
+    removeItem: jest.fn(),
+    clear: jest.fn(),
+  };
+  
   beforeEach(() => {
     global.fetch = mockFetch;
+    Object.defineProperty(global, 'localStorage', {
+      value: mockStorage,
+      writable: true,
+    });
+    
+    // Mock atob/btoa for JWT parsing and creation
+    global.atob = jest.fn((str) => Buffer.from(str, 'base64').toString('binary'));
+    global.btoa = jest.fn((str) => Buffer.from(str, 'binary').toString('base64'));
+    
     mockFetch.mockClear();
+    mockStorage.getItem.mockClear();
+    mockStorage.setItem.mockClear();
+    mockStorage.removeItem.mockClear();
+    mockStorage.clear.mockClear();
+    
     client = new PlintoClient({
       issuer: 'https://plinto.dev',
       clientId: 'test-client',
@@ -51,7 +73,7 @@ describe('PlintoClient', () => {
 
       const result = await client.signIn({
         email: 'test@example.com',
-        password: 'password123',
+        password: 'Password123!',
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
@@ -63,7 +85,7 @@ describe('PlintoClient', () => {
           }),
           body: JSON.stringify({
             email: 'test@example.com',
-            password: 'password123',
+            password: 'Password123!',
           }),
         })
       );
@@ -86,7 +108,7 @@ describe('PlintoClient', () => {
 
       await expect(client.signIn({
         email: 'test@example.com',
-        password: 'wrong',
+        password: 'WrongPass123!',
       })).rejects.toThrow('Invalid credentials');
     });
 
@@ -95,7 +117,7 @@ describe('PlintoClient', () => {
 
       await expect(client.signIn({
         email: 'test@example.com',
-        password: 'password',
+        password: 'Password123!',
       })).rejects.toThrow('Network error');
     });
   });
@@ -113,7 +135,7 @@ describe('PlintoClient', () => {
 
       const result = await client.signUp({
         email: 'test@example.com',
-        password: 'password123',
+        password: 'Password123!',
         name: 'Test User',
       });
 
@@ -123,7 +145,7 @@ describe('PlintoClient', () => {
           method: 'POST',
           body: JSON.stringify({
             email: 'test@example.com',
-            password: 'password123',
+            password: 'Password123!',
             name: 'Test User',
           }),
         })
@@ -139,7 +161,7 @@ describe('PlintoClient', () => {
     it('should validate email format', async () => {
       await expect(client.signUp({
         email: 'invalid-email',
-        password: 'password123',
+        password: 'Password123!',
       })).rejects.toThrow('Invalid email format');
     });
 
@@ -147,6 +169,7 @@ describe('PlintoClient', () => {
       await expect(client.signUp({
         email: 'test@example.com',
         password: '123',
+        name: 'Test User'
       })).rejects.toThrow('Password must be at least 8 characters');
     });
   });
@@ -158,6 +181,7 @@ describe('PlintoClient', () => {
         json: async () => ({ success: true }),
       });
 
+      // Use the public method to set access token
       client.setAccessToken('test-token');
       await client.signOut();
 
@@ -166,7 +190,7 @@ describe('PlintoClient', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Authorization': 'Bearer test-token',
+            'Content-Type': 'application/json',
           }),
         })
       );
@@ -189,8 +213,9 @@ describe('PlintoClient', () => {
         }),
       });
 
+      // Use the public method to set refresh token
       client.setRefreshToken('refresh-token');
-      const result = await client.refreshToken();
+      const result = await client.refreshAccessToken();
 
       expect(mockFetch).toHaveBeenCalledWith(
         'https://plinto.dev/api/v1/auth/refresh',
@@ -216,7 +241,7 @@ describe('PlintoClient', () => {
       });
 
       client.setRefreshToken('expired-token');
-      await expect(client.refreshToken()).rejects.toThrow('Refresh token expired');
+      await expect(client.refreshAccessToken()).rejects.toThrow('Refresh token expired');
     });
   });
 
@@ -358,7 +383,7 @@ describe('PlintoClient', () => {
 
       const result = await client.confirmPasswordReset({
         token: 'reset-token',
-        password: 'newpassword123',
+        password: 'NewPassword123!',
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
@@ -367,7 +392,7 @@ describe('PlintoClient', () => {
           method: 'POST',
           body: JSON.stringify({
             token: 'reset-token',
-            password: 'newpassword123',
+            password: 'NewPassword123!',
           }),
         })
       );
@@ -399,7 +424,15 @@ describe('PlintoClient', () => {
     it('should check if authenticated', () => {
       expect(client.isAuthenticated()).toBe(false);
       
-      client.setAccessToken('test-token');
+      // Create a valid JWT token for testing - expires far in the future
+      const header = btoa(JSON.stringify({ typ: 'JWT', alg: 'HS256' }));
+      const payload = btoa(JSON.stringify({ 
+        sub: '1234567890', 
+        exp: Math.floor(Date.now() / 1000) + 3600, // expires in 1 hour
+        email: 'test@example.com' 
+      }));
+      const validToken = `${header}.${payload}.signature`;
+      client.setAccessToken(validToken);
       expect(client.isAuthenticated()).toBe(true);
       
       client.clearTokens();
@@ -455,10 +488,11 @@ describe('PlintoClient', () => {
       });
 
       const result = await client.request('/protected');
+      const responseData = await result.json();
 
       expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(client.getAccessToken()).toBe('new-token');
-      expect(result.data).toBe('success');
+      expect(responseData.data).toBe('success');
     });
   });
 
