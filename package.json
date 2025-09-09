@@ -17,6 +17,7 @@
     "build:frontend": "turbo run build --filter='./apps/*'",
     "build:packages": "turbo run build --filter='./packages/*'",
     "start": "turbo run start",
+    "start:prod": "yarn workspace @plinto/marketing start",
     "test": "jest --coverage --maxWorkers=50%",
     "test:all": "yarn test:unit && yarn test:integration && yarn test:e2e",
     "test:unit": "jest --testPathPattern='.*/src/.*\\.test\\.(ts|tsx)$' --coverage",

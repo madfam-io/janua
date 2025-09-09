@@ -30,9 +30,9 @@ const localStorageMock = {
 Object.defineProperty(window, 'localStorage', { value: localStorageMock })
 
 const mockConfig = {
-  issuer: 'https://test.plinto.dev',
-  clientId: 'test-client-id',
-  redirectUri: 'http://localhost:3000/callback',
+  apiKey: 'test-key',
+  tenantId: 'test-tenant',
+  baseUrl: 'https://api.plinto.dev'
 }
 
 const mockUser = {

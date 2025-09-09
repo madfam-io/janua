@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SignIn } from '../components/SignIn';
-import { PlintoProvider } from '../context/PlintoContext';
+import { PlintoProvider } from '../provider';
 
 const mockSignIn = jest.fn();
 const mockRouter = {
@@ -29,7 +29,11 @@ describe('SignIn Component', () => {
 
   const renderSignIn = (props = {}) => {
     return render(
-      <PlintoProvider issuer="https://plinto.dev" clientId="test">
+      <PlintoProvider config={{ 
+        apiKey: 'test-key',
+        tenantId: 'test-tenant',
+        baseUrl: 'https://api.plinto.dev' 
+      }}>
         <SignIn {...props} />
       </PlintoProvider>
     );

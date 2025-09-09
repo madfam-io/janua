@@ -25,6 +25,7 @@
 * **[Documentation Hub](./docs/)** - All project documentation
   * **[Technical Docs](./docs/technical/)** - Architecture, codebase analysis, project structure
   * **[Deployment Guides](./docs/deployment/)** - Vercel setup, deployment instructions
+  * **[Operations](./docs/operations/)** - Production readiness, Railway deployment, monitoring
   * **[API Reference](./docs/api/)** - API specifications and endpoints
   * **[Guides](./docs/guides/)** - Tutorials and how-to guides
 
