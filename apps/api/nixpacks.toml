@@ -1,0 +1,12 @@
+# Nixpacks configuration for FastAPI deployment
+[phases.setup]
+nixPkgs = ["python311", "postgresql15"]
+
+[phases.install]
+cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]
+
+[phases.build]
+# No build step needed for Python API
+
+[start]
+cmd = "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
