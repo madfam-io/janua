@@ -1,0 +1,26 @@
+# Railway deployment configuration for Plinto API
+
+[build]
+builder = "nixpacks"
+buildCommand = "pip install -r requirements.txt"
+
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "always"
+
+[[services]]
+name = "plinto-api"
+type = "web"
+
+[[services.domains]]
+domain = "plinto-api.railway.app"
+
+[services.envs]
+ENVIRONMENT = "production"
+JWT_ISSUER = "https://plinto.dev"
+JWT_AUDIENCE = "plinto.dev"
+CORS_ORIGINS = '["https://plinto.dev","https://app.plinto.dev","https://admin.plinto.dev"]'
+COOKIE_DOMAIN = ".plinto.dev"
+SECURE_COOKIES = "true"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -20,7 +20,7 @@ import { IdentityList } from '@/components/identities/identity-list'
 import { SessionList } from '@/components/sessions/session-list'
 import { OrganizationList } from '@/components/organizations/organization-list'
 
-export default function AdminDashboard() {
+export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('overview')
 
   return (
@@ -32,9 +32,9 @@ export default function AdminDashboard() {
             <div className="flex items-center space-x-4">
               <Shield className="h-8 w-8 text-primary" />
               <div>
-                <h1 className="text-2xl font-bold">Plinto Admin</h1>
+                <h1 className="text-2xl font-bold">Plinto Dashboard</h1>
                 <p className="text-sm text-muted-foreground">
-                  Identity Platform Management
+                  Manage your identity platform
                 </p>
               </div>
             </div>
