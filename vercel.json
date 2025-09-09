@@ -3,8 +3,10 @@
   "outputDirectory": "apps/marketing/.next",
   "installCommand": "yarn install --frozen-lockfile",
   "framework": "nextjs",
-  "github": {
-    "enabled": true
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
   },
   "functions": {
     "pages/api/**/*.js": {
