@@ -58,9 +58,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Configure allowed hosts - be permissive for Railway health checks
+if settings.ENVIRONMENT == "production":
+    # In production, allow Railway patterns but be permissive for health checks
+    allowed_hosts = ["*"]  # Railway health checks come from internal IPs
+else:
+    # For development
+    allowed_hosts = ["localhost", "127.0.0.1", ".plinto.dev", "*"]
+
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", ".plinto.dev"]
+    allowed_hosts=allowed_hosts
 )
 
 
