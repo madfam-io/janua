@@ -60,9 +60,9 @@ class Settings(BaseSettings):
     PASSWORD_REQUIRE_SPECIAL: bool = Field(default=True)
     
     # CORS
-    CORS_ORIGINS: List[str] = Field(
-        default_factory=lambda: ["http://localhost:3000", "https://plinto.dev"],
-        description="Comma-separated list of allowed CORS origins"
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:3000,https://plinto.dev",
+        description="Comma-separated string or JSON array of allowed CORS origins"
     )
     
     # Rate limiting
@@ -122,19 +122,23 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be changed in production")
         return v
     
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        if isinstance(v, str):
-            # Handle empty string
-            if not v.strip():
-                return ["http://localhost:3000", "https://plinto.dev"]
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        elif isinstance(v, list):
-            return v
-        else:
-            # Fallback for any other type
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Parse CORS origins from string to list, handling both JSON and comma-separated formats"""
+        import json
+        
+        if not self.CORS_ORIGINS.strip():
             return ["http://localhost:3000", "https://plinto.dev"]
+        
+        # Try to parse as JSON first (for backwards compatibility)
+        if self.CORS_ORIGINS.strip().startswith('['):
+            try:
+                return json.loads(self.CORS_ORIGINS)
+            except json.JSONDecodeError:
+                pass
+        
+        # Parse as comma-separated string
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
     
     @property
     def service_url(self) -> str:
