@@ -307,10 +307,10 @@ export class PlintoClient {
   ): Promise<T> {
     const url = `${this.config.baseUrl}${path}`
     
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      ...options.headers
+      ...(options.headers as Record<string, string> || {})
     }
 
     // Add API key if provided
