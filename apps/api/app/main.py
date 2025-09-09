@@ -136,24 +136,16 @@ async def ready_check():
 
 
 # JWKS endpoint
-@app.get("/.well-known/jwks.json")
-async def get_jwks():
+@app.get("/.well-known/jwks.json")  
+def get_jwks_sync():
     """Return JSON Web Key Set for token verification"""
-    try:
-        # Return empty JWKS until proper JWT key management is implemented
-        # This maintains OpenID Connect compliance without requiring complex JWT setup
-        return {
-            "keys": []
-        }
-    except Exception:
-        # Fallback response to prevent any errors
-        return {"keys": []}
+    return {"keys": []}
 
 
 # OpenID Configuration
 @app.get("/.well-known/openid-configuration")
 async def get_openid_configuration():
-    base_url = settings.BASE_URL
+    base_url = settings.BASE_URL or "https://api.plinto.dev"
     return {
         "issuer": settings.JWT_ISSUER,
         "authorization_endpoint": f"{base_url}/auth/authorize",
