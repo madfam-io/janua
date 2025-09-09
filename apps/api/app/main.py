@@ -9,8 +9,7 @@ import structlog
 import time
 
 from app.config import settings
-# Temporarily disabled for debugging
-# from app.auth.router import router as auth_router
+from app.auth.router import router as auth_router
 from app.core.database import init_db
 from app.core.redis import init_redis
 from app.core.errors import (
@@ -135,11 +134,12 @@ async def ready_check():
     return checks
 
 
-# JWKS endpoint
-@app.get("/.well-known/jwks.json")  
-def get_jwks_sync():
-    """Return JSON Web Key Set for token verification"""
-    return {"keys": []}
+# JWKS endpoint - temporarily removed due to import issues
+# TODO: Implement proper JWT key management
+# @app.get("/.well-known/jwks.json")  
+# def get_jwks_sync():
+#     """Return JSON Web Key Set for token verification"""
+#     return {"keys": []}
 
 
 # OpenID Configuration
@@ -161,8 +161,8 @@ async def get_openid_configuration():
     }
 
 
-# Include routers - temporarily disabled for debugging
-# app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+# Include routers
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 
 
 # Register error handlers
