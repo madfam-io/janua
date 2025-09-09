@@ -39,6 +39,9 @@ export interface User {
   metadata?: Record<string, any>;
 }
 
+// Alias for backward compatibility and clarity
+export type Identity = User;
+
 export interface SignInCredentials {
   email: string;
   password: string;
@@ -80,6 +83,7 @@ export interface UpdateUserRequest {
 export interface Session {
   id: string;
   user_id: string;
+  organization_id?: string;
   created_at: string;
   last_active: string;
   expires_at: string;

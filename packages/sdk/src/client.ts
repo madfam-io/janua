@@ -204,6 +204,10 @@ export class PlintoClient implements PlintoEventEmitter {
     return user;
   }
 
+  async getCurrentUser(): Promise<User> {
+    return this.getUser();
+  }
+
   async updateUser(data: UpdateUserRequest): Promise<User> {
     if (!this.accessToken) {
       throw this.createError('Authentication required');

@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { PlintoClient, type PlintoConfig, type Identity, type Session } from '@plinto/sdk'
+import { PlintoClient, type PlintoConfig, type User, type Session } from '@plinto/sdk'
 
 interface PlintoContextValue {
   client: PlintoClient
-  identity: Identity | null
+  user: User | null
   session: Session | null
   isLoading: boolean
   isAuthenticated: boolean
@@ -20,7 +20,7 @@ export interface PlintoProviderProps {
 
 export function PlintoProvider({ children, config }: PlintoProviderProps) {
   const [client] = useState(() => new PlintoClient(config))
-  const [identity, setIdentity] = useState<Identity | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -29,11 +29,11 @@ export function PlintoProvider({ children, config }: PlintoProviderProps) {
       try {
         const token = localStorage.getItem('plinto_access_token')
         if (token) {
-          const currentSession = await client.sessions.current(token)
-          setSession(currentSession)
-          if (currentSession.identity_id) {
-            const currentIdentity = await client.identities.get(currentSession.identity_id)
-            setIdentity(currentIdentity)
+          const currentUser = await client.getCurrentUser()
+          if (currentUser) {
+            setUser(currentUser)
+            // Session management will be handled by the client internally
+            // setSession(currentSession) // We'll handle this when session API is ready
           }
         }
       } catch (error) {
@@ -49,38 +49,35 @@ export function PlintoProvider({ children, config }: PlintoProviderProps) {
   }, [client])
 
   const signIn = async (email: string, password: string) => {
-    const newSession = await client.sessions.create({ email, password })
-    setSession(newSession)
+    const tokens = await client.signIn({ email, password })
     
-    if (newSession.access_token) {
-      localStorage.setItem('plinto_access_token', newSession.access_token)
+    if (tokens.access_token) {
+      localStorage.setItem('plinto_access_token', tokens.access_token)
     }
-    if (newSession.refresh_token) {
-      localStorage.setItem('plinto_refresh_token', newSession.refresh_token)
+    if (tokens.refresh_token) {
+      localStorage.setItem('plinto_refresh_token', tokens.refresh_token)
     }
     
-    if (newSession.identity_id) {
-      const currentIdentity = await client.identities.get(newSession.identity_id)
-      setIdentity(currentIdentity)
+    const currentUser = await client.getCurrentUser()
+    if (currentUser) {
+      setUser(currentUser)
     }
   }
 
   const signOut = async () => {
-    if (session?.id) {
-      await client.sessions.revoke(session.id)
-    }
+    await client.signOut()
     setSession(null)
-    setIdentity(null)
+    setUser(null)
     localStorage.removeItem('plinto_access_token')
     localStorage.removeItem('plinto_refresh_token')
   }
 
   const value: PlintoContextValue = {
     client,
-    identity,
+    user,
     session,
     isLoading,
-    isAuthenticated: !!session && !!identity,
+    isAuthenticated: !!user,
     signIn,
     signOut,
   }

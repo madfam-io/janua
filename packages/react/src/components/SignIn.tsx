@@ -46,8 +46,27 @@ export function SignIn({
   }
 
   const handlePasskeySignIn = async () => {
-    // TODO: Implement WebAuthn/Passkey authentication
-    console.log('Passkey authentication not yet implemented')
+    try {
+      setError(null)
+      
+      // Authenticate with passkey using the Plinto SDK
+      await client.signInWithPasskey()
+      
+      if (onSuccess) {
+        onSuccess()
+      }
+      
+      if (redirectTo && typeof window !== 'undefined') {
+        window.location.href = redirectTo
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Passkey authentication failed'
+      setError(errorMessage)
+      
+      if (onError) {
+        onError(err instanceof Error ? err : new Error(errorMessage))
+      }
+    }
   }
 
   return (

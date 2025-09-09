@@ -1,0 +1,46 @@
+{
+  "name": "plinto-dashboard",
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && yarn build --filter=@plinto/dashboard",
+  "outputDirectory": "apps/dashboard/.next",
+  "installCommand": "yarn install",
+  "env": {
+    "NEXT_PUBLIC_PLINTO_ISSUER": "https://plinto.dev",
+    "NEXT_PUBLIC_PLINTO_API_URL": "https://api.plinto.dev",
+    "NEXT_PUBLIC_ENVIRONMENT": "production"
+  },
+  "rewrites": [
+    {
+      "source": "/api/v1/(.*)",
+      "destination": "https://api.plinto.dev/api/v1/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        }
+      ]
+    }
+  ]
+}

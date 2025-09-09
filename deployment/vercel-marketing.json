@@ -1,0 +1,59 @@
+{
+  "name": "plinto-marketing",
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && yarn build --filter=@plinto/marketing",
+  "outputDirectory": "apps/marketing/.next",
+  "installCommand": "yarn install",
+  "env": {
+    "NEXT_PUBLIC_PLINTO_ISSUER": "https://plinto.dev",
+    "NEXT_PUBLIC_PLINTO_API_URL": "https://api.plinto.dev",
+    "NEXT_PUBLIC_ENVIRONMENT": "production"
+  },
+  "rewrites": [
+    {
+      "source": "/api/v1/(.*)",
+      "destination": "https://api.plinto.dev/api/v1/$1"
+    },
+    {
+      "source": "/.well-known/(.*)",
+      "destination": "https://api.plinto.dev/.well-known/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        }
+      ]
+    },
+    {
+      "source": "/.well-known/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=300, s-maxage=600"
+        }
+      ]
+    }
+  ]
+}

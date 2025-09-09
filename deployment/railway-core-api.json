@@ -1,0 +1,30 @@
+{
+  "name": "plinto-core-api",
+  "source": "apps/api",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "uvicorn main:app --host 0.0.0.0 --port $PORT",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300
+  },
+  "variables": {
+    "PORT": "8000",
+    "PLINTO_ENV": "production",
+    "JWT_AUDIENCE": "plinto.dev",
+    "JWT_ISSUER": "https://plinto.dev",
+    "COOKIE_DOMAIN": "plinto.dev",
+    "CORS_ORIGINS": "https://plinto.dev,https://app.plinto.dev,https://demo.plinto.dev,https://docs.plinto.dev,https://admin.plinto.dev"
+  },
+  "domains": [
+    {
+      "domain": "api.plinto.dev"
+    }
+  ],
+  "networking": {
+    "serviceName": "plinto-core-api",
+    "internalPort": 8000
+  }
+}

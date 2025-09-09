@@ -16,12 +16,12 @@ export function UserProfile({
   showSessions = false,
   allowEdit = true
 }: UserProfileProps) {
-  const { identity, session, signOut, isLoading } = usePlinto()
+  const { user, session, signOut, isLoading } = usePlinto()
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({
-    firstName: identity?.firstName || '',
-    lastName: identity?.lastName || '',
-    email: identity?.email || ''
+    firstName: user?.given_name || '',
+    lastName: user?.family_name || '',
+    email: user?.email || ''
   })
 
   const handleSignOut = async () => {
@@ -32,12 +32,31 @@ export function UserProfile({
   }
 
   const handleSave = async () => {
-    // TODO: Implement profile update
-    console.log('Profile update not yet implemented', formData)
-    setIsEditing(false)
+    try {
+      // Update user profile using the Plinto SDK
+      await client.updateUser({
+        given_name: formData.firstName,
+        family_name: formData.lastName,
+        name: `${formData.firstName} ${formData.lastName}`.trim()
+      })
+      
+      // Refresh user data
+      const updatedUser = await client.getCurrentUser()
+      if (updatedUser) {
+        setFormData({
+          firstName: updatedUser.given_name || '',
+          lastName: updatedUser.family_name || '',
+          email: updatedUser.email || ''
+        })
+      }
+      
+      setIsEditing(false)
+    } catch (error) {
+      console.error('Failed to update profile:', error)
+    }
   }
 
-  if (!identity || !session) {
+  if (!user) {
     return (
       <div className={`plinto-user-profile ${className}`}>
         <p className="text-gray-500">Not authenticated</p>
@@ -112,24 +131,24 @@ export function UserProfile({
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Name</h3>
                 <p className="mt-1 text-sm text-gray-900">
-                  {identity.firstName} {identity.lastName}
+                  {user.given_name || user.name} {user.family_name || ''}
                 </p>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Email</h3>
-                <p className="mt-1 text-sm text-gray-900">{identity.email}</p>
+                <p className="mt-1 text-sm text-gray-900">{user.email}</p>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-gray-500">User ID</h3>
-                <p className="mt-1 text-sm text-gray-900 font-mono">{identity.id}</p>
+                <p className="mt-1 text-sm text-gray-900 font-mono">{user.id}</p>
               </div>
-              {showOrganization && session.organization_id && (
+              {showOrganization && session?.organization_id && (
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Organization</h3>
                   <p className="mt-1 text-sm text-gray-900">{session.organization_id}</p>
                 </div>
               )}
-              {showSessions && (
+              {showSessions && session && (
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Current Session</h3>
                   <p className="mt-1 text-sm text-gray-900 font-mono">{session.id}</p>

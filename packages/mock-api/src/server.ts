@@ -14,10 +14,32 @@ import { authenticateToken } from './middleware/auth';
 const app: Express = express();
 const PORT = process.env.PORT || 8000;
 
-// Middleware
+// CORS configuration - restrict to specific origins for security
+const allowedOrigins = [
+  'http://localhost:3000', // marketing
+  'http://localhost:3001', // dashboard
+  'http://localhost:3002', // demo
+  'http://localhost:3003', // docs
+  'http://localhost:3004', // admin
+  'http://localhost:3005', // auth (if restored)
+  'https://plinto.dev',    // production
+];
+
 app.use(cors({
-  origin: true,
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['X-Total-Count', 'X-Page-Count']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

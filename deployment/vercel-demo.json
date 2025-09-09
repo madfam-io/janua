@@ -1,0 +1,42 @@
+{
+  "name": "plinto-demo",
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && yarn build --filter=@plinto/demo",
+  "outputDirectory": "apps/demo/.next",
+  "installCommand": "yarn install",
+  "env": {
+    "NEXT_PUBLIC_PLINTO_ISSUER": "https://demo.plinto.dev",
+    "NEXT_PUBLIC_PLINTO_API_URL": "https://demo-api.plinto.dev",
+    "NEXT_PUBLIC_ENVIRONMENT": "demo"
+  },
+  "rewrites": [
+    {
+      "source": "/api/v1/(.*)",
+      "destination": "https://demo-api.plinto.dev/api/v1/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
+      ]
+    }
+  ]
+}

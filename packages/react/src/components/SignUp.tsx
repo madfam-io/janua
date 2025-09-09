@@ -38,14 +38,14 @@ export function SignUp({
     setError(null)
 
     try {
-      // TODO: Implement actual signup with Plinto SDK
-      // const { user } = await client.auth.signUp({
-      //   email: formData.email,
-      //   password: formData.password,
-      //   firstName: formData.firstName,
-      //   lastName: formData.lastName,
-      //   organizationName: requireOrganization ? formData.organizationName : undefined
-      // })
+      // Sign up the user with the Plinto SDK
+      await client.signUp({
+        email: formData.email,
+        password: formData.password,
+        given_name: formData.firstName,
+        family_name: formData.lastName,
+        name: `${formData.firstName} ${formData.lastName}`.trim()
+      })
 
       // If email verification is not required, sign in immediately
       if (!requireEmailVerification) {

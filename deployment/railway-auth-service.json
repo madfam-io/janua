@@ -1,0 +1,28 @@
+{
+  "name": "plinto-auth-service",
+  "source": "apps/auth-service",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "uvicorn main:app --host 0.0.0.0 --port $PORT",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300
+  },
+  "variables": {
+    "PORT": "8001",
+    "PLINTO_ENV": "production",
+    "JWT_AUDIENCE": "plinto.dev",
+    "JWT_ISSUER": "https://plinto.dev"
+  },
+  "domains": [
+    {
+      "domain": "auth.plinto.dev"
+    }
+  ],
+  "networking": {
+    "serviceName": "plinto-auth-service",
+    "internalPort": 8001
+  }
+}
