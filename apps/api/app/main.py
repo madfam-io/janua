@@ -91,7 +91,12 @@ async def health_check():
     }
 
 
-# Simple test endpoint for debugging JSON parsing
+# Test endpoints for debugging
+@app.get("/test")
+async def test_endpoint():
+    """Simple test endpoint to verify routing works"""
+    return {"status": "test endpoint working", "auth_router_included": True}
+
 @app.post("/test-json")
 async def test_json(data: dict):
     """Simple test endpoint to verify JSON parsing works"""
@@ -134,18 +139,24 @@ async def ready_check():
     return checks
 
 
-# JWKS endpoint - temporarily removed due to import issues
-# TODO: Implement proper JWT key management
-# @app.get("/.well-known/jwks.json")  
-# def get_jwks_sync():
-#     """Return JSON Web Key Set for token verification"""
-#     return {"keys": []}
+# JWKS endpoint - simplified implementation
+@app.get("/.well-known/jwks.json")  
+def get_jwks():
+    """Return JSON Web Key Set for token verification"""
+    # Return empty JWKS for now - this is valid according to RFC 7517
+    # In a real implementation, this would contain public keys for JWT verification
+    return {"keys": []}
 
 
 # OpenID Configuration
 @app.get("/.well-known/openid-configuration")
 async def get_openid_configuration():
-    base_url = settings.BASE_URL or "https://api.plinto.dev"
+    # Ensure proper BASE_URL with multiple fallbacks
+    base_url = settings.BASE_URL
+    if not base_url or base_url.strip() == "":
+        base_url = "https://api.plinto.dev"
+    # Remove trailing slash if present
+    base_url = base_url.rstrip("/")
     return {
         "issuer": settings.JWT_ISSUER,
         "authorization_endpoint": f"{base_url}/auth/authorize",
