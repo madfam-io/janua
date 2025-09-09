@@ -118,7 +118,10 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY", mode="before")
     @classmethod
     def validate_secret_key(cls, v):
-        if v == "change-this-in-production":
+        # Only validate in production environment
+        import os
+        environment = os.getenv("ENVIRONMENT", "development")
+        if environment == "production" and v == "change-this-in-production":
             raise ValueError("SECRET_KEY must be changed in production")
         return v
     
