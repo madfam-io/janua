@@ -46,6 +46,23 @@ class UserResponse(BaseModel):
     updated_at: str
 
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(..., description="Refresh token")
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(..., description="Verification token")
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., description="Reset token")
+    new_password: str = Field(..., min_length=8)
+
+
 # Auth endpoints
 @router.post("/signup", response_model=UserResponse)
 async def signup(
@@ -197,7 +214,7 @@ async def signout(
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
-    refresh_token: str = Field(..., description="Refresh token"),
+    request: RefreshTokenRequest,
     redis=Depends(get_redis)
 ):
     """Refresh access token using refresh token"""
@@ -239,7 +256,7 @@ async def get_current_user(
 
 @router.post("/verify-email")
 async def verify_email(
-    token: str = Field(..., description="Verification token"),
+    request: VerifyEmailRequest,
     db=Depends(get_db)
 ):
     """Verify email address with token"""
@@ -253,14 +270,14 @@ async def verify_email(
 
 @router.post("/forgot-password")
 async def forgot_password(
-    email: EmailStr,
+    request: ForgotPasswordRequest,
     redis=Depends(get_redis)
 ):
     """Request password reset"""
     # Check rate limit
     limiter = RateLimiter(redis)
     allowed, remaining = await limiter.check_rate_limit(
-        f"forgot_password:{email}",
+        f"forgot_password:{request.email}",
         limit=3,
         window=3600  # 3 requests per hour
     )
@@ -281,8 +298,7 @@ async def forgot_password(
 
 @router.post("/reset-password")
 async def reset_password(
-    token: str = Field(..., description="Reset token"),
-    new_password: str = Field(..., min_length=8),
+    request: ResetPasswordRequest,
     db=Depends(get_db)
 ):
     """Reset password with token"""
