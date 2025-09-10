@@ -16,7 +16,7 @@ export function SignIn({
   redirectTo,
   enablePasskeys = true 
 }: SignInProps) {
-  const { signIn, isLoading } = usePlinto()
+  const { signIn, isLoading, client } = usePlinto()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)

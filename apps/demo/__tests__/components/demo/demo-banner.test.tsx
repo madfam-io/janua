@@ -3,12 +3,15 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { DemoBanner } from '@/components/demo/demo-banner'
 
 // Mock framer-motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: (props) => React.createElement('div', props, props.children),
-  },
-  AnimatePresence: (props) => props.children,
-}))
+jest.mock('framer-motion', () => {
+  const React = require('react');
+  return {
+    motion: {
+      div: (props) => React.createElement('div', props, props.children),
+    },
+    AnimatePresence: (props) => props.children,
+  };
+})
 
 // Mock the useEnvironment hook
 jest.mock('@/hooks/useEnvironment', () => ({
@@ -16,16 +19,22 @@ jest.mock('@/hooks/useEnvironment', () => ({
 }))
 
 // Mock @plinto/ui components
-jest.mock('@plinto/ui', () => ({
-  Button: (props) => React.createElement('button', props, props.children),
-}))
+jest.mock('@plinto/ui', () => {
+  const React = require('react');
+  return {
+    Button: (props) => React.createElement('button', props, props.children),
+  };
+})
 
 // Mock lucide-react icons
-jest.mock('lucide-react', () => ({
-  X: (props) => React.createElement('span', { ...props, 'data-testid': 'x-icon' }),
-  Info: (props) => React.createElement('span', { ...props, 'data-testid': 'info-icon' }),
-  ExternalLink: (props) => React.createElement('span', { ...props, 'data-testid': 'external-link-icon' }),
-}))
+jest.mock('lucide-react', () => {
+  const React = require('react');
+  return {
+    X: (props) => React.createElement('span', { ...props, 'data-testid': 'x-icon' }),
+    Info: (props) => React.createElement('span', { ...props, 'data-testid': 'info-icon' }),
+    ExternalLink: (props) => React.createElement('span', { ...props, 'data-testid': 'external-link-icon' }),
+  };
+})
 
 const mockUseEnvironment = require('@/hooks/useEnvironment').useEnvironment
 

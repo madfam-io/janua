@@ -1,1 +1,1 @@
-# Core unit tests package
+# Core unit tests packageimport pytest_asyncio

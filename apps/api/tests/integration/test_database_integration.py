@@ -14,7 +14,7 @@ from app.core.database import init_db, get_db, engine
 class TestDatabaseIntegration:
     """Test database integration scenarios."""
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_database_connection_lifecycle(self):
         """Test complete database connection lifecycle."""
         # Test initialization
@@ -28,7 +28,7 @@ class TestDatabaseIntegration:
             mock_engine.connect.assert_called_once()
             mock_conn.execute.assert_called_once()
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_session_dependency_injection(self, test_db_session: AsyncSession):
         """Test database session dependency injection."""
         # Test that we can get a session
@@ -40,7 +40,7 @@ class TestDatabaseIntegration:
         row = result.fetchone()
         assert row.test == 1
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_transaction_rollback(self, test_db_session: AsyncSession):
         """Test transaction rollback behavior."""
         # Start a transaction
@@ -62,7 +62,7 @@ class TestDatabaseIntegration:
         row = result.fetchone()
         assert row.test == 2
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_concurrent_database_access(self, test_db_session: AsyncSession):
         """Test concurrent database access."""
         import asyncio
@@ -87,7 +87,7 @@ class TestDatabaseIntegration:
 class TestDatabaseErrorHandling:
     """Test database error handling scenarios."""
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_connection_error_handling(self):
         """Test database connection error handling."""
         with patch('app.core.database.engine') as mock_engine:
@@ -96,14 +96,14 @@ class TestDatabaseErrorHandling:
             with pytest.raises(Exception, match="Connection failed"):
                 await init_db()
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_query_error_handling(self, test_db_session: AsyncSession):
         """Test database query error handling."""
         with pytest.raises(Exception):
             # This should raise an error due to invalid SQL
             await test_db_session.execute(text("INVALID SQL QUERY"))
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_session_cleanup_on_error(self, test_db_session: AsyncSession):
         """Test that sessions are properly cleaned up after errors."""
         try:
@@ -128,7 +128,7 @@ class TestDatabaseErrorHandling:
 class TestDatabasePerformance:
     """Test database performance scenarios."""
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_query_performance(self, test_db_session: AsyncSession):
         """Test basic query performance."""
         import time
@@ -144,7 +144,7 @@ class TestDatabasePerformance:
         assert row.test == 1
         assert (end_time - start_time) < 1.0  # Should complete within 1 second
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_multiple_queries_performance(self, test_db_session: AsyncSession):
         """Test performance of multiple sequential queries."""
         import time
@@ -166,7 +166,7 @@ class TestDatabasePerformance:
 class TestDatabaseConfiguration:
     """Test database configuration scenarios."""
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_database_settings_integration(self):
         """Test database settings integration."""
         from app.config import get_settings
@@ -180,7 +180,7 @@ class TestDatabaseConfiguration:
         # For testing, should be using test database
         assert "test" in settings.DATABASE_URL.lower() or "sqlite" in settings.DATABASE_URL.lower()
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_engine_configuration(self):
         """Test database engine configuration."""
         from app.core.database import engine
@@ -196,7 +196,7 @@ class TestDatabaseConfiguration:
 class TestDatabaseMigrations:
     """Test database migration scenarios."""
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_schema_creation(self, test_db_session: AsyncSession):
         """Test basic schema operations."""
         # Test creating a temporary table
@@ -223,7 +223,7 @@ class TestDatabaseMigrations:
         
         await test_db_session.commit()
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_data_types_support(self, test_db_session: AsyncSession):
         """Test support for various data types."""
         # Create temporary table with various data types
@@ -259,7 +259,7 @@ class TestDatabaseMigrations:
 class TestDatabaseSecurity:
     """Test database security scenarios."""
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_sql_injection_protection(self, test_db_session: AsyncSession):
         """Test protection against SQL injection."""
         # Create temporary table
@@ -297,7 +297,7 @@ class TestDatabaseSecurity:
         
         await test_db_session.commit()
     
-    @pytest.mark.asyncio
+    @pytest_asyncio.fixture
     async def test_connection_string_security(self):
         """Test that connection strings don't expose sensitive information."""
         from app.core.database import engine

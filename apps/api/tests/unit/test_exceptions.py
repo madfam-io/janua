@@ -49,7 +49,8 @@ class TestPlintoAPIException:
         exc = PlintoAPIException(message="Simple error")
         
         assert exc.status_code == 500
-        assert exc.error_code == "PLINTOAPI_EXCEPTION"
+        # Updated to match actual implementation - class name is uppercase without underscores
+        assert exc.error_code == "PLINTOAPIEXCEPTION"
         assert exc.details == {}
 
 

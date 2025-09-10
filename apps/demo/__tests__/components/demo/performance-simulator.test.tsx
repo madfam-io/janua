@@ -3,14 +3,17 @@ import { render, screen } from '@testing-library/react'
 import { PerformanceSimulator } from '@/components/demo/performance-simulator'
 
 // Mock framer-motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: (props) => {
-      const { children, ...rest } = props;
-      return React.createElement('div', rest, children);
+jest.mock('framer-motion', () => {
+  const React = require('react');
+  return {
+    motion: {
+      div: (props) => {
+        const { children, ...rest } = props;
+        return React.createElement('div', rest, children);
+      },
     },
-  },
-}))
+  };
+})
 
 // Mock the useDemoFeatures hook
 jest.mock('@/hooks/useEnvironment', () => ({
@@ -18,21 +21,27 @@ jest.mock('@/hooks/useEnvironment', () => ({
 }))
 
 // Mock @plinto/ui components
-jest.mock('@plinto/ui', () => ({
-  Card: (props) => React.createElement('div', { 'data-testid': 'card', ...props }, props.children),
-  CardContent: (props) => React.createElement('div', { 'data-testid': 'card-content', ...props }, props.children),
-  CardDescription: (props) => React.createElement('div', { 'data-testid': 'card-description', ...props }, props.children),
-  CardHeader: (props) => React.createElement('div', { 'data-testid': 'card-header', ...props }, props.children),
-  CardTitle: (props) => React.createElement('div', { 'data-testid': 'card-title', ...props }, props.children),
-}))
+jest.mock('@plinto/ui', () => {
+  const React = require('react');
+  return {
+    Card: (props) => React.createElement('div', { 'data-testid': 'card', ...props }, props.children),
+    CardContent: (props) => React.createElement('div', { 'data-testid': 'card-content', ...props }, props.children),
+    CardDescription: (props) => React.createElement('div', { 'data-testid': 'card-description', ...props }, props.children),
+    CardHeader: (props) => React.createElement('div', { 'data-testid': 'card-header', ...props }, props.children),
+    CardTitle: (props) => React.createElement('div', { 'data-testid': 'card-title', ...props }, props.children),
+  };
+})
 
 // Mock lucide-react icons
-jest.mock('lucide-react', () => ({
-  Zap: (props) => React.createElement('span', { 'data-testid': 'zap-icon', ...props }),
-  Globe: (props) => React.createElement('span', { 'data-testid': 'globe-icon', ...props }),
-  Server: (props) => React.createElement('span', { 'data-testid': 'server-icon', ...props }),
-  ArrowUp: (props) => React.createElement('span', { 'data-testid': 'arrow-up-icon', ...props }),
-}))
+jest.mock('lucide-react', () => {
+  const React = require('react');
+  return {
+    Zap: (props) => React.createElement('span', { 'data-testid': 'zap-icon', ...props }),
+    Globe: (props) => React.createElement('span', { 'data-testid': 'globe-icon', ...props }),
+    Server: (props) => React.createElement('span', { 'data-testid': 'server-icon', ...props }),
+    ArrowUp: (props) => React.createElement('span', { 'data-testid': 'arrow-up-icon', ...props }),
+  };
+})
 
 const mockUseDemoFeatures = require('@/hooks/useEnvironment').useDemoFeatures
 

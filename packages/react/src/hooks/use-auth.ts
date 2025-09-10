@@ -1,10 +1,10 @@
 import { usePlinto } from '../provider'
 
 export function useAuth() {
-  const { identity, session, isLoading, isAuthenticated, signIn, signOut } = usePlinto()
+  const { user, session, isLoading, isAuthenticated, signIn, signOut } = usePlinto()
   
   return {
-    user: identity,
+    user,
     session,
     isLoading,
     isAuthenticated,

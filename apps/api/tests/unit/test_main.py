@@ -17,7 +17,10 @@ class TestApplicationSetup:
         """Test that app instance is properly configured."""
         assert app.title == "Plinto API"
         assert app.description == "Secure identity platform API"
-        assert hasattr(app, 'lifespan')
+        # FastAPI apps have a state attribute for application state management
+        assert hasattr(app, 'state')
+        # Also verify the app has been configured with lifespan events
+        assert app.router.lifespan_context is not None
     
     def test_middleware_setup(self):
         """Test that middleware is properly configured."""
@@ -50,7 +53,6 @@ class TestApplicationSetup:
 class TestHealthEndpoints:
     """Test health and status endpoints."""
     
-    @pytest.mark.asyncio
     async def test_health_endpoint(self, test_client: AsyncClient):
         """Test the health check endpoint."""
         response = await test_client.get("/health")
@@ -62,7 +64,6 @@ class TestHealthEndpoints:
         assert "version" in data
         assert "environment" in data
     
-    @pytest.mark.asyncio
     async def test_ready_endpoint_success(self, test_client: AsyncClient):
         """Test the readiness check endpoint when services are healthy."""
         with patch('app.main.engine') as mock_engine, \
@@ -85,7 +86,6 @@ class TestHealthEndpoints:
             assert data["database"] is True
             assert data["redis"] is True
     
-    @pytest.mark.asyncio
     async def test_ready_endpoint_degraded(self, test_client: AsyncClient):
         """Test the readiness check endpoint when services are unhealthy."""
         with patch('app.main.engine') as mock_engine, \
@@ -110,7 +110,6 @@ class TestHealthEndpoints:
 class TestOpenIDEndpoints:
     """Test OpenID Connect discovery endpoints."""
     
-    @pytest.mark.asyncio
     async def test_openid_configuration(self, test_client: AsyncClient):
         """Test OpenID Connect configuration endpoint."""
         response = await test_client.get("/.well-known/openid-configuration")
@@ -139,7 +138,6 @@ class TestOpenIDEndpoints:
         assert data["userinfo_endpoint"].startswith("http")
         assert data["jwks_uri"].startswith("http")
     
-    @pytest.mark.asyncio
     async def test_jwks_endpoint(self, test_client: AsyncClient):
         """Test JWKS endpoint."""
         response = await test_client.get("/.well-known/jwks.json")
@@ -155,7 +153,6 @@ class TestOpenIDEndpoints:
 class TestTestEndpoints:
     """Test debugging/test endpoints."""
     
-    @pytest.mark.asyncio
     async def test_test_endpoint(self, test_client: AsyncClient):
         """Test the simple test endpoint."""
         response = await test_client.get("/test")
@@ -166,7 +163,6 @@ class TestTestEndpoints:
         assert data["status"] == "test endpoint working"
         assert "auth_router_included" in data
     
-    @pytest.mark.asyncio
     async def test_test_json_endpoint(self, test_client: AsyncClient):
         """Test the JSON test endpoint."""
         test_data = {"test": "data", "number": 42}
@@ -182,7 +178,6 @@ class TestTestEndpoints:
 class TestMiddleware:
     """Test middleware behavior."""
     
-    @pytest.mark.asyncio
     async def test_cors_middleware(self, test_client: AsyncClient):
         """Test CORS middleware configuration."""
         response = await test_client.options("/health")
@@ -190,7 +185,6 @@ class TestMiddleware:
         # CORS headers should be present
         assert "access-control-allow-origin" in response.headers
     
-    @pytest.mark.asyncio
     async def test_process_time_header(self, test_client: AsyncClient):
         """Test that process time header is added."""
         response = await test_client.get("/health")
@@ -200,7 +194,6 @@ class TestMiddleware:
         process_time = float(response.headers["x-process-time"])
         assert process_time >= 0
     
-    @pytest.mark.asyncio
     async def test_trusted_host_middleware(self, test_client: AsyncClient):
         """Test trusted host middleware behavior."""
         # Test with valid host
@@ -214,7 +207,6 @@ class TestMiddleware:
 class TestLifespan:
     """Test application lifespan events."""
     
-    @pytest.mark.asyncio
     async def test_lifespan_startup(self):
         """Test application startup sequence."""
         with patch('app.main.init_db') as mock_init_db, \

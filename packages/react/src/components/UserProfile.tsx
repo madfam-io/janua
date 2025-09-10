@@ -16,7 +16,7 @@ export function UserProfile({
   showSessions = false,
   allowEdit = true
 }: UserProfileProps) {
-  const { user, session, signOut, isLoading } = usePlinto()
+  const { user, session, signOut, isLoading, client } = usePlinto()
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({
     firstName: user?.given_name || '',
