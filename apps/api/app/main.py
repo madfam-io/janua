@@ -73,12 +73,16 @@ async def lifespan(app: FastAPI):
 
 
 # Create FastAPI app
+# Create FastAPI app with conditional docs
+docs_enabled = settings.ENABLE_DOCS or settings.ENVIRONMENT == "development"
+
 app = FastAPI(
     title="Plinto API",
-    description="Secure identity platform API",
+    description="Secure identity platform API - Beta Release",
     version=settings.VERSION,
-    docs_url="/docs" if settings.ENABLE_DOCS else None,
-    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None,
     lifespan=lifespan
 )
 

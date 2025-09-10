@@ -1,0 +1,384 @@
+# Plinto API Documentation
+
+Welcome to the Plinto API documentation. This guide covers all endpoints available in our secure identity platform API.
+
+## Base URL
+
+```
+Production: https://api.plinto.dev
+Development: http://localhost:8000
+```
+
+## Authentication
+
+All API endpoints (except auth endpoints) require a Bearer token in the Authorization header:
+
+```http
+Authorization: Bearer <your_access_token>
+```
+
+### Getting Access Tokens
+
+Use the authentication endpoints to obtain access tokens:
+
+1. **Sign up** a new user
+2. **Sign in** to get access and refresh tokens
+3. Use the **refresh** endpoint to get new tokens
+
+## Quick Start
+
+### 1. Create a User Account
+
+```bash
+curl -X POST https://api.plinto.dev/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePassword123!",
+    "name": "John Doe"
+  }'
+```
+
+### 2. Sign In
+
+```bash
+curl -X POST https://api.plinto.dev/api/v1/auth/signin \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePassword123!"
+  }'
+```
+
+### 3. Access Protected Resources
+
+```bash
+curl -X GET https://api.plinto.dev/api/v1/users/profile \
+  -H "Authorization: Bearer <your_access_token>"
+```
+
+## API Endpoints
+
+### Authentication Endpoints
+
+#### POST /api/v1/auth/signup
+Create a new user account.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!",
+  "name": "John Doe"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "user-uuid",
+  "email": "user@example.com",
+  "name": "John Doe",
+  "email_verified": false,
+  "created_at": "2025-09-10T12:00:00Z",
+  "updated_at": "2025-09-10T12:00:00Z"
+}
+```
+
+#### POST /api/v1/auth/signin
+Authenticate user and get access tokens.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!"
+}
+```
+
+**Response:**
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "token_type": "bearer",
+  "expires_in": 900
+}
+```
+
+#### POST /api/v1/auth/refresh
+Refresh access token using refresh token.
+
+**Request Body:**
+```json
+{
+  "refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+#### GET /api/v1/auth/me
+Get current user information.
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response:**
+```json
+{
+  "id": "user-uuid",
+  "email": "user@example.com",
+  "name": "John Doe",
+  "email_verified": true,
+  "created_at": "2025-09-10T12:00:00Z",
+  "updated_at": "2025-09-10T12:00:00Z"
+}
+```
+
+#### POST /api/v1/auth/verify-email
+Verify email address with verification token.
+
+**Request Body:**
+```json
+{
+  "token": "verification-token-from-email"
+}
+```
+
+#### POST /api/v1/auth/forgot-password
+Request password reset email.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+### User Management Endpoints
+
+#### GET /api/v1/users/profile
+Get current user's profile information.
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response:**
+```json
+{
+  "id": "user-uuid",
+  "email": "user@example.com",
+  "name": "John Doe",
+  "avatar_url": "https://example.com/avatar.jpg",
+  "email_verified": true,
+  "created_at": "2025-09-10T12:00:00Z",
+  "updated_at": "2025-09-10T12:00:00Z",
+  "last_login_at": "2025-09-10T15:30:00Z",
+  "is_active": true
+}
+```
+
+#### PUT /api/v1/users/profile
+Update user profile information.
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Request Body:**
+```json
+{
+  "name": "John Smith",
+  "avatar_url": "https://example.com/new-avatar.jpg"
+}
+```
+
+#### POST /api/v1/users/change-password
+Change user password.
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Request Body:**
+```json
+{
+  "current_password": "OldPassword123!",
+  "new_password": "NewSecurePassword456!"
+}
+```
+
+#### GET /api/v1/users/sessions
+Get user's active sessions.
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response:**
+```json
+[
+  {
+    "id": "session-uuid",
+    "device_name": "MacBook Pro",
+    "ip_address": "192.168.1.100",
+    "user_agent": "Mozilla/5.0...",
+    "created_at": "2025-09-10T12:00:00Z",
+    "last_activity_at": "2025-09-10T15:30:00Z",
+    "is_current": true
+  }
+]
+```
+
+#### DELETE /api/v1/users/sessions/{session_id}
+Revoke a specific session.
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+#### DELETE /api/v1/users/sessions
+Revoke all user sessions (sign out from all devices).
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+## Health Check Endpoints
+
+#### GET /health
+Basic health check endpoint.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "version": "0.1.0",
+  "environment": "production"
+}
+```
+
+#### GET /ready
+Comprehensive readiness check with dependencies.
+
+**Response:**
+```json
+{
+  "status": "ready",
+  "database": true,
+  "redis": true
+}
+```
+
+## Error Handling
+
+The API returns consistent error responses:
+
+```json
+{
+  "error": "ValidationError",
+  "message": "Invalid request data",
+  "status_code": 400,
+  "timestamp": "2025-09-10T15:30:00Z",
+  "path": "/api/v1/auth/signin",
+  "request_id": "req-uuid",
+  "error_code": "VALIDATION_ERROR"
+}
+```
+
+### Common Error Codes
+
+- `400` - Bad Request (validation errors)
+- `401` - Unauthorized (invalid or expired tokens)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found (resource doesn't exist)
+- `429` - Too Many Requests (rate limited)
+- `500` - Internal Server Error
+
+## Rate Limiting
+
+The API implements rate limiting:
+
+- **Authentication endpoints**: 10 requests per minute
+- **Profile endpoints**: 100 requests per minute
+- **General endpoints**: 60 requests per minute
+
+Rate limit headers are included in responses:
+- `X-RateLimit-Limit`: Maximum requests allowed
+- `X-RateLimit-Remaining`: Requests remaining in window
+- `X-RateLimit-Reset`: Time when limit resets
+
+## Security
+
+### Password Requirements
+
+Passwords must meet these criteria:
+- Minimum 12 characters
+- At least one uppercase letter
+- At least one lowercase letter
+- At least one number
+- At least one special character
+
+### Token Security
+
+- **Access tokens**: Short-lived (15 minutes)
+- **Refresh tokens**: Longer-lived (7 days)
+- Token rotation implemented for refresh tokens
+- Tokens are blacklisted on logout
+
+### HTTPS Only
+
+All API communication must use HTTPS in production. HTTP requests will be rejected.
+
+## SDKs and Libraries
+
+### JavaScript/TypeScript
+
+```bash
+npm install @plinto/js-sdk
+```
+
+```javascript
+import { PlintoClient } from '@plinto/js-sdk'
+
+const client = new PlintoClient({
+  apiUrl: 'https://api.plinto.dev',
+  apiKey: 'your-api-key'
+})
+
+// Sign in user
+const { tokens } = await client.auth.signin({
+  email: 'user@example.com',
+  password: 'password'
+})
+
+// Get user profile
+const profile = await client.users.getProfile()
+```
+
+### Python
+
+```bash
+pip install plinto-python
+```
+
+```python
+from plinto import PlintoClient
+
+client = PlintoClient(
+    api_url="https://api.plinto.dev",
+    api_key="your-api-key"
+)
+
+# Sign in user
+tokens = client.auth.signin(
+    email="user@example.com",
+    password="password"
+)
+
+# Get user profile
+profile = client.users.get_profile()
+```
+
+## Support
+
+For API support and questions:
+
+- **Documentation**: [https://docs.plinto.dev](https://docs.plinto.dev)
+- **GitHub Issues**: [https://github.com/plinto/api/issues](https://github.com/plinto/api/issues)
+- **Email**: [api-support@plinto.dev](mailto:api-support@plinto.dev)
+
+## Changelog
+
+### v0.1.0 (Beta Release)
+- Initial API release
+- Authentication and user management
+- Rate limiting and security features
+- Comprehensive documentation
