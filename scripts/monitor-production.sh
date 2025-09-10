@@ -16,14 +16,13 @@ ALERT_WEBHOOK="${ALERT_WEBHOOK_URL:-}"
 LOG_FILE="${LOG_FILE:-monitoring.log}"
 
 # Services to monitor
-declare -A SERVICES=(
-    ["API Health"]="https://api.plinto.dev/health"
-    ["Marketing Site"]="https://www.plinto.dev"
-    ["Main App"]="https://app.plinto.dev"
-    ["Documentation"]="https://docs.plinto.dev"
-    ["Admin Panel"]="https://admin.plinto.dev"
-    ["Demo App"]="https://demo.plinto.dev"
-)
+declare -A SERVICES
+SERVICES["API Health"]="https://api.plinto.dev/health"
+SERVICES["Marketing Site"]="https://www.plinto.dev"
+SERVICES["Main App"]="https://app.plinto.dev"
+SERVICES["Documentation"]="https://docs.plinto.dev"
+SERVICES["Admin Panel"]="https://admin.plinto.dev"
+SERVICES["Demo App"]="https://demo.plinto.dev"
 
 # Initialize counters
 TOTAL_SERVICES=0
