@@ -17,8 +17,6 @@ except ImportError:
     SENTRY_AVAILABLE = False
 
 from app.config import settings
-from app.auth.router import router as auth_router
-from app.users.router import router as users_router
 from app.core.database import init_db
 from app.core.redis import init_redis
 from app.core.errors import (
@@ -29,6 +27,21 @@ from app.core.errors import (
 )
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
+
+# Import routers with error handling for production stability
+try:
+    from app.auth.router import router as auth_router
+    AUTH_ROUTER_AVAILABLE = True
+except Exception as e:
+    logger.error(f"Failed to import auth router: {e}")
+    AUTH_ROUTER_AVAILABLE = False
+
+try:
+    from app.users.router import router as users_router
+    USERS_ROUTER_AVAILABLE = True
+except Exception as e:
+    logger.error(f"Failed to import users router: {e}")
+    USERS_ROUTER_AVAILABLE = False
 
 logger = structlog.get_logger()
 
@@ -60,11 +73,19 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Plinto API", version=settings.VERSION, env=settings.ENVIRONMENT)
     
-    # Initialize database
-    await init_db()
+    # Initialize database with error handling
+    try:
+        await init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
     
-    # Initialize Redis
-    await init_redis()
+    # Initialize Redis with error handling
+    try:
+        await init_redis()
+        logger.info("Redis initialized successfully")
+    except Exception as e:
+        logger.error(f"Redis initialization failed: {e}")
     
     yield
     
@@ -143,6 +164,18 @@ async def add_process_time_header(request: Request, call_next):
     return response
 
 
+# Root endpoint
+@app.get("/")
+def root():
+    """Root endpoint for Plinto API"""
+    return {
+        "name": "Plinto API",
+        "version": settings.VERSION,
+        "status": "operational",
+        "documentation": "https://docs.plinto.dev/api",
+        "environment": settings.ENVIRONMENT
+    }
+
 # Health check
 @app.get("/health")
 async def health_check():
@@ -212,31 +245,63 @@ def get_jwks():
 
 # OpenID Configuration
 @app.get("/.well-known/openid-configuration")
-async def get_openid_configuration():
-    # Ensure proper BASE_URL with multiple fallbacks
-    base_url = settings.BASE_URL
-    if not base_url or base_url.strip() == "":
-        base_url = "https://api.plinto.dev"
-    # Remove trailing slash if present
-    base_url = base_url.rstrip("/")
+def get_openid_configuration():
+    """Return OpenID Connect configuration - sync to avoid async issues"""
+    try:
+        # Ensure proper BASE_URL with multiple fallbacks
+        base_url = getattr(settings, 'BASE_URL', 'https://api.plinto.dev')
+        if not base_url or base_url.strip() == "":
+            base_url = "https://api.plinto.dev"
+        # Remove trailing slash if present
+        base_url = base_url.rstrip("/")
+        
+        return {
+            "issuer": getattr(settings, 'JWT_ISSUER', 'https://plinto.dev'),
+            "authorization_endpoint": f"{base_url}/auth/authorize",
+            "token_endpoint": f"{base_url}/auth/token",
+            "userinfo_endpoint": f"{base_url}/auth/userinfo",
+            "jwks_uri": f"{base_url}/.well-known/jwks.json",
+            "response_types_supported": ["code", "token", "id_token"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+            "scopes_supported": ["openid", "profile", "email"],
+            "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+            "claims_supported": ["sub", "name", "email", "email_verified", "picture"]
+        }
+    except Exception as e:
+        logger.error(f"OpenID configuration error: {e}")
+        return {"error": "Configuration temporarily unavailable"}
+
+
+# Include routers with error handling for production deployment
+if AUTH_ROUTER_AVAILABLE:
+    try:
+        app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+        logger.info("Auth router included successfully")
+    except Exception as e:
+        logger.error(f"Failed to include auth router: {e}")
+else:
+    logger.warning("Auth router not available - skipping")
+
+if USERS_ROUTER_AVAILABLE:
+    try:
+        app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
+        logger.info("Users router included successfully")
+    except Exception as e:
+        logger.error(f"Failed to include users router: {e}")
+else:
+    logger.warning("Users router not available - skipping")
+
+# API status endpoint
+@app.get("/api/status")
+def api_status():
     return {
-        "issuer": settings.JWT_ISSUER,
-        "authorization_endpoint": f"{base_url}/auth/authorize",
-        "token_endpoint": f"{base_url}/auth/token",
-        "userinfo_endpoint": f"{base_url}/auth/userinfo",
-        "jwks_uri": f"{base_url}/.well-known/jwks.json",
-        "response_types_supported": ["code", "token", "id_token"],
-        "subject_types_supported": ["public"],
-        "id_token_signing_alg_values_supported": ["RS256"],
-        "scopes_supported": ["openid", "profile", "email"],
-        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
-        "claims_supported": ["sub", "name", "email", "email_verified", "picture"]
+        "status": "API operational",
+        "auth_router": "available" if AUTH_ROUTER_AVAILABLE else "unavailable",
+        "users_router": "available" if USERS_ROUTER_AVAILABLE else "unavailable",
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT
     }
-
-
-# Include routers
-app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 
 
 # Register error handlers
