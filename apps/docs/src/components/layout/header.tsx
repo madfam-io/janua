@@ -20,6 +20,7 @@ export function Header() {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [selectedVersion, setSelectedVersion] = useState('v1.2.0')
   const { theme, setTheme } = useTheme()
 
   return (
@@ -64,15 +65,20 @@ export function Header() {
             </button>
 
             {/* Version Selector */}
-            <select className="hidden lg:block rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300">
-              <option>v1.2.0</option>
-              <option>v1.1.0</option>
-              <option>v1.0.0</option>
+            <select 
+              className="hidden lg:block rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300"
+              value={selectedVersion}
+              onChange={(e) => setSelectedVersion(e.target.value)}
+            >
+              <option value="v1.2.0">v1.2.0 (Latest)</option>
+              <option value="v1.1.0">v1.1.0</option>
+              <option value="v1.0.0">v1.0.0</option>
+              <option value="v0.9.0">v0.9.0 (Beta)</option>
             </select>
 
             {/* GitHub */}
             <Link
-              href="https://github.com/plinto/plinto"
+              href="https://github.com/madfam-io/plinto"
               target="_blank"
               rel="noopener noreferrer"
               className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"

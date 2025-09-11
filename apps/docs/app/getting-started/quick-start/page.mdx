@@ -1,0 +1,178 @@
+# Quick Start Guide
+
+Get Plinto up and running in your application in under 5 minutes.
+
+## 1. Install the SDK
+
+Choose your preferred package manager:
+
+```bash
+# npm
+npm install @plinto/nextjs
+
+# yarn
+yarn add @plinto/nextjs
+
+# pnpm
+pnpm add @plinto/nextjs
+```
+
+## 2. Set Up Environment Variables
+
+Create a `.env.local` file in your project root:
+
+```bash
+PLINTO_ISSUER=https://api.plinto.dev
+PLINTO_AUDIENCE=your-app-identifier
+PLINTO_CLIENT_ID=your-client-id
+PLINTO_CLIENT_SECRET=your-client-secret
+```
+
+> **Get your credentials**: Sign up at [app.plinto.dev](https://app.plinto.dev) to get your client credentials.
+
+## 3. Configure Plinto
+
+Create a `lib/plinto.ts` file:
+
+```typescript
+import { Plinto } from '@plinto/nextjs'
+
+export const plinto = new Plinto(\{
+  issuer: process.env.PLINTO_ISSUER!,
+  audience: process.env.PLINTO_AUDIENCE!,
+  clientId: process.env.PLINTO_CLIENT_ID!,
+  clientSecret: process.env.PLINTO_CLIENT_SECRET!,
+\})
+```
+
+## 4. Protect Your First Route
+
+Create a protected API route in `app/api/protected/route.ts`:
+
+```typescript
+import \{ plinto \} from '@/lib/plinto'
+import \{ NextRequest \} from 'next/server'
+
+export async function GET(request: NextRequest) \{
+  const session = await plinto.getSession(request)
+  
+  if (!session) \{
+    return new Response('Unauthorized', \{ status: 401 \})
+  \}
+  
+  return Response.json(\{
+    message: 'Hello, authenticated user!',
+    user: session.user,
+    organization: session.organization
+  \})
+\}
+```
+
+## 5. Add Authentication to Your UI
+
+Create a login component:
+
+```tsx
+'use client'
+
+import \{ useState \} from 'react'
+import \{ plinto \} from '@/lib/plinto'
+
+export function LoginForm() \{
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => \{
+    e.preventDefault()
+    setLoading(true)
+    
+    try \{
+      const result = await plinto.signIn(\{
+        email,
+        password
+      \})
+      
+      // Redirect to dashboard or protected area
+      window.location.href = '/dashboard'
+    \} catch (error) \{
+      console.error('Login failed:', error)
+      // Handle error (show message to user)
+    \} finally \{
+      setLoading(false)
+    \}
+  \}
+
+  return (
+    <form onSubmit=\{handleSubmit\} className="space-y-4">
+      <div>
+        <label htmlFor="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          value=\{email\}
+          onChange=\{(e) => setEmail(e.target.value)\}
+          required
+        />
+      </div>
+      <div>
+        <label htmlFor="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          value=\{password\}
+          onChange=\{(e) => setPassword(e.target.value)\}
+          required
+        />
+      </div>
+      <button type="submit" disabled=\{loading\}>
+        \{loading ? 'Signing in...' : 'Sign In'\}
+      </button>
+    </form>
+  )
+\}
+```
+
+## 6. Test Your Integration
+
+1. Start your development server:
+   ```bash
+   npm run dev
+   ```
+
+2. Visit your protected route:
+   ```
+   http://localhost:3000/api/protected
+   ```
+
+3. You should see a 401 Unauthorized response (this is expected!)
+
+4. Add the login form to a page and test the authentication flow.
+
+## 🎉 Congratulations!
+
+You've successfully integrated Plinto authentication into your application. Your users can now:
+
+- Sign in with email and password
+- Access protected routes and API endpoints
+- Have their sessions managed automatically
+
+## Next Steps
+
+- **[Complete Installation Guide](/getting-started/installation)** - Detailed setup for all frameworks
+- **[Authentication Patterns](/guides/authentication)** - Learn about different auth methods
+- **[Session Management](/guides/sessions)** - Handle user sessions and tokens
+- **[Security Best Practices](/guides/security)** - Secure your application properly
+
+## Need Help?
+
+- Check our [API Reference](/api) for detailed endpoint documentation
+- Browse [Examples](/examples) for complete sample applications
+- Join our [Discord community](https://discord.gg/plinto) for support
+
+## Framework-Specific Guides
+
+- [Next.js Integration](/guides/frameworks/nextjs)
+- [React Integration](/guides/frameworks/react)
+- [Vue Integration](/guides/frameworks/vue)
+- [Express Integration](/guides/frameworks/express)

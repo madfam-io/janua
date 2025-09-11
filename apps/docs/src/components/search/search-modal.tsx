@@ -2,53 +2,9 @@
 
 import { Fragment, useEffect, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { Search, X, FileText, Hash, Code, Book } from 'lucide-react'
+import { Search, X, FileText, Hash, Code, Book, Layers } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-
-interface SearchResult {
-  id: string
-  title: string
-  description: string
-  url: string
-  type: 'guide' | 'api' | 'example' | 'reference'
-  section?: string
-}
-
-// Mock search results for demo
-const mockResults: SearchResult[] = [
-  {
-    id: '1',
-    title: 'Quick Start Guide',
-    description: 'Get up and running with Plinto in under 5 minutes',
-    url: '/getting-started/quick-start',
-    type: 'guide',
-    section: 'Getting Started',
-  },
-  {
-    id: '2',
-    title: 'Authentication API',
-    description: 'POST /api/v1/auth/signin - Sign in with email and password',
-    url: '/api/authentication#signin',
-    type: 'api',
-    section: 'API Reference',
-  },
-  {
-    id: '3',
-    title: 'Implementing Passkeys',
-    description: 'Learn how to add passwordless authentication with WebAuthn',
-    url: '/guides/authentication/passkeys',
-    type: 'guide',
-    section: 'Guides',
-  },
-  {
-    id: '4',
-    title: 'Next.js Example',
-    description: 'Complete Next.js app with authentication',
-    url: '/examples/nextjs',
-    type: 'example',
-    section: 'Examples',
-  },
-]
+import { searchDocumentation, type SearchResult } from '@/lib/search'
 
 interface SearchModalProps {
   isOpen: boolean
@@ -62,14 +18,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
 
   useEffect(() => {
-    if (query.length > 0) {
-      // Mock search - in production, this would call Algolia
-      const filtered = mockResults.filter(
-        (result) =>
-          result.title.toLowerCase().includes(query.toLowerCase()) ||
-          result.description.toLowerCase().includes(query.toLowerCase())
-      )
-      setResults(filtered)
+    if (query.length > 1) {
+      const searchResults = searchDocumentation(query)
+      setResults(searchResults)
       setSelectedIndex(0)
     } else {
       setResults([])
@@ -110,6 +61,8 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         return <Hash className="h-4 w-4" />
       case 'example':
         return <Code className="h-4 w-4" />
+      case 'sdk':
+        return <Layers className="h-4 w-4" />
       default:
         return <FileText className="h-4 w-4" />
     }
@@ -219,7 +172,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                   <span>Close</span>
                 </div>
                 <div>
-                  Powered by Algolia
+                  Powered by Plinto Search
                 </div>
               </div>
             </Dialog.Panel>
