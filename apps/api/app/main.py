@@ -48,6 +48,15 @@ except Exception as e:
     logger.error(f"Failed to import users router: {e}")
     USERS_ROUTER_AVAILABLE = False
 
+# Import beta authentication system as fallback
+try:
+    from app.beta_auth import router as beta_auth_router
+    BETA_AUTH_AVAILABLE = True
+    logger.info("Beta auth router imported successfully")
+except Exception as e:
+    logger.error(f"Failed to import beta auth router: {e}")
+    BETA_AUTH_AVAILABLE = False
+
 # Initialize Sentry for error tracking
 if SENTRY_AVAILABLE and settings.ENVIRONMENT in ["production", "staging"]:
     sentry_dsn = getattr(settings, "SENTRY_DSN", None)
@@ -285,17 +294,29 @@ def get_openid_configuration():
 
 
 # Include routers with error handling for production deployment
-logger.info(f"Router availability - Auth: {AUTH_ROUTER_AVAILABLE}, Users: {USERS_ROUTER_AVAILABLE}")
+logger.info(f"Router availability - Auth: {AUTH_ROUTER_AVAILABLE}, Users: {USERS_ROUTER_AVAILABLE}, Beta: {BETA_AUTH_AVAILABLE}")
 
-if AUTH_ROUTER_AVAILABLE:
+# Include beta authentication router (priority for beta launch)
+if BETA_AUTH_AVAILABLE:
+    try:
+        app.include_router(beta_auth_router, prefix="/api/v1/auth", tags=["beta-auth"])
+        logger.info("✅ Beta auth router included successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to include beta auth router: {e}")
+        BETA_AUTH_AVAILABLE = False
+else:
+    logger.warning("⚠️ Beta auth router not available")
+
+# Include main auth router if available and beta is not working
+if AUTH_ROUTER_AVAILABLE and not BETA_AUTH_AVAILABLE:
     try:
         app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
         logger.info("✅ Auth router included successfully")
     except Exception as e:
         logger.error(f"❌ Failed to include auth router: {e}")
         AUTH_ROUTER_AVAILABLE = False
-else:
-    logger.warning("⚠️ Auth router not available - authentication disabled")
+elif not AUTH_ROUTER_AVAILABLE and not BETA_AUTH_AVAILABLE:
+    logger.warning("⚠️ No authentication system available - authentication disabled")
 
 if USERS_ROUTER_AVAILABLE:
     try:
@@ -314,17 +335,17 @@ def api_status():
         # Safely check router availability at runtime
         auth_available = 'AUTH_ROUTER_AVAILABLE' in globals() and AUTH_ROUTER_AVAILABLE
         users_available = 'USERS_ROUTER_AVAILABLE' in globals() and USERS_ROUTER_AVAILABLE
+        beta_available = 'BETA_AUTH_AVAILABLE' in globals() and BETA_AUTH_AVAILABLE
         
         return {
             "status": "API operational",
             "auth_router": "available" if auth_available else "unavailable",
             "users_router": "available" if users_available else "unavailable",
+            "beta_auth": "available" if beta_available else "unavailable",
+            "authentication": "beta" if beta_available else ("main" if auth_available else "none"),
             "version": getattr(settings, 'VERSION', 'unknown'),
             "environment": getattr(settings, 'ENVIRONMENT', 'unknown'),
-            "globals_check": {
-                "AUTH_ROUTER_AVAILABLE": 'AUTH_ROUTER_AVAILABLE' in globals(),
-                "USERS_ROUTER_AVAILABLE": 'USERS_ROUTER_AVAILABLE' in globals()
-            }
+            "message": "Beta authentication active" if beta_available else "Main auth system in use"
         }
     except Exception as e:
         return {"error": f"Status check failed: {str(e)}"}
