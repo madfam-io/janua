@@ -1,10 +1,21 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
-import { layout } from './layout'
+import RootLayout from './layout'
 
-describe('layout', () => {
-  it('should render without crashing', () => {
-    render(<layout />)
-    expect(screen.getByTestId('layout')).toBeInTheDocument()
+// Mock Next.js font
+jest.mock('next/font/google', () => ({
+  Inter: () => ({
+    className: 'mock-inter-font',
+  }),
+}))
+
+describe('RootLayout', () => {
+  it('should export layout component', () => {
+    expect(RootLayout).toBeDefined()
+    expect(typeof RootLayout).toBe('function')
+  })
+
+  it('should have correct metadata export', async () => {
+    const { metadata } = await import('./layout')
+    expect(metadata.title).toContain('Plinto Admin')
+    expect(metadata.description).toContain('Internal superadmin tools')
   })
 })

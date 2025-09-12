@@ -1,10 +1,11 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { page } from './page'
+import AdminPage from './page'
 
-describe('page', () => {
+describe('AdminPage', () => {
   it('should render without crashing', () => {
-    render(<page />)
-    expect(screen.getByTestId('page')).toBeInTheDocument()
+    render(<AdminPage />)
+    expect(screen.getByText('Plinto Superadmin')).toBeInTheDocument()
+    expect(screen.getByText('Platform Overview')).toBeInTheDocument()
   })
 })
