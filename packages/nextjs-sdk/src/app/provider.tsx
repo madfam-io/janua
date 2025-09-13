@@ -1,8 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { PlintoClient } from '@plinto/js';
-import type { User, Session, PlintoConfig } from '@plinto/js';
+import { PlintoClient } from '@plinto/typescript-sdk';
+import type { User, Session, PlintoConfig } from '@plinto/typescript-sdk';
 
 interface PlintoContextValue {
   client: PlintoClient;

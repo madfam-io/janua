@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { usePlinto } from '../provider'
-import type { TokenPair } from '@plinto/sdk'
+import type { TokenPair } from '@plinto/typescript-sdk'
 
 export function useSession() {
   const { client, session } = usePlinto()

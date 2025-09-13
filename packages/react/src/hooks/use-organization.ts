@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { usePlinto } from '../provider'
-import type { Organization } from '@plinto/sdk'
+import type { Organization } from '@plinto/typescript-sdk'
 
 export function useOrganization() {
   const { client, isAuthenticated } = usePlinto()

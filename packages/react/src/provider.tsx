@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { PlintoClient, type PlintoConfig, type User, type Session } from '@plinto/sdk'
+import { PlintoClient, type PlintoConfig, type User, type Session } from '@plinto/typescript-sdk'
 
 interface PlintoContextValue {
   client: PlintoClient

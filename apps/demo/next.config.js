@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@plinto/ui', '@plinto/sdk'],
+  transpilePackages: ['@plinto/ui', '@plinto/typescript-sdk'],
   async rewrites() {
     return [
       {

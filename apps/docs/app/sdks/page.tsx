@@ -52,13 +52,13 @@ export default function SDKsPage() {
             stable
           />
           <SDKCard
-            name="@plinto/js"
-            description="Universal JavaScript SDK for any framework"
+            name="@plinto/typescript-sdk"
+            description="Universal TypeScript SDK for any framework"
             version="1.2.1"
             href="/sdks/javascript/universal"
-            githubUrl="https://github.com/plinto/plinto-js"
-            installCommand="npm install @plinto/js"
-            features={["Framework Agnostic", "Node.js Support", "Browser Support", "TypeScript Definitions"]}
+            githubUrl="https://github.com/plinto/plinto-typescript"
+            installCommand="npm install @plinto/typescript-sdk"
+            features={["Framework Agnostic", "Node.js Support", "Browser Support", "Full TypeScript Support"]}
             stable
           />
         </div>

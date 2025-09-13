@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlintoClient } from '@plinto/sdk'
+import { PlintoClient } from '@plinto/typescript-sdk'
 import { useApiConfig } from '@/hooks/useEnvironment'
 
 export function Providers({ children }: { children: React.ReactNode }) {

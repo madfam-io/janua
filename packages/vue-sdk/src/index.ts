@@ -1,5 +1,5 @@
-// Re-export everything from @plinto/js
-export * from '@plinto/js';
+// Re-export everything from @plinto/typescript-sdk
+export * from '@plinto/typescript-sdk';
 
 // Plugin
 export { createPlinto, PLINTO_KEY } from './plugin';

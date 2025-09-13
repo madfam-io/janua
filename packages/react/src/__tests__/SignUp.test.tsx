@@ -3,10 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SignUp } from '../components/SignUp'
 import { PlintoProvider } from '../provider'
-import { PlintoClient } from '@plinto/sdk'
+import { PlintoClient } from '@plinto/typescript-sdk'
 
 // Mock the Plinto SDK
-jest.mock('@plinto/sdk', () => ({
+jest.mock('@plinto/typescript-sdk', () => ({
   PlintoClient: jest.fn().mockImplementation(() => ({
     signUp: jest.fn(),
     signIn: jest.fn(),

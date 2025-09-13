@@ -1,6 +1,6 @@
-// Re-export everything from @plinto/js
-export * from '@plinto/js';
-export { PlintoClient } from '@plinto/js';
+// Re-export everything from @plinto/typescript-sdk
+export * from '@plinto/typescript-sdk';
+export { PlintoClient } from '@plinto/typescript-sdk';
 
 // Export middleware utilities
 export { createPlintoMiddleware, withAuth, config } from './middleware';

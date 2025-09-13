@@ -1,0 +1,1255 @@
+openapi: 3.0.3
+info:
+  title: Plinto Identity Platform API
+  description: |
+    Complete authentication and identity management platform API.
+    
+    ## Authentication
+    All API requests require authentication via API key or JWT token.
+    
+    ## Rate Limiting
+    - 1000 requests per minute for authenticated requests
+    - 100 requests per minute for unauthenticated requests
+    
+    ## Environments
+    - Production: https://api.plinto.dev
+    - Staging: https://staging-api.plinto.dev
+    - Development: http://localhost:3000
+  version: 1.0.0
+  contact:
+    name: Plinto Support
+    email: support@plinto.dev
+    url: https://docs.plinto.dev
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.plinto.dev
+    description: Production
+  - url: https://staging-api.plinto.dev
+    description: Staging
+  - url: http://localhost:3000
+    description: Development
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Users
+    description: User management operations
+  - name: Sessions
+    description: Session management
+  - name: Organizations
+    description: Organization and team management
+  - name: MFA
+    description: Multi-factor authentication
+  - name: OAuth
+    description: Social authentication providers
+  - name: Passkeys
+    description: WebAuthn/Passkeys management
+
+paths:
+  /api/v1/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register new user
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Sign in user
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: MFA required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFAChallengeResponse'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Sign out user
+      operationId: logout
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Logout successful
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+              required: [refresh_token]
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/password/reset:
+    post:
+      tags: [Authentication]
+      summary: Request password reset
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+              required: [email]
+      responses:
+        '204':
+          description: Reset email sent
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/auth/password/confirm:
+    post:
+      tags: [Authentication]
+      summary: Confirm password reset
+      operationId: confirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+              required: [token, password]
+      responses:
+        '204':
+          description: Password reset successful
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/verify-email:
+    post:
+      tags: [Authentication]
+      summary: Verify email address
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+              required: [token]
+      responses:
+        '204':
+          description: Email verified
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/users/me:
+    get:
+      tags: [Users]
+      summary: Get current user
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    
+    put:
+      tags: [Users]
+      summary: Update current user
+      operationId: updateCurrentUser
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    
+    delete:
+      tags: [Users]
+      summary: Delete current user account
+      operationId: deleteCurrentUser
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+              required: [password]
+      responses:
+        '204':
+          description: Account deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users (admin only)
+      operationId: listUsers
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/users/{userId}:
+    get:
+      tags: [Users]
+      summary: Get user by ID (admin only)
+      operationId: getUserById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/sessions:
+    get:
+      tags: [Sessions]
+      summary: List user sessions
+      operationId: listSessions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    
+    delete:
+      tags: [Sessions]
+      summary: Revoke all sessions
+      operationId: revokeAllSessions
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: All sessions revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/sessions/{sessionId}:
+    delete:
+      tags: [Sessions]
+      summary: Revoke specific session
+      operationId: revokeSession
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Session revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations:
+    get:
+      tags: [Organizations]
+      summary: List user organizations
+      operationId: listOrganizations
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Organization list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    
+    post:
+      tags: [Organizations]
+      summary: Create organization
+      operationId: createOrganization
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+      responses:
+        '201':
+          description: Organization created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/organizations/{orgId}:
+    get:
+      tags: [Organizations]
+      summary: Get organization details
+      operationId: getOrganization
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    
+    put:
+      tags: [Organizations]
+      summary: Update organization
+      operationId: updateOrganization
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrganizationRequest'
+      responses:
+        '200':
+          description: Organization updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    
+    delete:
+      tags: [Organizations]
+      summary: Delete organization
+      operationId: deleteOrganization
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Organization deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/members:
+    get:
+      tags: [Organizations]
+      summary: List organization members
+      operationId: listOrganizationMembers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Member list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/invites:
+    post:
+      tags: [Organizations]
+      summary: Invite member to organization
+      operationId: inviteMember
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+      responses:
+        '201':
+          description: Invite sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invite'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/auth/mfa/enable:
+    post:
+      tags: [MFA]
+      summary: Enable MFA
+      operationId: enableMFA
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                method:
+                  type: string
+                  enum: [totp, sms, email]
+                  default: totp
+      responses:
+        '200':
+          description: MFA setup info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFASetupResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/mfa/verify:
+    post:
+      tags: [MFA]
+      summary: Verify MFA code
+      operationId: verifyMFA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                challenge_id:
+                  type: string
+              required: [code, challenge_id]
+      responses:
+        '200':
+          description: MFA verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/mfa/disable:
+    post:
+      tags: [MFA]
+      summary: Disable MFA
+      operationId: disableMFA
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+              required: [password]
+      responses:
+        '204':
+          description: MFA disabled
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/oauth/{provider}/authorize:
+    get:
+      tags: [OAuth]
+      summary: Get OAuth authorization URL
+      operationId: getOAuthURL
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, github, microsoft, apple]
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Authorization URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorization_url:
+                    type: string
+                  state:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/oauth/callback:
+    post:
+      tags: [OAuth]
+      summary: Handle OAuth callback
+      operationId: handleOAuthCallback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                state:
+                  type: string
+                redirect_uri:
+                  type: string
+              required: [code, state, redirect_uri]
+      responses:
+        '200':
+          description: OAuth successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/passkeys/register/start:
+    post:
+      tags: [Passkeys]
+      summary: Start passkey registration
+      operationId: startPasskeyRegistration
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Registration options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthnCreationOptions'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/passkeys/register/complete:
+    post:
+      tags: [Passkeys]
+      summary: Complete passkey registration
+      operationId: completePasskeyRegistration
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebAuthnCredential'
+      responses:
+        '201':
+          description: Passkey registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Passkey'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/passkeys/authenticate/start:
+    post:
+      tags: [Passkeys]
+      summary: Start passkey authentication
+      operationId: startPasskeyAuthentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Authentication options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthnRequestOptions'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/passkeys/authenticate/complete:
+    post:
+      tags: [Passkeys]
+      summary: Complete passkey authentication
+      operationId: completePasskeyAuthentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebAuthnAssertion'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    
+    PerPageParam:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    
+    SearchParam:
+      name: search
+      in: query
+      schema:
+        type: string
+
+  schemas:
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        first_name:
+          type: string
+        last_name:
+          type: string
+        metadata:
+          type: object
+      required: [email, password]
+    
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+    
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        tokens:
+          $ref: '#/components/schemas/TokenResponse'
+        requires_mfa:
+          type: boolean
+        challenge_id:
+          type: string
+    
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          default: Bearer
+        expires_in:
+          type: integer
+    
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        email_verified:
+          type: boolean
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+        phone_verified:
+          type: boolean
+        avatar_url:
+          type: string
+        metadata:
+          type: object
+        mfa_enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    
+    UpdateUserRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+        metadata:
+          type: object
+    
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        device:
+          type: string
+        browser:
+          type: string
+        os:
+          type: string
+        ip_address:
+          type: string
+        location:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_active:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        logo_url:
+          type: string
+        metadata:
+          type: object
+        settings:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    
+    CreateOrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        logo_url:
+          type: string
+        metadata:
+          type: object
+        settings:
+          type: object
+      required: [name]
+    
+    UpdateOrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        logo_url:
+          type: string
+        metadata:
+          type: object
+        settings:
+          type: object
+    
+    OrganizationMember:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+        org_id:
+          type: string
+        role:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        joined_at:
+          type: string
+          format: date-time
+    
+    InviteMemberRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+      required: [email, role]
+    
+    Invite:
+      type: object
+      properties:
+        id:
+          type: string
+        org_id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        invited_by:
+          type: string
+        invited_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, accepted, expired, cancelled]
+    
+    MFAChallengeResponse:
+      type: object
+      properties:
+        challenge_id:
+          type: string
+        method:
+          type: string
+          enum: [totp, sms, email]
+        message:
+          type: string
+    
+    MFASetupResponse:
+      type: object
+      properties:
+        qr_code:
+          type: string
+        secret:
+          type: string
+        recovery_codes:
+          type: array
+          items:
+            type: string
+    
+    Passkey:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        credential_id:
+          type: string
+        public_key:
+          type: string
+        name:
+          type: string
+        last_used:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    
+    WebAuthnCreationOptions:
+      type: object
+      properties:
+        publicKey:
+          type: object
+    
+    WebAuthnRequestOptions:
+      type: object
+      properties:
+        publicKey:
+          type: object
+    
+    WebAuthnCredential:
+      type: object
+      properties:
+        id:
+          type: string
+        rawId:
+          type: string
+        type:
+          type: string
+        response:
+          type: object
+    
+    WebAuthnAssertion:
+      type: object
+      properties:
+        id:
+          type: string
+        rawId:
+          type: string
+        type:
+          type: string
+        response:
+          type: object
+    
+    UserListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    
+    OrganizationListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    
+    MemberListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationMember'
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+      required: [code, message]
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

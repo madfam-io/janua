@@ -1,8 +1,8 @@
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { SignJWT, jwtVerify } from 'jose';
-import { PlintoClient } from '@plinto/js';
-import type { User, Session } from '@plinto/js';
+import { PlintoClient } from '@plinto/typescript-sdk';
+import type { User, Session } from '@plinto/typescript-sdk';
 
 const COOKIE_NAME = 'plinto-session';
 const COOKIE_OPTIONS = {

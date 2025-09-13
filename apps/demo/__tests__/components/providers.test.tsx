@@ -19,7 +19,7 @@ jest.mock('@/hooks/useEnvironment', () => ({
 }))
 
 // Mock PlintoClient
-jest.mock('@plinto/sdk', () => ({
+jest.mock('@plinto/typescript-sdk', () => ({
   PlintoClient: jest.fn().mockImplementation(() => ({
     initialize: jest.fn()
   }))

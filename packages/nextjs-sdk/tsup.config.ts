@@ -11,7 +11,7 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ['react', 'react-dom', 'next', '@plinto/js'],
+  external: ['react', 'react-dom', 'next', '@plinto/typescript-sdk'],
   noExternal: [],
   target: 'es2020',
 });

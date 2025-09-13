@@ -1,6 +1,6 @@
 import { inject, computed, ComputedRef } from 'vue';
 import { PLINTO_KEY, PlintoVue } from './plugin';
-import type { User, Session } from '@plinto/js';
+import type { User, Session } from '@plinto/typescript-sdk';
 
 export function usePlinto(): PlintoVue {
   const plinto = inject<PlintoVue>(PLINTO_KEY);

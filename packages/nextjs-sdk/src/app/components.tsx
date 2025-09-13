@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAuth, useUser } from './provider';
-import type { SignUpRequest, SignInRequest } from '@plinto/js';
+import type { SignUpRequest, SignInRequest } from '@plinto/typescript-sdk';
 
 // SignIn Component
 export interface SignInFormProps {

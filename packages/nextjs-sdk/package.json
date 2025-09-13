@@ -60,7 +60,7 @@
     "url": "https://github.com/plinto/plinto/issues"
   },
   "dependencies": {
-    "@plinto/js": "^0.1.0",
+    "@plinto/typescript-sdk": "*",
     "jose": "^5.0.0"
   },
   "peerDependencies": {

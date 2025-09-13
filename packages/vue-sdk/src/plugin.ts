@@ -1,6 +1,6 @@
 import { App, reactive, readonly } from 'vue';
-import { PlintoClient } from '@plinto/js';
-import type { User, Session, PlintoConfig } from '@plinto/js';
+import { PlintoClient } from '@plinto/typescript-sdk';
+import type { User, Session, PlintoConfig } from '@plinto/typescript-sdk';
 
 export interface PlintoState {
   user: User | null;

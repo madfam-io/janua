@@ -1,7 +1,7 @@
 {
-  "name": "@plinto/sdk",
+  "name": "@plinto/jwt-utils",
   "version": "0.1.0",
-  "description": "Plinto JavaScript/TypeScript SDK",
+  "description": "JWT and JWKS utilities for Plinto Identity Platform",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -37,16 +37,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/aureolabs/plinto"
+    "url": "https://github.com/plinto/plinto",
+    "directory": "packages/jwt-utils"
   },
   "keywords": [
     "plinto",
-    "identity",
-    "authentication",
     "jwt",
-    "passkeys",
-    "webauthn"
+    "jwks",
+    "authentication",
+    "verification",
+    "tokens"
   ],
-  "author": "Aureo Labs",
+  "author": "Plinto Team",
   "license": "MIT"
 }

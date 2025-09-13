@@ -20,7 +20,7 @@
     "test:watch": "jest --config jest.config.js --watch"
   },
   "dependencies": {
-    "@plinto/sdk": "*"
+    "@plinto/typescript-sdk": "*"
   },
   "peerDependencies": {
     "react": "^18.0.0",

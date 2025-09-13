@@ -19,7 +19,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@plinto/sdk": "*",
+    "@plinto/typescript-sdk": "*",
     "@plinto/ui": "*",
     "@radix-ui/react-checkbox": "^1.0.4",
     "@radix-ui/react-dialog": "^1.0.5",
