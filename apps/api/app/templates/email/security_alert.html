@@ -1,0 +1,111 @@
+{% extends "email/base.html" %}
+
+{% block title %}Security Alert - {{ alert_type }}{% endblock %}
+
+{% block content %}
+<div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 24px; margin: 0 0 24px 0;">
+    <h1 style="color: #dc2626; font-size: 24px; font-weight: 600; margin: 0 0 16px 0; display: flex; align-items: center;">
+        🚨 Security Alert
+    </h1>
+    <p style="color: #991b1b; font-size: 18px; font-weight: 600; margin: 0;">
+        {{ alert_type }}
+    </p>
+</div>
+
+<p style="color: #475569; font-size: 16px; line-height: 24px; margin: 0 0 16px 0;">
+    Hello {{ user_name or "there" }},
+</p>
+
+<p style="color: #475569; font-size: 16px; line-height: 24px; margin: 0 0 24px 0;">
+    We detected {{ alert_description }} on your Plinto account and wanted to notify you immediately.
+</p>
+
+{% if alert_type == "Suspicious Login Attempt" %}
+<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 20px; margin: 24px 0;">
+    <h2 style="color: #1e293b; font-size: 18px; font-weight: 600; margin: 0 0 16px 0;">
+        Login Details
+    </h2>
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; font-weight: 600; width: 120px;">Time:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ event_time }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; font-weight: 600;">Location:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ location or "Unknown" }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; font-weight: 600;">IP Address:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ ip_address }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; font-weight: 600;">Device:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ user_agent }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; font-weight: 600;">Status:</td>
+            <td style="padding: 8px 0; color: {% if login_success %}#059669{% else %}#dc2626{% endif %};">
+                {% if login_success %}✅ Successful{% else %}❌ Failed{% endif %}
+            </td>
+        </tr>
+    </table>
+</div>
+{% endif %}
+
+{% if recommended_actions %}
+<div style="background: #fef9e7; border: 1px solid #f59e0b; border-radius: 6px; padding: 20px; margin: 24px 0;">
+    <h2 style="color: #92400e; font-size: 18px; font-weight: 600; margin: 0 0 16px 0;">
+        🔐 Recommended Actions
+    </h2>
+    <ul style="color: #92400e; margin: 0; padding-left: 20px;">
+        {% for action in recommended_actions %}
+        <li style="margin: 8px 0;">{{ action }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if was_you %}
+<div style="text-align: center; margin: 32px 0;">
+    <p style="color: #475569; font-size: 16px; margin: 0 0 16px 0;">
+        <strong>Was this you?</strong>
+    </p>
+    <a href="{{ confirm_url }}"
+       style="background: #059669; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; display: inline-block; margin: 0 8px;">
+        Yes, This Was Me
+    </a>
+    <a href="{{ secure_account_url }}"
+       style="background: #dc2626; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; display: inline-block; margin: 0 8px;">
+        No, Secure My Account
+    </a>
+</div>
+{% endif %}
+
+{% if alert_type == "Password Changed" or alert_type == "Email Changed" %}
+<div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 6px; padding: 16px; margin: 24px 0;">
+    <p style="color: #065f46; font-size: 14px; margin: 0;">
+        <strong>Account Updated Successfully</strong><br>
+        If you made this change, no further action is required. If not, please secure your account immediately.
+    </p>
+</div>
+{% endif %}
+
+<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 32px 0;">
+
+<div style="background: #f1f5f9; border-radius: 6px; padding: 16px; margin: 24px 0;">
+    <h3 style="color: #1e293b; font-size: 16px; font-weight: 600; margin: 0 0 12px 0;">
+        🛡️ How to Keep Your Account Secure
+    </h3>
+    <ul style="color: #475569; font-size: 14px; margin: 0; padding-left: 20px;">
+        <li>Use a strong, unique password</li>
+        <li>Enable two-factor authentication</li>
+        <li>Don't share your login credentials</li>
+        <li>Log out from shared or public devices</li>
+        <li>Keep your contact information updated</li>
+    </ul>
+</div>
+
+<p style="color: #64748b; font-size: 14px; line-height: 20px; margin: 24px 0 0 0;">
+    If you have any concerns about your account security, please contact our support team immediately at <a href="mailto:{{ support_email }}" style="color: #3b82f6;">{{ support_email }}</a>
+</p>
+{% endblock %}

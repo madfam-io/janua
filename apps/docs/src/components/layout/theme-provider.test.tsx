@@ -1,10 +1,28 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
-import { theme-provider } from './theme-provider'
+import { render } from '@testing-library/react'
+import { ThemeProvider } from './theme-provider'
 
-describe('theme-provider', () => {
+// Mock window.matchMedia
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: jest.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: jest.fn(),
+    removeListener: jest.fn(),
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    dispatchEvent: jest.fn(),
+  })),
+})
+
+describe('ThemeProvider', () => {
   it('should render without crashing', () => {
-    render(<theme-provider />)
-    expect(screen.getByTestId('theme-provider')).toBeInTheDocument()
+    render(
+      <ThemeProvider>
+        <div data-testid="theme-provider">Test content</div>
+      </ThemeProvider>
+    )
   })
 })

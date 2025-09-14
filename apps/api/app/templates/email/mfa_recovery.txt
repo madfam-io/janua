@@ -1,0 +1,32 @@
+PLINTO - Account Recovery Request
+
+Hello {{ user_name or "there" }},
+
+We received a request to recover your account because you've lost access to your two-factor authentication device.
+
+RECOVERY CODE: {{ recovery_code }}
+
+This code expires in 30 minutes for your security.
+
+You can also use this link to recover your account:
+{{ recovery_url }}
+
+IMPORTANT SECURITY INFORMATION:
+- This recovery code can only be used once
+- It expires in 30 minutes for your security
+- After recovery, you'll need to set up two-factor authentication again
+- If you didn't request this, secure your account immediately
+
+SECURITY ALERT:
+If you did not request account recovery, someone may be trying to access your account. Please contact support immediately and consider changing your password.
+
+Request Details:
+Time: {{ request_time }}
+IP Address: {{ ip_address }}
+Browser: {{ user_agent }}
+
+Need help? Contact our support team at {{ support_email }}
+
+---
+This email was sent by Plinto - Secure Identity Management
+If you didn't request this email, please ignore it or contact support.

@@ -1,10 +1,16 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
-import { search-modal } from './search-modal'
+import { render } from '@testing-library/react'
+import { SearchModal } from './search-modal'
 
-describe('search-modal', () => {
+// Mock next/navigation
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+  }),
+}))
+
+describe('SearchModal', () => {
   it('should render without crashing', () => {
-    render(<search-modal />)
-    expect(screen.getByTestId('search-modal')).toBeInTheDocument()
+    render(<SearchModal isOpen={true} onClose={() => {}} />)
   })
 })

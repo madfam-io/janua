@@ -1,0 +1,47 @@
+PLINTO - SECURITY ALERT: {{ alert_type }}
+
+Hello {{ user_name or "there" }},
+
+🚨 SECURITY ALERT 🚨
+
+We detected {{ alert_description }} on your Plinto account and wanted to notify you immediately.
+
+{% if alert_type == "Suspicious Login Attempt" %}
+LOGIN DETAILS:
+Time: {{ event_time }}
+Location: {{ location or "Unknown" }}
+IP Address: {{ ip_address }}
+Device: {{ user_agent }}
+Status: {% if login_success %}✅ Successful{% else %}❌ Failed{% endif %}
+{% endif %}
+
+{% if recommended_actions %}
+RECOMMENDED ACTIONS:
+{% for action in recommended_actions %}
+- {{ action }}
+{% endfor %}
+{% endif %}
+
+{% if was_you %}
+WAS THIS YOU?
+If this was you, you can confirm at: {{ confirm_url }}
+If this was NOT you, secure your account immediately: {{ secure_account_url }}
+{% endif %}
+
+{% if alert_type == "Password Changed" or alert_type == "Email Changed" %}
+ACCOUNT UPDATED:
+If you made this change, no further action is required. If not, please secure your account immediately.
+{% endif %}
+
+HOW TO KEEP YOUR ACCOUNT SECURE:
+- Use a strong, unique password
+- Enable two-factor authentication
+- Don't share your login credentials
+- Log out from shared or public devices
+- Keep your contact information updated
+
+If you have any concerns about your account security, please contact our support team immediately at {{ support_email }}
+
+---
+This email was sent by Plinto - Secure Identity Management
+This is an automated security notification and cannot receive replies.
