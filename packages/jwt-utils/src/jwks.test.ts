@@ -1,7 +1,7 @@
-import * as module from './jwks'
+import * as jwksModule from './jwks'
 
 describe('jwks', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(jwksModule).toBeDefined()
   })
 })

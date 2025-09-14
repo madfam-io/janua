@@ -1,7 +1,7 @@
-import * as module from './passkeys'
+import * as passkeysModule from './passkeys'
 
 describe('passkeys', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(passkeysModule).toBeDefined()
   })
 })

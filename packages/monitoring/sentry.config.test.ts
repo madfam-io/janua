@@ -1,7 +1,7 @@
-import * as module from './sentry'
+import * as sentryModule from './sentry.config'
 
 describe('sentry', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(sentryModule).toBeDefined()
   })
 })

@@ -1,7 +1,7 @@
-import * as module from './index'
+import * as jwtUtilsModule from './index'
 
 describe('index', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(jwtUtilsModule).toBeDefined()
   })
 })

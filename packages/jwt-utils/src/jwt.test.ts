@@ -1,7 +1,7 @@
-import * as module from './jwt'
+import * as jwtModule from './jwt'
 
 describe('jwt', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(jwtModule).toBeDefined()
   })
 })

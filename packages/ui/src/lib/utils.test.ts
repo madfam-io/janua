@@ -1,7 +1,7 @@
-import * as module from './utils'
+import * as utilsModule from './utils'
 
 describe('utils', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(utilsModule).toBeDefined()
   })
 })

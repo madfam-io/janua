@@ -1,7 +1,7 @@
-import * as module from './index'
+import * as uiModule from './index'
 
 describe('index', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(uiModule).toBeDefined()
   })
 })

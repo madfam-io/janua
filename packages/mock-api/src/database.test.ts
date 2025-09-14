@@ -1,7 +1,7 @@
-import * as module from './database'
+import * as databaseModule from './database'
 
 describe('database', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(databaseModule).toBeDefined()
   })
 })

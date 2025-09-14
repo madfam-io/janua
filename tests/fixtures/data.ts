@@ -16,6 +16,36 @@ export const userFixtures = {
       nationality: 'US',
     },
   },
+
+  verifiedUser: {
+    id: 'user-verified-123',
+    email: 'verified@example.com',
+    name: 'Verified User',
+    verified: true,
+    createdAt: '2023-01-01T00:00:00Z',
+    updatedAt: '2023-01-01T00:00:00Z',
+    profile: {
+      firstName: 'Verified',
+      lastName: 'User',
+      dateOfBirth: '1990-01-01',
+      nationality: 'US',
+    },
+  },
+
+  validUser: {
+    id: 'user-verified-123',
+    email: 'verified@example.com',
+    name: 'Verified User',
+    verified: true,
+    createdAt: '2023-01-01T00:00:00Z',
+    updatedAt: '2023-01-01T00:00:00Z',
+    profile: {
+      firstName: 'Verified',
+      lastName: 'User',
+      dateOfBirth: '1990-01-01',
+      nationality: 'US',
+    },
+  },
   
   unverified: {
     id: 'user-unverified-123',
@@ -197,6 +227,17 @@ export const tokenFixtures = {
       exp: 1640998800,
     },
   },
+
+  validAccessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLXZlcmlmaWVkLTEyMyIsImVtYWlsIjoidmVyaWZpZWRAZXhhbXBsZS5jb20iLCJ2ZXJpZmllZCI6dHJ1ZSwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.valid-access-token',
+
+  validRefreshToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLXZlcmlmaWVkLTEyMyIsInR5cCI6InJlZnJlc2giLCJpYXQiOjE2NDA5OTUyMDAsImV4cCI6MTY0MTYwMDAwMH0.valid-refresh-token',
+
+  validTokenResponse: {
+    access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLXZlcmlmaWVkLTEyMyIsImVtYWlsIjoidmVyaWZpZWRAZXhhbXBsZS5jb20iLCJ2ZXJpZmllZCI6dHJ1ZSwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.valid-access-token',
+    refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLXZlcmlmaWVkLTEyMyIsInR5cCI6InJlZnJlc2giLCJpYXQiOjE2NDA5OTUyMDAsImV4cCI6MTY0MTYwMDAwMH0.valid-refresh-token',
+    token_type: 'bearer' as const,
+    expires_in: 3600
+  },
   
   expired: {
     token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLXZlcmlmaWVkLTEyMyIsImVtYWlsIjoidmVyaWZpZWRAZXhhbXBsZS5jb20iLCJ2ZXJpZmllZCI6dHJ1ZSwiaWF0IjoxNjQwOTkxNjAwLCJleHAiOjE2NDA5OTUyMDB9',
@@ -211,6 +252,13 @@ export const tokenFixtures = {
   
   invalid: {
     token: 'invalid-token-format',
+  },
+
+  validTokens: {
+    access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLXZlcmlmaWVkLTEyMyIsImVtYWlsIjoidmVyaWZpZWRAZXhhbXBsZS5jb20iLCJ2ZXJpZmllZCI6dHJ1ZSwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE2NDA5OTg4MDB9.valid-access-token',
+    refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLXZlcmlmaWVkLTEyMyIsInR5cCI6InJlZnJlc2giLCJpYXQiOjE2NDA5OTUyMDAsImV4cCI6MTY0MTYwMDAwMH0.valid-refresh-token',
+    token_type: 'bearer' as const,
+    expires_in: 3600
   },
 };
 

@@ -17,6 +17,21 @@ module.exports = {
     '**/?(*.)+(spec|test).[jt]s?(x)',
   ],
   transform: {
-    '^.+\\.(js|jsx|ts|tsx)$': 'babel-jest',
+    '^.+\\.(js|jsx|ts|tsx)$': ['ts-jest', {
+      tsconfig: {
+        jsx: 'react-jsx',
+        allowSyntheticDefaultImports: true,
+        esModuleInterop: true,
+      },
+    }],
+  },
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
+  globals: {
+    'ts-jest': {
+      useESM: true,
+      tsconfig: {
+        jsx: 'react-jsx',
+      },
+    },
   },
 };

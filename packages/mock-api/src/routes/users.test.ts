@@ -1,7 +1,7 @@
-import * as module from './users'
+import * as usersModule from './users'
 
 describe('users', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(usersModule).toBeDefined()
   })
 })

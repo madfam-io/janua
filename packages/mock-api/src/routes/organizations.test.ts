@@ -1,7 +1,7 @@
-import * as module from './organizations'
+import * as organizationsModule from './organizations'
 
 describe('organizations', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(organizationsModule).toBeDefined()
   })
 })

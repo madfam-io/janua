@@ -1,7 +1,7 @@
-import * as module from './sessions'
+import * as sessionsModule from './sessions'
 
 describe('sessions', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(sessionsModule).toBeDefined()
   })
 })

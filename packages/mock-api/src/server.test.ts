@@ -1,7 +1,7 @@
-import * as module from './server'
+import * as serverModule from './server'
 
 describe('server', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(serverModule).toBeDefined()
   })
 })

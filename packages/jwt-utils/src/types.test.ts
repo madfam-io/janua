@@ -1,7 +1,7 @@
-import * as module from './types'
+import * as typesModule from './types'
 
 describe('types', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(typesModule).toBeDefined()
   })
 })

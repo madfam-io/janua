@@ -1,7 +1,7 @@
-import * as module from './auth'
+import * as authModule from './auth'
 
 describe('auth', () => {
   it('should export expected functions', () => {
-    expect(module).toBeDefined()
+    expect(authModule).toBeDefined()
   })
 })

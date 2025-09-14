@@ -1,10 +1,25 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { layout } from './layout'
+import RootLayout from './layout'
 
-describe('layout', () => {
+describe('RootLayout', () => {
   it('should render without crashing', () => {
-    render(<layout />)
-    expect(screen.getByTestId('layout')).toBeInTheDocument()
+    const TestChild = () => <div>Test Child</div>
+    render(
+      <RootLayout>
+        <TestChild />
+      </RootLayout>
+    )
+    expect(screen.getByText('Test Child')).toBeInTheDocument()
+  })
+
+  it('should render html and body tags', () => {
+    const TestChild = () => <div>Content</div>
+    const { container } = render(
+      <RootLayout>
+        <TestChild />
+      </RootLayout>
+    )
+    expect(container.firstChild).toHaveProperty('tagName', 'HTML')
   })
 })

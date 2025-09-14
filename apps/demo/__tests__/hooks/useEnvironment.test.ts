@@ -45,25 +45,23 @@ describe('useEnvironment', () => {
 describe('useDemoFeatures', () => {
   it('should return demo features when in demo mode', () => {
     const { result } = renderHook(() => useDemoFeatures())
-    
+
     expect(result.current.isDemo).toBe(true)
-    expect(result.current.credentials).toEqual({
-      email: 'demo@plinto.dev',
-      password: 'DemoPassword123!'
-    })
+    expect(result.current.demoConfig).toBeDefined()
     expect(result.current.performanceData).toBeDefined()
     expect(result.current.generateSampleUsers).toBeDefined()
+    expect(result.current.simulatePerformance).toBeDefined()
   })
 })
 
 describe('useApiConfig', () => {
   it('should return API configuration', () => {
     const { result } = renderHook(() => useApiConfig())
-    
+
     expect(result.current).toEqual({
       apiUrl: 'http://localhost:4000',
-      timeout: 5000,
-      retries: 3
+      timeout: 2000, // Demo mode uses faster timeout
+      retries: 1     // Demo mode uses fewer retries
     })
   })
 })

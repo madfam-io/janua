@@ -1,5 +1,5 @@
 // Global test setup
-import '@testing-library/jest-dom';
+require('@testing-library/jest-dom');
 
 // Mock environment variables
 process.env.NODE_ENV = 'test';
@@ -30,8 +30,9 @@ jest.mock('next/navigation', () => ({
 jest.mock('next/image', () => ({
   __esModule: true,
   default: (props) => {
+    const { createElement } = require('react');
     // eslint-disable-next-line jsx-a11y/alt-text
-    return <img {...props} />;
+    return createElement('img', props);
   },
 }));
 

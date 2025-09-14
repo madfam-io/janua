@@ -1,10 +1,18 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { comparison } from './comparison'
+import { ComparisonSection } from './comparison'
 
-describe('comparison', () => {
+describe('ComparisonSection', () => {
   it('should render without crashing', () => {
-    render(<comparison />)
-    expect(screen.getByTestId('comparison')).toBeInTheDocument()
+    render(<ComparisonSection />)
+    // Look for typical comparison table headers or content
+    const headings = screen.getAllByRole('heading')
+    expect(headings.length).toBeGreaterThan(0)
+  })
+
+  it('should render comparison content', () => {
+    render(<ComparisonSection />)
+    // Test that the component renders basic comparison elements
+    expect(screen.getByRole('table')).toBeInTheDocument()
   })
 })
