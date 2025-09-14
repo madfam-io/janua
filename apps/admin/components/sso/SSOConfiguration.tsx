@@ -205,7 +205,7 @@ export function SSOConfiguration({ organizationId }: SSOConfigurationProps) {
             </div>
             {config && (
               <div className="flex items-center space-x-4">
-                <Badge variant={config.status === 'active' ? 'success' : 'secondary'}>
+                <Badge variant={config.status === 'active' ? 'default' : 'secondary'}>
                   {config.status}
                 </Badge>
                 <Switch
