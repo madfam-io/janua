@@ -71,5 +71,8 @@
     "url": "https://github.com/aureolabs/plinto"
   },
   "author": "Aureo Labs (MADFAM)",
-  "license": "PROPRIETARY"
+  "license": "PROPRIETARY",
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.50.1"
+  }
 }
