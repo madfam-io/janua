@@ -1,4 +1,7 @@
-import { HeroSection } from '@/components/sections/hero'
+import { EnhancedHeroSection } from '@/components/sections/enhanced-hero'
+import { SecurityTrustCenter } from '@/components/sections/security-trust-center'
+import { EnterpriseShowcase } from '@/components/sections/enterprise-showcase'
+import { GlobalPaymentDisplay } from '@/components/sections/global-payment-display'
 import { TrustSection } from '@/components/sections/trust'
 import { FeaturesGrid } from '@/components/sections/features'
 import { DeveloperExperience } from '@/components/sections/developer-experience'
@@ -16,15 +19,20 @@ export default function LandingPage() {
     <>
       <Navigation />
       <main className="relative">
-        {/* Hero Section with animated background */}
-        <div className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-purple-950" />
-          <div className="absolute inset-0 bg-grid-pattern opacity-[0.02]" />
-          <HeroSection />
-        </div>
+        {/* Enhanced Hero Section with geo-targeting */}
+        <EnhancedHeroSection />
 
         {/* Trust indicators */}
         <TrustSection />
+
+        {/* Security Trust Center */}
+        <SecurityTrustCenter />
+
+        {/* Enterprise Showcase */}
+        <EnterpriseShowcase />
+
+        {/* Global Payment Display */}
+        <GlobalPaymentDisplay />
 
         {/* Core features */}
         <section className="py-24 px-4 sm:px-6 lg:px-8">
