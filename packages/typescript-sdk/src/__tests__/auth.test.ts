@@ -55,7 +55,8 @@ describe('Auth', () => {
         user: userFixtures.verifiedUser,
         access_token: tokenFixtures.validAccessToken,
         refresh_token: tokenFixtures.validRefreshToken,
-        expires_in: 3600
+        expires_in: 3600,
+        token_type: 'bearer' as const
       };
 
       mockHttpClient.post.mockResolvedValue({ data: mockResponse });
@@ -73,7 +74,9 @@ describe('Auth', () => {
         user: mockResponse.user,
         tokens: {
           access_token: mockResponse.access_token,
-          refresh_token: mockResponse.refresh_token
+          refresh_token: mockResponse.refresh_token,
+          expires_in: mockResponse.expires_in,
+          token_type: mockResponse.token_type
         }
       });
     });
@@ -108,7 +111,8 @@ describe('Auth', () => {
         user: userFixtures.verifiedUser,
         access_token: tokenFixtures.validAccessToken,
         refresh_token: tokenFixtures.validRefreshToken,
-        expires_in: 3600
+        expires_in: 3600,
+        token_type: 'bearer' as const
       };
 
       mockHttpClient.post.mockResolvedValue({ data: mockResponse });
@@ -126,7 +130,9 @@ describe('Auth', () => {
         user: mockResponse.user,
         tokens: {
           access_token: mockResponse.access_token,
-          refresh_token: mockResponse.refresh_token
+          refresh_token: mockResponse.refresh_token,
+          expires_in: mockResponse.expires_in,
+          token_type: mockResponse.token_type
         }
       });
     });
@@ -204,7 +210,8 @@ describe('Auth', () => {
       const mockResponse = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
-        expires_in: 3600
+        expires_in: 3600,
+        token_type: 'bearer' as const
       };
 
       mockHttpClient.post.mockResolvedValue({ data: mockResponse });
@@ -213,6 +220,8 @@ describe('Auth', () => {
 
       expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/refresh', {
         refresh_token: tokenFixtures.validRefreshToken
+      }, {
+        skipAuth: true
       });
       expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
         access_token: mockResponse.access_token,
@@ -221,7 +230,9 @@ describe('Auth', () => {
       });
       expect(result).toEqual({
         access_token: mockResponse.access_token,
-        refresh_token: mockResponse.refresh_token
+        refresh_token: mockResponse.refresh_token,
+        expires_in: mockResponse.expires_in,
+        token_type: mockResponse.token_type
       });
     });
 
@@ -246,7 +257,7 @@ describe('Auth', () => {
 
       const result = await auth.verifyEmail(token);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/verify-email', { token });
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/email/verify', { token }, { skipAuth: true });
       expect(result).toEqual({ 
         success: true,
         message: 'Email verified successfully' 
@@ -267,7 +278,7 @@ describe('Auth', () => {
 
       const result = await auth.requestPasswordReset(email);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/password/reset', { email });
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/password/reset-request', { email }, { skipAuth: true });
       expect(result).toEqual({ 
         success: true,
         message: 'Password reset email sent' 
@@ -289,9 +300,11 @@ describe('Auth', () => {
 
       const result = await auth.resetPassword(token, newPassword);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/password/confirm', { 
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/password/confirm', {
         token,
-        password: newPassword 
+        password: newPassword
+      }, {
+        skipAuth: true
       });
       expect(result).toEqual({ 
         success: true,
@@ -338,7 +351,8 @@ describe('Auth', () => {
           user: userFixtures.verifiedUser,
           access_token: tokenFixtures.validAccessToken,
           refresh_token: tokenFixtures.validRefreshToken,
-          expires_in: 3600
+          expires_in: 3600,
+          token_type: 'bearer' as const
         };
 
         mockHttpClient.post.mockResolvedValue({ data: mockResponse });
@@ -352,7 +366,9 @@ describe('Auth', () => {
           user: mockResponse.user,
           tokens: {
             access_token: mockResponse.access_token,
-            refresh_token: mockResponse.refresh_token
+            refresh_token: mockResponse.refresh_token,
+            expires_in: mockResponse.expires_in,
+            token_type: mockResponse.token_type
           }
         });
       });
@@ -437,16 +453,19 @@ describe('Auth', () => {
           user: userFixtures.verifiedUser,
           access_token: tokenFixtures.validAccessToken,
           refresh_token: tokenFixtures.validRefreshToken,
-          expires_in: 3600
+          expires_in: 3600,
+          token_type: 'bearer' as const
         };
 
         mockHttpClient.post.mockResolvedValue({ data: mockResponse });
 
         const result = await auth.handleOAuthCallback(code, state);
 
-        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/oauth/callback', { 
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/oauth/callback', {
           code,
-          state 
+          state
+        }, {
+          skipAuth: true
         });
         expect(mockTokenManager.setTokens).toHaveBeenCalled();
         expect(mockOnSignIn).toHaveBeenCalled();
@@ -454,7 +473,9 @@ describe('Auth', () => {
           user: mockResponse.user,
           tokens: {
             access_token: mockResponse.access_token,
-            refresh_token: mockResponse.refresh_token
+            refresh_token: mockResponse.refresh_token,
+            expires_in: mockResponse.expires_in,
+            token_type: mockResponse.token_type
           }
         });
       });
@@ -476,7 +497,9 @@ describe('Auth', () => {
 
         const result = await auth.getOAuthProviders();
 
-        expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/auth/oauth/providers');
+        expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/auth/oauth/providers', {
+          skipAuth: true
+        });
         expect(result).toEqual(mockProviders);
       });
     });
@@ -518,14 +541,573 @@ describe('Auth', () => {
         ...updates
       };
 
-      mockHttpClient.put.mockResolvedValue({ 
+      mockHttpClient.patch.mockResolvedValue({
         data: updatedUser
       });
 
       const result = await auth.updateProfile(updates);
 
-      expect(mockHttpClient.put).toHaveBeenCalledWith('/api/v1/auth/me', updates);
+      expect(mockHttpClient.patch).toHaveBeenCalledWith('/api/v1/auth/profile', updates);
       expect(result).toEqual(updatedUser);
+    });
+  });
+
+  describe('Magic Link operations', () => {
+    describe('sendMagicLink', () => {
+      it('should send magic link successfully', async () => {
+        const request = { email: 'user@example.com' };
+        const mockResponse = { message: 'Magic link sent successfully' };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.sendMagicLink(request);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/magic-link', request, {
+          skipAuth: true
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('verifyMagicLink', () => {
+      it('should verify magic link successfully', async () => {
+        const token = 'magic_link_token_123';
+        const mockResponse = {
+          user: userFixtures.validUser,
+          tokens: tokenFixtures.validTokens,
+          message: 'Magic link verified successfully'
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.verifyMagicLink(token);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/magic-link/verify', {
+          token: token
+        }, { skipAuth: true });
+        expect(result).toEqual(mockResponse);
+        expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
+          access_token: mockResponse.tokens.access_token,
+          refresh_token: mockResponse.tokens.refresh_token,
+          expires_in: mockResponse.tokens.expires_in
+        });
+        expect(mockOnSignIn).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('Extended MFA operations', () => {
+    describe('getMFAStatus', () => {
+      it('should get MFA status successfully', async () => {
+        const mockResponse = {
+          enabled: true,
+          methods: ['totp', 'sms'],
+          backup_codes_count: 8
+        };
+
+        mockHttpClient.get.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.getMFAStatus();
+
+        expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/mfa/status');
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('regenerateMFABackupCodes', () => {
+      it('should regenerate MFA backup codes successfully', async () => {
+        const password = 'userpassword123';
+        const mockResponse = {
+          backup_codes: ['code1', 'code2', 'code3'],
+          message: 'Backup codes regenerated successfully'
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.regenerateMFABackupCodes(password);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/regenerate-backup-codes', {
+          password: password
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('validateMFACode', () => {
+      it('should validate MFA code successfully', async () => {
+        const code = '123456';
+        const mockResponse = { valid: true, message: 'Code is valid' };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.validateMFACode(code);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/validate-code', {
+          code: code
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('getMFARecoveryOptions', () => {
+      it('should get MFA recovery options successfully', async () => {
+        const email = 'user@example.com';
+        const mockResponse = {
+          options: ['backup_codes', 'sms', 'email'],
+          available_methods: ['sms'],
+          message: 'Recovery options available'
+        };
+
+        mockHttpClient.get.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.getMFARecoveryOptions(email);
+
+        expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/mfa/recovery-options?email=user%40example.com', {
+          skipAuth: true
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('initiateMFARecovery', () => {
+      it('should initiate MFA recovery successfully', async () => {
+        const email = 'user@example.com';
+        const mockResponse = { message: 'MFA recovery initiated successfully' };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.initiateMFARecovery(email);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/initiate-recovery', {
+          email: email
+        }, { skipAuth: true });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+  });
+
+  describe('Extended OAuth operations', () => {
+    describe('initiateOAuth', () => {
+      it('should initiate OAuth flow successfully', async () => {
+        const provider = 'google';
+        const options = {
+          redirect_uri: 'https://app.example.com/callback',
+          scopes: ['email', 'profile']
+        };
+        const mockResponse = {
+          authorization_url: 'https://oauth.google.com/auth?client_id=123&redirect_uri=...',
+          state: 'random_state_123',
+          provider: 'google'
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.initiateOAuth(provider, options);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/oauth/authorize/google', null, {
+          params: {
+            redirect_uri: 'https://app.example.com/callback',
+            scopes: 'email,profile'
+          },
+          skipAuth: true
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('handleOAuthCallbackWithProvider', () => {
+      it('should handle OAuth callback with provider successfully', async () => {
+        const provider = 'google';
+        const code = 'oauth_code_123';
+        const state = 'state_123';
+        const mockResponse = {
+          user: userFixtures.validUser,
+          access_token: tokenFixtures.validTokens.access_token,
+          refresh_token: tokenFixtures.validTokens.refresh_token,
+          token_type: tokenFixtures.validTokens.token_type,
+          expires_in: tokenFixtures.validTokens.expires_in,
+          message: 'OAuth authentication successful'
+        };
+
+        mockHttpClient.get.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.handleOAuthCallbackWithProvider(provider, code, state);
+
+        expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/auth/oauth/callback/google', {
+          params: { code: code, state: state },
+          skipAuth: true
+        });
+        expect(result).toEqual(mockResponse);
+        expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
+          access_token: mockResponse.access_token,
+          refresh_token: mockResponse.refresh_token,
+          expires_in: mockResponse.expires_in
+        });
+        expect(mockOnSignIn).toHaveBeenCalled();
+      });
+    });
+
+    describe('linkOAuthAccount', () => {
+      it('should link OAuth account successfully', async () => {
+        const provider = 'github';
+        const options = { redirect_uri: 'https://app.example.com/link-callback' };
+        const mockResponse = {
+          authorization_url: 'https://github.com/login/oauth/authorize?client_id=123&redirect_uri=...',
+          state: 'random_state_456',
+          provider: 'github',
+          action: 'link'
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.linkOAuthAccount(provider, options);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/oauth/link/github', null, {
+          params: {
+            redirect_uri: 'https://app.example.com/link-callback'
+          }
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('unlinkOAuthAccount', () => {
+      it('should unlink OAuth account successfully', async () => {
+        const provider = 'github';
+        const mockResponse = {
+          message: 'OAuth account unlinked successfully'
+        };
+
+        mockHttpClient.delete.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.unlinkOAuthAccount(provider);
+
+        expect(mockHttpClient.delete).toHaveBeenCalledWith(`/api/v1/auth/oauth/unlink/${provider}`);
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('getLinkedAccounts', () => {
+      it('should get linked accounts successfully', async () => {
+        const mockResponse = {
+          linked_accounts: [
+            {
+              provider: 'google',
+              external_id: 'google123',
+              email: 'user@google.com',
+              linked_at: '2023-01-01T00:00:00Z'
+            },
+            {
+              provider: 'github',
+              external_id: 'github456',
+              email: 'user@github.com',
+              linked_at: '2023-01-02T00:00:00Z'
+            }
+          ]
+        };
+
+        mockHttpClient.get.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.getLinkedAccounts();
+
+        expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/auth/oauth/accounts');
+        expect(result).toEqual(mockResponse);
+      });
+    });
+  });
+
+  describe('Additional password operations', () => {
+    describe('forgotPassword', () => {
+      it('should send forgot password email successfully', async () => {
+        const request = { email: 'user@example.com' };
+        const mockResponse = { message: 'Password reset email sent' };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.forgotPassword(request);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/password/forgot', request, {
+          skipAuth: true
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('resendVerificationEmail', () => {
+      it('should resend verification email successfully', async () => {
+        const mockResponse = { message: 'Verification email sent' };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.resendVerificationEmail();
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/email/resend-verification');
+        expect(result).toEqual(mockResponse);
+      });
+    });
+  });
+
+  describe('Passkey operations', () => {
+    describe('checkPasskeyAvailability', () => {
+      it('should check passkey availability successfully', async () => {
+        const mockResponse = {
+          available: true,
+          supported_authenticators: ['platform', 'cross-platform'],
+          message: 'Passkeys are supported'
+        };
+
+        mockHttpClient.get.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.checkPasskeyAvailability();
+
+        expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/passkeys/availability', {
+          skipAuth: true
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('getPasskeyRegistrationOptions', () => {
+      it('should get passkey registration options successfully', async () => {
+        const options = { user_verification: 'required' };
+        const mockResponse = {
+          challenge: 'registration_challenge_123',
+          rp: { name: 'My App', id: 'app.example.com' },
+          user: { id: 'user123', name: 'user@example.com', displayName: 'User' },
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }]
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.getPasskeyRegistrationOptions(options);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/passkeys/register/options', options);
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('verifyPasskeyRegistration', () => {
+      it('should verify passkey registration successfully', async () => {
+        const credential = {
+          id: 'credential_id_123',
+          rawId: 'raw_credential_id',
+          response: {
+            clientDataJSON: 'client_data',
+            attestationObject: 'attestation_object'
+          }
+        };
+        const mockResponse = {
+          passkey: {
+            id: '550e8400-e29b-41d4-a716-446655440000',
+            name: 'My Passkey',
+            created_at: '2023-01-01T00:00:00Z'
+          },
+          message: 'Passkey registered successfully'
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.verifyPasskeyRegistration(credential);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/passkeys/register/verify', {
+          credential: credential,
+          name: undefined
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('getPasskeyAuthenticationOptions', () => {
+      it('should get passkey authentication options successfully', async () => {
+        const email = 'user@example.com';
+        const mockResponse = {
+          challenge: 'auth_challenge_123',
+          allowCredentials: [
+            {
+              id: 'credential_id_123',
+              type: 'public-key',
+              transports: ['usb', 'nfc']
+            }
+          ]
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.getPasskeyAuthenticationOptions(email);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/passkeys/authenticate/options', {
+          email: email
+        }, {
+          skipAuth: true
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('verifyPasskeyAuthentication', () => {
+      it('should verify passkey authentication successfully', async () => {
+        const credential = {
+          id: 'credential_id_123',
+          rawId: 'raw_credential_id',
+          response: {
+            clientDataJSON: 'client_data',
+            authenticatorData: 'authenticator_data',
+            signature: 'signature'
+          }
+        };
+        const mockResponse = {
+          user: userFixtures.validUser,
+          tokens: tokenFixtures.validTokens,
+          message: 'Passkey authentication successful'
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.verifyPasskeyAuthentication(credential, 'auth_challenge_123', 'user@example.com');
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/passkeys/authenticate/verify', {
+          credential: credential,
+          challenge: 'auth_challenge_123',
+          email: 'user@example.com'
+        }, { skipAuth: true });
+        expect(result).toEqual(mockResponse);
+        expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
+          access_token: mockResponse.tokens.access_token,
+          refresh_token: mockResponse.tokens.refresh_token,
+          expires_in: mockResponse.tokens.expires_in
+        });
+        expect(mockOnSignIn).toHaveBeenCalled();
+      });
+    });
+
+    describe('listPasskeys', () => {
+      it('should list user passkeys successfully', async () => {
+        const mockResponse = [
+          {
+            id: '550e8400-e29b-41d4-a716-446655440000',
+            name: 'iPhone Touch ID',
+            created_at: '2023-01-01T00:00:00Z',
+            last_used_at: '2023-01-15T00:00:00Z'
+          },
+          {
+            id: 'passkey_456',
+            name: 'Security Key',
+            created_at: '2023-01-10T00:00:00Z',
+            last_used_at: null
+          }
+        ];
+
+        mockHttpClient.get.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.listPasskeys();
+
+        expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/passkeys/');
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('updatePasskey', () => {
+      it('should update passkey name successfully', async () => {
+        const passkeyId = '550e8400-e29b-41d4-a716-446655440000';
+        const name = 'Updated Passkey Name';
+        const mockResponse = {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          name: 'Updated Passkey Name',
+          created_at: '2023-01-01T00:00:00Z',
+          last_used_at: '2023-01-15T00:00:00Z'
+        };
+
+        mockHttpClient.patch.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.updatePasskey(passkeyId, name);
+
+        expect(mockHttpClient.patch).toHaveBeenCalledWith(`/api/v1/passkeys/${passkeyId}`, {
+          name: name
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('deletePasskey', () => {
+      it('should delete passkey successfully', async () => {
+        const passkeyId = '550e8400-e29b-41d4-a716-446655440001';
+        const password = 'userpassword123';
+        const mockResponse = { message: 'Passkey deleted successfully' };
+
+        mockHttpClient.delete.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.deletePasskey(passkeyId, password);
+
+        expect(mockHttpClient.delete).toHaveBeenCalledWith(`/api/v1/passkeys/${passkeyId}`, {
+          data: { password: password }
+        });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('regeneratePasskeySecret', () => {
+      it('should regenerate passkey secret successfully', async () => {
+        const passkeyId = '550e8400-e29b-41d4-a716-446655440002';
+        const mockResponse = {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          name: 'iPhone Touch ID',
+          created_at: '2023-01-01T00:00:00Z',
+          last_used_at: '2023-01-15T00:00:00Z'
+        };
+
+        mockHttpClient.post.mockResolvedValue({
+          data: mockResponse
+        });
+
+        const result = await auth.regeneratePasskeySecret(passkeyId);
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith(`/api/v1/passkeys/${passkeyId}/regenerate-secret`);
+        expect(result).toEqual(mockResponse);
+      });
     });
   });
 });

@@ -284,6 +284,16 @@ export interface TokenResponse {
   expires_in: number;
 }
 
+// API Response interfaces (what comes from the server)
+export interface AuthApiResponse {
+  user: User;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: 'bearer';
+}
+
+// Client Response interfaces (what the SDK returns)
 export interface AuthResponse {
   user: User;
   tokens: TokenResponse;

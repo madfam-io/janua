@@ -12,6 +12,7 @@ import type {
   ChangePasswordRequest,
   MagicLinkRequest,
   AuthResponse,
+  AuthApiResponse,
   TokenResponse,
   User,
   UserUpdateRequest,
@@ -60,8 +61,8 @@ export class Auth {
       throw new ValidationError('Invalid username format');
     }
 
-    const response = await this.http.post<AuthResponse>('/api/v1/auth/register', request);
-    
+    const response = await this.http.post<AuthApiResponse>('/api/v1/auth/register', request);
+
     // Store tokens
     if (response.data.access_token && response.data.refresh_token) {
       await this.tokenManager.setTokens({
@@ -70,20 +71,21 @@ export class Auth {
         expires_in: response.data.expires_in
       });
     }
-    
+
     // Call onSignIn callback if it exists
     if (this.onSignIn) {
       this.onSignIn({ user: response.data.user });
     }
-    
+
     return {
       user: response.data.user,
       tokens: {
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in
+        expires_in: response.data.expires_in,
+        token_type: response.data.token_type
       }
-    } as AuthResponse;
+    };
   }
 
   /**
@@ -103,8 +105,13 @@ export class Auth {
       throw new ValidationError('Invalid username format');
     }
 
-    const response = await this.http.post<AuthResponse>('/api/v1/auth/login', request);
-    
+    const response = await this.http.post<AuthApiResponse>('/api/v1/auth/login', request);
+
+    // Handle MFA requirement
+    if ('requires_mfa' in response.data) {
+      return response.data as any; // Return MFA challenge response
+    }
+
     // Store tokens
     if (response.data.access_token && response.data.refresh_token) {
       await this.tokenManager.setTokens({
@@ -113,20 +120,21 @@ export class Auth {
         expires_in: response.data.expires_in
       });
     }
-    
+
     // Call onSignIn callback if it exists
     if (this.onSignIn) {
       this.onSignIn({ user: response.data.user });
     }
-    
+
     return {
       user: response.data.user,
       tokens: {
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in
+        expires_in: response.data.expires_in,
+        token_type: response.data.token_type
       }
-    } as AuthResponse;
+    };
   }
 
   /**
@@ -175,16 +183,25 @@ export class Auth {
     
     return {
       access_token: response.data.access_token,
-      refresh_token: response.data.refresh_token
-    } as TokenResponse;
+      refresh_token: response.data.refresh_token,
+      expires_in: response.data.expires_in,
+      token_type: response.data.token_type
+    };
   }
 
   /**
    * Get current user information
    */
-  async getCurrentUser(): Promise<User> {
-    const response = await this.http.get<User>('/api/v1/auth/me');
-    return response.data;
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const response = await this.http.get<User>('/api/v1/auth/me');
+      return response.data;
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -228,15 +245,18 @@ export class Auth {
   /**
    * Reset password with token
    */
-  async resetPassword(request: ResetPasswordRequest): Promise<{ message: string }> {
-    const passwordValidation = ValidationUtils.validatePassword(request.new_password);
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    const passwordValidation = ValidationUtils.validatePassword(newPassword);
     if (!passwordValidation.isValid) {
       throw new ValidationError('Password validation failed', {
         violations: { password: passwordValidation.errors }
       });
     }
 
-    const response = await this.http.post<{ message: string }>('/api/v1/auth/password/reset', request, {
+    const response = await this.http.post<{ message: string }>('/api/v1/auth/password/confirm', {
+      token,
+      password: newPassword
+    }, {
       skipAuth: true
     });
     return response.data;
@@ -245,15 +265,18 @@ export class Auth {
   /**
    * Change password for authenticated user
    */
-  async changePassword(request: ChangePasswordRequest): Promise<{ message: string }> {
-    const passwordValidation = ValidationUtils.validatePassword(request.new_password);
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+    const passwordValidation = ValidationUtils.validatePassword(newPassword);
     if (!passwordValidation.isValid) {
       throw new ValidationError('Password validation failed', {
         violations: { password: passwordValidation.errors }
       });
     }
 
-    const response = await this.http.post<{ message: string }>('/api/v1/auth/password/change', request);
+    const response = await this.http.put<{ message: string }>('/api/v1/auth/password/change', {
+      current_password: currentPassword,
+      new_password: newPassword
+    });
     return response.data;
   }
 
@@ -296,6 +319,21 @@ export class Auth {
     const response = await this.http.post<AuthResponse>('/api/v1/auth/magic-link/verify', {
       token
     }, { skipAuth: true });
+
+    // Store tokens
+    if (response.data.tokens && response.data.tokens.access_token && response.data.tokens.refresh_token) {
+      await this.tokenManager.setTokens({
+        access_token: response.data.tokens.access_token,
+        refresh_token: response.data.tokens.refresh_token,
+        expires_in: response.data.tokens.expires_in
+      });
+    }
+
+    // Call onSignIn callback if it exists
+    if (this.onSignIn) {
+      this.onSignIn({ user: response.data.user });
+    }
+
     return response.data;
   }
 
@@ -312,28 +350,51 @@ export class Auth {
   /**
    * Enable MFA (returns QR code and backup codes)
    */
-  async enableMFA(request: MFAEnableRequest): Promise<MFAEnableResponse> {
-    const response = await this.http.post<MFAEnableResponse>('/api/v1/mfa/enable', request);
+  async enableMFA(method: string): Promise<MFAEnableResponse> {
+    const response = await this.http.post<MFAEnableResponse>('/api/v1/auth/mfa/enable', { method });
     return response.data;
   }
 
   /**
    * Verify MFA setup with TOTP code
    */
-  async verifyMFA(request: MFAVerifyRequest): Promise<{ message: string }> {
+  async verifyMFA(request: MFAVerifyRequest): Promise<AuthResponse> {
     if (!/^\d{6}$/.test(request.code)) {
       throw new ValidationError('MFA code must be 6 digits');
     }
 
-    const response = await this.http.post<{ message: string }>('/api/v1/mfa/verify', request);
-    return response.data;
+    const response = await this.http.post<AuthApiResponse>('/api/v1/auth/mfa/verify', request);
+
+    // Store tokens
+    if (response.data.access_token && response.data.refresh_token) {
+      await this.tokenManager.setTokens({
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_in: response.data.expires_in
+      });
+    }
+
+    // Call onSignIn callback if it exists
+    if (this.onSignIn) {
+      this.onSignIn({ user: response.data.user });
+    }
+
+    return {
+      user: response.data.user,
+      tokens: {
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_in: response.data.expires_in,
+        token_type: response.data.token_type
+      }
+    };
   }
 
   /**
    * Disable MFA
    */
-  async disableMFA(request: MFADisableRequest): Promise<{ message: string }> {
-    const response = await this.http.post<{ message: string }>('/api/v1/mfa/disable', request);
+  async disableMFA(password: string): Promise<{ message: string }> {
+    const response = await this.http.post<{ message: string }>('/api/v1/auth/mfa/disable', { password });
     return response.data;
   }
 
@@ -400,18 +461,27 @@ export class Auth {
   /**
    * Get available OAuth providers
    */
-  async getOAuthProviders(): Promise<OAuthProvidersResponse> {
+  async getOAuthProviders(): Promise<Array<{ provider?: string; name: string; enabled: boolean }>> {
     const response = await this.http.get<OAuthProvidersResponse>('/api/v1/auth/oauth/providers', {
       skipAuth: true
     });
-    return response.data;
+    return response.data.providers;
   }
 
   /**
    * Initiate OAuth authorization flow
    */
-  // Alias for backward compatibility
-  signInWithOAuth = this.initiateOAuth;
+  /**
+   * Sign in with OAuth provider
+   */
+  async signInWithOAuth(params: { provider: string; redirect_uri: string }): Promise<{
+    authorization_url: string;
+  }> {
+    const response = await this.http.get('/api/v1/auth/oauth/authorize', {
+      params
+    });
+    return response.data;
+  }
 
   async initiateOAuth(
     provider: OAuthProvider,
@@ -445,9 +515,45 @@ export class Auth {
   }
 
   /**
-   * Handle OAuth callback (typically called by your backend)
+   * Handle OAuth callback
    */
-  async handleOAuthCallback(
+  async handleOAuthCallback(code: string, state: string): Promise<AuthResponse> {
+    const response = await this.http.post<AuthApiResponse>('/api/v1/auth/oauth/callback', {
+      code,
+      state
+    }, {
+      skipAuth: true
+    });
+
+    // Store tokens
+    if (response.data.access_token && response.data.refresh_token) {
+      await this.tokenManager.setTokens({
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_in: response.data.expires_in
+      });
+    }
+
+    // Call onSignIn callback if it exists
+    if (this.onSignIn) {
+      this.onSignIn({ user: response.data.user });
+    }
+
+    return {
+      user: response.data.user,
+      tokens: {
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_in: response.data.expires_in,
+        token_type: response.data.token_type
+      }
+    };
+  }
+
+  /**
+   * Handle OAuth callback (with provider - for advanced use)
+   */
+  async handleOAuthCallbackWithProvider(
     provider: OAuthProvider,
     code: string,
     state: string
@@ -465,6 +571,21 @@ export class Auth {
       params: { code, state },
       skipAuth: true
     });
+
+    // Store tokens if present
+    if (response.data.access_token && response.data.refresh_token) {
+      await this.tokenManager.setTokens({
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_in: response.data.expires_in
+      });
+    }
+
+    // Call onSignIn callback if user is present
+    if (this.onSignIn && response.data.user) {
+      this.onSignIn({ user: response.data.user });
+    }
+
     return response.data;
   }
 
@@ -605,6 +726,21 @@ export class Auth {
       challenge,
       email
     }, { skipAuth: true });
+
+    // Store tokens
+    if (response.data.tokens && response.data.tokens.access_token && response.data.tokens.refresh_token) {
+      await this.tokenManager.setTokens({
+        access_token: response.data.tokens.access_token,
+        refresh_token: response.data.tokens.refresh_token,
+        expires_in: response.data.tokens.expires_in
+      });
+    }
+
+    // Call onSignIn callback if it exists
+    if (this.onSignIn) {
+      this.onSignIn({ user: response.data.user });
+    }
+
     return response.data;
   }
 
