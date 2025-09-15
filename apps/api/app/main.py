@@ -45,11 +45,11 @@ from app.routers.v1 import (
     admin as admin_v1,
     webhooks as webhooks_v1,
     # sso as sso_v1,  # TODO: Re-enable once dependency injection is configured
-    migration as migration_v1,
+    # migration as migration_v1,  # TODO: Add migration models to models.py
     white_label as white_label_v1,
-    compliance as compliance_v1,
-    iot as iot_v1,
-    localization as localization_v1,
+    # compliance as compliance_v1,  # TODO: Add compliance models to models.py
+    # iot as iot_v1,  # TODO: Add IoT models to models.py
+    # localization as localization_v1,  # TODO: Add localization models to models.py
     scim as scim_v1
 )
 from app.core.tenant_context import TenantMiddleware
@@ -507,11 +507,11 @@ app.include_router(admin_v1.router, prefix="/api/v1")
 app.include_router(webhooks_v1.router, prefix="/api/v1")
 # TODO: Re-enable SSO router once dependency injection is properly configured
 # app.include_router(sso_v1.router, prefix="/api/v1")
-app.include_router(migration_v1.router, prefix="/api/v1")
+# app.include_router(migration_v1.router, prefix="/api/v1")  # TODO: Add migration models
 app.include_router(white_label_v1.router, prefix="/api/v1")
-app.include_router(compliance_v1.router, prefix="/api/v1")
-app.include_router(iot_v1.router, prefix="/api/v1")
-app.include_router(localization_v1.router, prefix="/api/v1")
+# app.include_router(compliance_v1.router, prefix="/api/v1")  # TODO: Add compliance models
+# app.include_router(iot_v1.router, prefix="/api/v1")  # TODO: Add IoT models
+# app.include_router(localization_v1.router, prefix="/api/v1")  # TODO: Add localization models
 app.include_router(scim_v1.router, prefix="/api/v1")  # SCIM 2.0 endpoints
 
 # Initialize database on startup
