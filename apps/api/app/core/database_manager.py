@@ -169,13 +169,21 @@ class DatabaseManager:
             return {}
 
         pool = self._engine.pool
-        return {
+        stats = {
             "size": pool.size(),
             "checked_in": pool.checkedin(),
             "checked_out": pool.checkedout(),
             "overflow": pool.overflow(),
-            "invalid": pool.invalid(),
         }
+        
+        # The 'invalid' method doesn't exist on async pools
+        # Use 'total' instead which gives total connections
+        if hasattr(pool, 'invalid'):
+            stats["invalid"] = pool.invalid()
+        else:
+            stats["total"] = pool.size() + pool.overflow()
+        
+        return stats
 
     async def close(self) -> None:
         """Clean shutdown of database connections"""

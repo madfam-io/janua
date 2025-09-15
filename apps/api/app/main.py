@@ -107,9 +107,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 # Add security middleware (order matters - add these first)
-if not settings.DEBUG:
-    # Only redirect to HTTPS in production
-    app.add_middleware(HTTPSRedirectMiddleware)
+# Disabled HTTPS redirect - Railway handles HTTPS termination at the proxy level
+# if not settings.DEBUG:
+#     app.add_middleware(HTTPSRedirectMiddleware)
 
 # Add trusted host middleware 
 allowed_hosts = ["plinto.dev", "*.plinto.dev", "plinto-api.railway.app", "healthcheck.railway.app", "*.railway.app", "localhost", "127.0.0.1"]
