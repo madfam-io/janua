@@ -539,3 +539,36 @@ class IDPMetadata(Base):
 
     # Relationship
     sso_configuration = relationship("SSOConfiguration")
+
+
+# Token models for JWT authentication
+class TokenClaims(Base):
+    """JWT token claims model"""
+    __tablename__ = "token_claims"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    jti = Column(String(255), unique=True, nullable=False)  # JWT ID
+    token_type = Column(String(50), nullable=False)  # access or refresh
+    issued_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked = Column(Boolean, default=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    user = relationship("User")
+
+
+class TokenPair(Base):
+    """Token pair for access and refresh tokens"""
+    __tablename__ = "token_pairs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    access_token_jti = Column(String(255), nullable=False)
+    refresh_token_jti = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_used = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    user = relationship("User")

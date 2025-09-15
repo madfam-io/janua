@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 
 from app.config import settings
-from app.models.token import TokenClaims, TokenPair
+from app.models import TokenClaims, TokenPair
 from app.exceptions import AuthenticationError, TokenError
 
 
