@@ -67,7 +67,7 @@ describe('Auth', () => {
       expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
         access_token: mockResponse.access_token,
         refresh_token: mockResponse.refresh_token,
-        expires_in: mockResponse.expires_in
+        expires_at: expect.any(Number)
       });
       expect(mockOnSignIn).toHaveBeenCalledWith({ user: mockResponse.user });
       expect(result).toEqual({
@@ -123,7 +123,7 @@ describe('Auth', () => {
       expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
         access_token: mockResponse.access_token,
         refresh_token: mockResponse.refresh_token,
-        expires_in: mockResponse.expires_in
+        expires_at: expect.any(Number)
       });
       expect(mockOnSignIn).toHaveBeenCalledWith({ user: mockResponse.user });
       expect(result).toEqual({
@@ -226,7 +226,7 @@ describe('Auth', () => {
       expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
         access_token: mockResponse.access_token,
         refresh_token: mockResponse.refresh_token,
-        expires_in: mockResponse.expires_in
+        expires_at: expect.any(Number)
       });
       expect(result).toEqual({
         access_token: mockResponse.access_token,
@@ -593,7 +593,7 @@ describe('Auth', () => {
         expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
           access_token: mockResponse.tokens.access_token,
           refresh_token: mockResponse.tokens.refresh_token,
-          expires_in: mockResponse.tokens.expires_in
+          expires_at: expect.any(Number)
         });
         expect(mockOnSignIn).toHaveBeenCalled();
       });
@@ -759,7 +759,7 @@ describe('Auth', () => {
         expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
           access_token: mockResponse.access_token,
           refresh_token: mockResponse.refresh_token,
-          expires_in: mockResponse.expires_in
+          expires_at: expect.any(Number)
         });
         expect(mockOnSignIn).toHaveBeenCalled();
       });
@@ -1012,7 +1012,7 @@ describe('Auth', () => {
         expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
           access_token: mockResponse.tokens.access_token,
           refresh_token: mockResponse.tokens.refresh_token,
-          expires_in: mockResponse.tokens.expires_in
+          expires_at: expect.any(Number)
         });
         expect(mockOnSignIn).toHaveBeenCalled();
       });

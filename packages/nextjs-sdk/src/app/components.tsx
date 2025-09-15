@@ -91,8 +91,8 @@ export function SignUpForm({
   const [formData, setFormData] = useState<SignUpRequest>({
     email: '',
     password: '',
-    firstName: '',
-    lastName: '',
+    first_name: '',
+    last_name: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -123,15 +123,15 @@ export function SignUpForm({
         <>
           <input
             type="text"
-            value={formData.firstName || ''}
-            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+            value={formData.first_name || ''}
+            onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
             placeholder="First Name"
             disabled={isLoading}
           />
           <input
             type="text"
-            value={formData.lastName || ''}
-            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+            value={formData.last_name || ''}
+            onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
             placeholder="Last Name"
             disabled={isLoading}
           />
@@ -188,8 +188,8 @@ export function UserButton({
     }
   };
 
-  const displayName = showName && (user.firstName || user.lastName)
-    ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
+  const displayName = showName && (user.first_name || user.last_name)
+    ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
     : null;
 
   return (
@@ -207,9 +207,9 @@ export function UserButton({
           cursor: 'pointer',
         }}
       >
-        {user.profileImageUrl ? (
+        {user.profile_image_url ? (
           <img
-            src={user.profileImageUrl}
+            src={user.profile_image_url}
             alt="Profile"
             style={{ width: 32, height: 32, borderRadius: '50%' }}
           />

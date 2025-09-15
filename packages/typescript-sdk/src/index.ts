@@ -368,6 +368,7 @@ export function createClientWithPreset(
   overrides: Partial<import('./types').PlintoConfig> = {}
 ): import('./client').PlintoClient {
   const presetConfig = presets[preset];
-  const { createClient } = require('./client');
-  return createClient({ ...presetConfig, ...overrides });
+  // Use the already imported createClient function
+  const { createClient: createClientFn } = require('./client');
+  return createClientFn({ ...presetConfig, ...overrides });
 }

@@ -25,7 +25,7 @@ import { Admin } from './admin';
 export class PlintoClient extends EventEmitter<SdkEventMap> {
   private config: Required<PlintoConfig>;
   private tokenManager: TokenManager;
-  private httpClient: HttpClient | AxiosHttpClient;
+  private httpClient: HttpClient;
 
   // Module instances
   public readonly auth: Auth;
@@ -47,7 +47,12 @@ export class PlintoClient extends EventEmitter<SdkEventMap> {
     this.httpClient = this.createHttpClient();
     
     // Initialize modules
-    this.auth = new Auth(this.httpClient);
+    this.auth = new Auth(
+      this.httpClient,
+      this.tokenManager,
+      () => this.emit('auth:signIn', {}),
+      () => this.emit('auth:signOut', {})
+    );
     this.users = new Users(this.httpClient);
     this.organizations = new Organizations(this.httpClient);
     this.webhooks = new Webhooks(this.httpClient);
@@ -130,7 +135,7 @@ export class PlintoClient extends EventEmitter<SdkEventMap> {
   /**
    * Create HTTP client instance
    */
-  private createHttpClient(): HttpClient | AxiosHttpClient {
+  private createHttpClient(): HttpClient {
     return createHttpClient(this.config, this.tokenManager);
   }
 

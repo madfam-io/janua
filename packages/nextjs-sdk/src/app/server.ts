@@ -26,8 +26,7 @@ export class PlintoServerClient {
 
   constructor(config: { appId: string; apiKey: string; jwtSecret: string }) {
     this.client = new PlintoClient({
-      appId: config.appId,
-      apiKey: config.apiKey,
+      baseURL: process.env.NEXT_PUBLIC_API_URL!,
     });
     
     this.secret = new TextEncoder().encode(config.jwtSecret);
@@ -86,9 +85,17 @@ export class PlintoServerClient {
     
     const sessionData: SessionData = {
       user: response.user,
-      session: response.session,
-      accessToken: response.tokens.accessToken,
-      refreshToken: response.tokens.refreshToken,
+      session: {
+        id: 'temp',
+        user_id: response.user.id,
+        is_current: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        last_activity: new Date().toISOString()
+      } as any,
+      accessToken: response.tokens.access_token,
+      refreshToken: response.tokens.refresh_token,
     };
 
     const encryptedSession = await this.encryptSession(sessionData);
@@ -97,7 +104,15 @@ export class PlintoServerClient {
 
     return {
       user: response.user,
-      session: response.session,
+      session: {
+        id: 'temp',
+        user_id: response.user.id,
+        is_current: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        last_activity: new Date().toISOString()
+      } as any,
     };
   }
 
@@ -111,9 +126,17 @@ export class PlintoServerClient {
     
     const sessionData: SessionData = {
       user: response.user,
-      session: response.session,
-      accessToken: response.tokens.accessToken,
-      refreshToken: response.tokens.refreshToken,
+      session: {
+        id: 'temp',
+        user_id: response.user.id,
+        is_current: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        last_activity: new Date().toISOString()
+      } as any,
+      accessToken: response.tokens.access_token,
+      refreshToken: response.tokens.refresh_token,
     };
 
     const encryptedSession = await this.encryptSession(sessionData);
@@ -122,7 +145,15 @@ export class PlintoServerClient {
 
     return {
       user: response.user,
-      session: response.session,
+      session: {
+        id: 'temp',
+        user_id: response.user.id,
+        is_current: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        last_activity: new Date().toISOString()
+      } as any,
     };
   }
 
@@ -143,7 +174,7 @@ export class PlintoServerClient {
 
   async updateUser(data: any): Promise<User> {
     const session = await this.requireAuth();
-    const updatedUser = await this.client.users.updateUser(session.user.id, data);
+    const updatedUser = await this.client.users.update(session.user.id, data);
     
     // Update session cookie with new user data
     const cookieStore = await cookies();

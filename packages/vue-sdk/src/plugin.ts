@@ -38,12 +38,15 @@ class PlintoVue {
 
   private async initialize() {
     try {
-      // Check for auth params in URL
-      if (this.client.hasAuthParams()) {
-        await this.client.handleRedirectCallback();
+      // Check for OAuth callback parameters in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('code') && urlParams.has('state')) {
+        const code = urlParams.get('code')!;
+        const state = urlParams.get('state')!;
+        await this.client.auth.handleOAuthCallback(code, state);
       }
 
-      this.updateAuthState();
+      await this.updateAuthState();
     } catch (error) {
       console.error('Failed to initialize Plinto:', error);
     } finally {
@@ -51,17 +54,20 @@ class PlintoVue {
     }
 
     // Set up periodic auth state check
-    setInterval(() => {
-      const currentUser = this.client.getUser();
+    setInterval(async () => {
+      const currentUser = await this.client.getCurrentUser();
       if (currentUser !== this.state.user) {
-        this.updateAuthState();
+        await this.updateAuthState();
       }
     }, 1000);
   }
 
-  private updateAuthState() {
-    const user = this.client.getUser();
-    const session = this.client.getSession();
+  private async updateAuthState() {
+    const user = await this.client.getCurrentUser();
+    const session = user ? {
+      accessToken: await this.client.getAccessToken(),
+      refreshToken: await this.client.getRefreshToken()
+    } as any : null;
     
     this.state.user = user;
     this.state.session = session;
@@ -101,7 +107,8 @@ class PlintoVue {
   }
 
   async updateSession() {
-    await this.client.updateSession();
+    // Refresh the current user and update auth state
+    await this.client.auth.getCurrentUser();
     this.updateAuthState();
   }
 

@@ -119,11 +119,11 @@ export function useMagicLink() {
   const client = plinto.getClient();
 
   const sendMagicLink = async (email: string, redirectUrl?: string) => {
-    await client.auth.sendMagicLink({ email, redirectUrl });
+    await client.auth.sendMagicLink({ email, redirect_url: redirectUrl });
   };
 
   const signInWithMagicLink = async (token: string) => {
-    const response = await client.auth.signInWithMagicLink(token);
+    const response = await client.auth.verifyMagicLink(token);
     await plinto.updateSession();
     return response;
   };
@@ -139,10 +139,10 @@ export function useOAuth() {
   const client = plinto.getClient();
 
   const getOAuthUrl = async (
-    provider: 'google' | 'github' | 'microsoft' | 'apple' | 'discord' | 'twitter' | 'linkedin',
+    provider: any,
     redirectUrl?: string
   ) => {
-    return client.auth.getOAuthUrl({ provider, redirectUrl });
+    return client.auth.initiateOAuth(provider as any, { redirect_uri: redirectUrl || window.location.origin + '/auth/callback' });
   };
 
   const handleOAuthCallback = async (code: string, state: string) => {
@@ -162,7 +162,7 @@ export function usePasskeys() {
   const client = plinto.getClient();
 
   const registerPasskey = async (options?: any) => {
-    const registrationOptions = await client.auth.beginPasskeyRegistration(options);
+    const registrationOptions = await client.auth.getPasskeyRegistrationOptions();
     // In a real implementation, you would use the WebAuthn API here
     // const credential = await navigator.credentials.create(registrationOptions);
     // await client.auth.completePasskeyRegistration(credential);
@@ -170,7 +170,7 @@ export function usePasskeys() {
   };
 
   const authenticateWithPasskey = async () => {
-    const authOptions = await client.auth.beginPasskeyAuthentication();
+    const authOptions = await client.auth.getPasskeyAuthenticationOptions();
     // In a real implementation, you would use the WebAuthn API here
     // const credential = await navigator.credentials.get(authOptions);
     // const response = await client.auth.completePasskeyAuthentication(credential);
@@ -193,17 +193,17 @@ export function useMFA() {
   };
 
   const confirmMFA = async (code: string) => {
-    await client.auth.confirmMFA(code);
+    await client.auth.verifyMFA({ code });
     await plinto.updateSession();
   };
 
-  const disableMFA = async (code: string) => {
-    await client.auth.disableMFA(code);
+  const disableMFA = async (password: string) => {
+    await client.auth.disableMFA(password);
     await plinto.updateSession();
   };
 
   const verifyMFA = async (code: string) => {
-    const tokens = await client.auth.verifyMFA(code);
+    const tokens = await client.auth.verifyMFA({ code });
     await plinto.updateSession();
     return tokens;
   };

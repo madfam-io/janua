@@ -1,0 +1,192 @@
+/* Design Tokens for Plinto Documentation */
+
+:root {
+  /* Colors - Light Mode */
+  --color-primary-50: 238 242 255;
+  --color-primary-100: 224 231 255;
+  --color-primary-200: 199 210 254;
+  --color-primary-300: 165 180 252;
+  --color-primary-400: 129 140 248;
+  --color-primary-500: 99 102 241;
+  --color-primary-600: 79 70 229;
+  --color-primary-700: 67 56 202;
+  --color-primary-800: 55 48 163;
+  --color-primary-900: 49 46 129;
+  --color-primary-950: 30 27 75;
+
+  /* Success Colors */
+  --color-success-50: 240 253 244;
+  --color-success-100: 220 252 231;
+  --color-success-200: 187 247 208;
+  --color-success-300: 134 239 172;
+  --color-success-400: 74 222 128;
+  --color-success-500: 34 197 94;
+  --color-success-600: 22 163 74;
+  --color-success-700: 21 128 61;
+  --color-success-800: 22 101 52;
+  --color-success-900: 20 83 45;
+
+  /* Warning Colors */
+  --color-warning-50: 255 251 235;
+  --color-warning-100: 254 243 199;
+  --color-warning-200: 253 230 138;
+  --color-warning-300: 252 211 77;
+  --color-warning-400: 251 191 36;
+  --color-warning-500: 245 158 11;
+  --color-warning-600: 217 119 6;
+  --color-warning-700: 180 83 9;
+  --color-warning-800: 146 64 14;
+  --color-warning-900: 120 53 15;
+
+  /* Error Colors */
+  --color-error-50: 254 242 242;
+  --color-error-100: 254 226 226;
+  --color-error-200: 254 202 202;
+  --color-error-300: 252 165 165;
+  --color-error-400: 248 113 113;
+  --color-error-500: 239 68 68;
+  --color-error-600: 220 38 38;
+  --color-error-700: 185 28 28;
+  --color-error-800: 153 27 27;
+  --color-error-900: 127 29 29;
+
+  /* Spacing Scale (8px grid) */
+  --space-0: 0;
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+  --space-16: 4rem;    /* 64px */
+  --space-20: 5rem;    /* 80px */
+  --space-24: 6rem;    /* 96px */
+  --space-32: 8rem;    /* 128px */
+
+  /* Typography Scale */
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+  --text-3xl: 1.875rem;   /* 30px */
+  --text-4xl: 2.25rem;    /* 36px */
+  --text-5xl: 3rem;       /* 48px */
+
+  /* Line Heights */
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-loose: 2;
+
+  /* Font Weights */
+  --font-light: 300;
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Border Radius */
+  --radius-none: 0;
+  --radius-sm: 0.125rem;
+  --radius-base: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-base: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+
+  /* Z-Index Scale */
+  --z-0: 0;
+  --z-10: 10;
+  --z-20: 20;
+  --z-30: 30;
+  --z-40: 40;
+  --z-50: 50;
+
+  /* Transitions */
+  --transition-fast: 150ms;
+  --transition-base: 250ms;
+  --transition-slow: 500ms;
+
+  /* Breakpoints */
+  --screen-sm: 640px;
+  --screen-md: 768px;
+  --screen-lg: 1024px;
+  --screen-xl: 1280px;
+  --screen-2xl: 1536px;
+}
+
+/* Dark Mode Overrides */
+.dark {
+  --color-primary-50: 30 27 75;
+  --color-primary-100: 49 46 129;
+  --color-primary-200: 55 48 163;
+  --color-primary-300: 67 56 202;
+  --color-primary-400: 79 70 229;
+  --color-primary-500: 99 102 241;
+  --color-primary-600: 129 140 248;
+  --color-primary-700: 165 180 252;
+  --color-primary-800: 199 210 254;
+  --color-primary-900: 224 231 255;
+  --color-primary-950: 238 242 255;
+}
+
+/* Semantic Tokens */
+:root {
+  /* Text Colors */
+  --text-primary: rgb(17 24 39);
+  --text-secondary: rgb(107 114 128);
+  --text-tertiary: rgb(156 163 175);
+  --text-inverse: rgb(255 255 255);
+
+  /* Background Colors */
+  --bg-primary: rgb(255 255 255);
+  --bg-secondary: rgb(249 250 251);
+  --bg-tertiary: rgb(243 244 246);
+  --bg-inverse: rgb(17 24 39);
+
+  /* Border Colors */
+  --border-primary: rgb(229 231 235);
+  --border-secondary: rgb(209 213 219);
+  --border-tertiary: rgb(156 163 175);
+}
+
+.dark {
+  /* Text Colors - Dark Mode */
+  --text-primary: rgb(243 244 246);
+  --text-secondary: rgb(156 163 175);
+  --text-tertiary: rgb(107 114 128);
+  --text-inverse: rgb(17 24 39);
+
+  /* Background Colors - Dark Mode */
+  --bg-primary: rgb(17 24 39);
+  --bg-secondary: rgb(31 41 55);
+  --bg-tertiary: rgb(55 65 81);
+  --bg-inverse: rgb(255 255 255);
+
+  /* Border Colors - Dark Mode */
+  --border-primary: rgb(55 65 81);
+  --border-secondary: rgb(75 85 99);
+  --border-tertiary: rgb(107 114 128);
+}
+
+/* HTTP Method Colors */
+.method-get { color: rgb(34 197 94); }
+.method-post { color: rgb(59 130 246); }
+.method-put, .method-patch { color: rgb(251 146 60); }
+.method-delete { color: rgb(239 68 68); }

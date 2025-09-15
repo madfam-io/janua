@@ -32,12 +32,15 @@ export function PlintoProvider({
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const updateAuthState = useCallback(() => {
-    const currentUser = client.getUser();
-    const currentSession = client.getSession();
+  const updateAuthState = useCallback(async () => {
+    const currentUser = await client.getCurrentUser();
+    const currentSession = {
+      accessToken: await client.getAccessToken(),
+      refreshToken: await client.getRefreshToken()
+    };
     
     setUser(currentUser);
-    setSession(currentSession);
+    setSession(currentSession as any);
     
     if (onAuthChange) {
       onAuthChange(currentUser);
@@ -46,7 +49,7 @@ export function PlintoProvider({
 
   const updateUser = useCallback(async () => {
     try {
-      await client.updateSession();
+      await client.auth.getCurrentUser();
       updateAuthState();
     } catch (error) {
       console.error('Failed to update user:', error);
@@ -69,8 +72,11 @@ export function PlintoProvider({
 
   useEffect(() => {
     // Check for auth params in URL
-    if (client.hasAuthParams()) {
-      client.handleRedirectCallback()
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('code') && urlParams.has('state')) {
+      const code = urlParams.get('code')!;
+      const state = urlParams.get('state')!;
+      client.auth.handleOAuthCallback(code, state)
         .then(() => updateAuthState())
         .catch(console.error)
         .finally(() => setIsLoading(false));
@@ -81,8 +87,8 @@ export function PlintoProvider({
     }
 
     // Set up auth state listener
-    const checkInterval = setInterval(() => {
-      const currentUser = client.getUser();
+    const checkInterval = setInterval(async () => {
+      const currentUser = await client.getCurrentUser();
       if (currentUser !== user) {
         updateAuthState();
       }

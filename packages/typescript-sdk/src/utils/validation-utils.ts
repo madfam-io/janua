@@ -1,0 +1,149 @@
+/**
+ * Validation utilities for input validation and data verification
+ */
+
+export class ValidationUtils {
+  /**
+   * Validate email format
+   */
+  static isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  /**
+   * Validate password strength
+   */
+  static isValidPassword(password: string): boolean {
+    return password.length >= 8;
+  }
+
+  /**
+   * Comprehensive password validation with detailed rules
+   */
+  static validatePassword(password: string): {
+    isValid: boolean;
+    errors: string[];
+  } {
+    const errors: string[] = [];
+
+    if (password.length < 8) {
+      errors.push('Password must be at least 8 characters long');
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      errors.push('Password must contain at least one uppercase letter');
+    }
+
+    if (!/[a-z]/.test(password)) {
+      errors.push('Password must contain at least one lowercase letter');
+    }
+
+    if (!/[0-9]/.test(password)) {
+      errors.push('Password must contain at least one number');
+    }
+
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      errors.push('Password must contain at least one special character');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Validate username format
+   */
+  static isValidUsername(username: string): boolean {
+    // Username must be 3-30 characters, alphanumeric with underscores and hyphens
+    const usernameRegex = /^[a-zA-Z0-9_-]{3,30}$/;
+    return usernameRegex.test(username);
+  }
+
+  /**
+   * Validate phone number format
+   */
+  static isValidPhoneNumber(phone: string): boolean {
+    // Basic international phone number validation
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    return phoneRegex.test(phone.replace(/[\s()-]/g, ''));
+  }
+
+  /**
+   * Validate URL format
+   */
+  static isValidUrl(url: string): boolean {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Validate UUID format
+   */
+  static isValidUuid(uuid: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  }
+
+  /**
+   * Validate date string format
+   */
+  static isValidDateString(dateString: string): boolean {
+    const date = new Date(dateString);
+    return !isNaN(date.getTime());
+  }
+
+  /**
+   * Validate timezone format
+   */
+  static isValidTimezone(timezone: string): boolean {
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: timezone });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Validate locale format
+   */
+  static isValidLocale(locale: string): boolean {
+    try {
+      new Intl.Locale(locale);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Sanitize string input
+   */
+  static sanitizeString(input: string): string {
+    return input
+      .trim()
+      .replace(/[<>]/g, '') // Remove basic HTML tags
+      .slice(0, 1000); // Limit length
+  }
+
+  /**
+   * Validate object against schema
+   */
+  static validateObject<T>(
+    obj: any,
+    requiredFields: (keyof T)[]
+  ): { isValid: boolean; missingFields: string[] } {
+    const missingFields = requiredFields.filter(field => !(field in obj));
+    return {
+      isValid: missingFields.length === 0,
+      missingFields: missingFields as string[]
+    };
+  }
+}

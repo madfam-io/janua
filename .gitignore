@@ -43,10 +43,18 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output
+test-results/
+playwright-report/
+playwright/.cache/
 
 # Temporary files
 *.tmp
 *.temp
+*.bak
+*.orig
+*.swp
+*.swo
+*~
 
 # Python
 __pycache__/

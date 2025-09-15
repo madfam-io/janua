@@ -368,6 +368,58 @@ VALUES ('admin@plinto.dev', 'super_admin', true);
 - Pagination for large datasets
 - Virtual scrolling for long lists
 
+## 🎨 UI Components
+
+### Component Library
+
+The admin panel uses **shadcn/ui** components built on top of **Radix UI** primitives for accessibility and **Tailwind CSS** for styling.
+
+#### Available Components
+
+```
+components/ui/
+├── alert.tsx         # Alert notifications
+├── badge.tsx         # Status badges
+├── button.tsx        # Button variants
+├── card.tsx          # Card containers
+├── input.tsx         # Form inputs
+├── label.tsx         # Form labels
+├── select.tsx        # Dropdown selects
+├── switch.tsx        # Toggle switches
+├── tabs.tsx          # Tab navigation
+└── [more...]         # Additional components
+```
+
+#### Component Usage
+
+```tsx
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+
+export function AdminPanel() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>User Management</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Badge variant="default">Active</Badge>
+        <Button variant="destructive">Delete User</Button>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+#### Styling System
+
+- **Tailwind CSS**: Utility-first styling
+- **CSS Variables**: Theme customization via CSS custom properties
+- **Dark Mode**: Built-in dark mode support
+- **Responsive**: Mobile-first responsive design
+- **Accessibility**: ARIA labels and keyboard navigation
+
 ## 🛠️ Development
 
 ### Local Development Security

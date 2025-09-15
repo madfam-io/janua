@@ -1,0 +1,130 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Documentation Pre-Commit Hook
+# Validates documentation changes before commit
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo "📚 Running documentation validation..."
+
+# Get changed documentation files
+CHANGED_DOCS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(md|mdx)$')
+
+if [ -z "$CHANGED_DOCS" ]; then
+  echo "No documentation changes detected, skipping validation"
+  exit 0
+fi
+
+echo "Validating changed documentation files:"
+echo "$CHANGED_DOCS" | sed 's/^/  - /'
+
+# Run validation checks
+ERRORS=0
+
+# Check for sensitive information
+for file in $CHANGED_DOCS; do
+  if grep -qE "(api[_-]?key|secret|password|token|private[_-]?key)" "$file" 2>/dev/null; then
+    echo "${YELLOW}⚠ Warning: Potential sensitive information in $file${NC}"
+    echo "  Please review and remove any sensitive data"
+    ERRORS=$((ERRORS + 1))
+  fi
+done
+
+# Check for internal URLs in public docs
+for file in $CHANGED_DOCS; do
+  if echo "$file" | grep -q "^apps/docs/"; then
+    if grep -qE "(localhost|127\.0\.0\.1|internal\.|staging\.)" "$file" 2>/dev/null; then
+      echo "${RED}✗ Error: Internal URL found in public documentation: $file${NC}"
+      ERRORS=$((ERRORS + 1))
+    fi
+  fi
+done
+
+# Check for duplicate content between /docs and /apps/docs
+for file in $CHANGED_DOCS; do
+  basename=$(basename "$file")
+
+  # If file is in /docs, check if it exists in /apps/docs
+  if echo "$file" | grep -q "^docs/" && [ "$basename" != "README.md" ]; then
+    if [ -f "apps/docs/content/$basename" ] || [ -f "apps/docs/app/$basename" ]; then
+      echo "${RED}✗ Error: Duplicate file detected: $basename exists in both /docs and /apps/docs${NC}"
+      echo "  Please follow content guidelines in docs/CONTENT_GUIDELINES.md"
+      ERRORS=$((ERRORS + 1))
+    fi
+  fi
+
+  # If file is in /apps/docs, check if it exists in /docs (excluding internal/)
+  if echo "$file" | grep -q "^apps/docs/"; then
+    if [ -f "docs/$basename" ] && ! echo "docs/$basename" | grep -q "docs/internal/"; then
+      echo "${RED}✗ Error: Duplicate file detected: $basename exists in both locations${NC}"
+      ERRORS=$((ERRORS + 1))
+    fi
+  fi
+done
+
+# Check for broken relative links
+for file in $CHANGED_DOCS; do
+  if [ -f "$file" ]; then
+    grep -oE '\[([^\]]+)\]\(([^)]+)\)' "$file" | grep -oE '\(([^)]+)\)' | tr -d '()' | while read -r link; do
+      if [[ "$link" == /* ]] || [[ "$link" == http* ]] || [[ "$link" == "#"* ]]; then
+        continue
+      fi
+
+      dir=$(dirname "$file")
+      target="$dir/$link"
+
+      if [ ! -f "$target" ] && [ ! -f "$target.md" ] && [ ! -f "$target.mdx" ] && [ ! -d "$target" ]; then
+        echo "${YELLOW}⚠ Warning: Possible broken link in $file: $link${NC}"
+      fi
+    done
+  fi
+done
+
+# Check for TODO/FIXME in public docs
+for file in $CHANGED_DOCS; do
+  if echo "$file" | grep -q "^apps/docs/"; then
+    if grep -qE "(TODO|FIXME|XXX|HACK)" "$file" 2>/dev/null; then
+      echo "${YELLOW}⚠ Warning: TODO/FIXME found in public documentation: $file${NC}"
+      echo "  Please resolve before committing"
+    fi
+  fi
+done
+
+# Check file size (warn if > 100KB)
+for file in $CHANGED_DOCS; do
+  if [ -f "$file" ]; then
+    size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+    if [ "$size" -gt 102400 ]; then
+      size_kb=$((size / 1024))
+      echo "${YELLOW}⚠ Warning: Large documentation file: $file (${size_kb}KB)${NC}"
+      echo "  Consider splitting into smaller files"
+    fi
+  fi
+done
+
+# Verify content guidelines compliance
+if [ ! -f "docs/CONTENT_GUIDELINES.md" ]; then
+  echo "${YELLOW}⚠ Warning: Content guidelines not found${NC}"
+  echo "  Please review docs/CONTENT_GUIDELINES.md"
+fi
+
+# Final check
+if [ $ERRORS -gt 0 ]; then
+  echo ""
+  echo "${RED}✗ Documentation validation failed with $ERRORS error(s)${NC}"
+  echo "Please fix the issues above and try again"
+  echo ""
+  echo "For more information, see:"
+  echo "  - docs/CONTENT_GUIDELINES.md"
+  echo "  - Run: ./scripts/docs-pipeline.sh validate <file>"
+  exit 1
+else
+  echo "${GREEN}✓ Documentation validation passed${NC}"
+fi
+
+exit 0

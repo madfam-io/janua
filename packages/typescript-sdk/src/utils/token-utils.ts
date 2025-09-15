@@ -1,0 +1,209 @@
+/**
+ * Token-related utilities for JWT handling and token storage
+ */
+
+/**
+ * Base64URL encoding/decoding utilities
+ */
+export class Base64Url {
+  static encode(data: string): string {
+    return Buffer.from(data)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  }
+
+  static decode(data: string): string {
+    // Add padding if needed
+    let base64 = data.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    return Buffer.from(base64, 'base64').toString('utf-8');
+  }
+}
+
+/**
+ * JWT parsing and validation utilities
+ */
+export class JwtUtils {
+  static parseToken(token: string): any {
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid JWT format');
+    }
+
+    try {
+      const payload = Base64Url.decode(parts[1]);
+      return JSON.parse(payload);
+    } catch (error) {
+      throw new Error('Failed to parse JWT payload');
+    }
+  }
+
+  static isExpired(token: string): boolean {
+    try {
+      const payload = this.parseToken(token);
+      if (!payload.exp) {
+        return false; // No expiration claim
+      }
+      return Date.now() >= payload.exp * 1000;
+    } catch {
+      return true; // Consider invalid tokens as expired
+    }
+  }
+
+  static getTimeToExpiry(token: string): number {
+    try {
+      const payload = this.parseToken(token);
+      if (!payload.exp) {
+        return Infinity; // No expiration
+      }
+      const expiryMs = payload.exp * 1000;
+      const now = Date.now();
+      return Math.max(0, Math.floor((expiryMs - now) / 1000));
+    } catch {
+      return 0;
+    }
+  }
+}
+
+/**
+ * Interface for token storage implementations
+ */
+export interface TokenStorage {
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+  removeItem(key: string): Promise<void>;
+}
+
+/**
+ * LocalStorage implementation for browser environments
+ */
+export class LocalTokenStorage implements TokenStorage {
+  async getItem(key: string): Promise<string | null> {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  async setItem(key: string, value: string): Promise<void> {
+    try {
+      localStorage.setItem(key, value);
+    } catch (error) {
+      console.warn('Failed to save to localStorage:', error);
+    }
+  }
+
+  async removeItem(key: string): Promise<void> {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.warn('Failed to remove from localStorage:', error);
+    }
+  }
+}
+
+/**
+ * SessionStorage implementation for browser environments
+ */
+export class SessionTokenStorage implements TokenStorage {
+  async getItem(key: string): Promise<string | null> {
+    try {
+      return sessionStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  async setItem(key: string, value: string): Promise<void> {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch (error) {
+      console.warn('Failed to save to sessionStorage:', error);
+    }
+  }
+
+  async removeItem(key: string): Promise<void> {
+    try {
+      sessionStorage.removeItem(key);
+    } catch (error) {
+      console.warn('Failed to remove from sessionStorage:', error);
+    }
+  }
+}
+
+/**
+ * In-memory storage implementation
+ */
+export class MemoryTokenStorage implements TokenStorage {
+  private storage = new Map<string, string>();
+
+  async getItem(key: string): Promise<string | null> {
+    return this.storage.get(key) || null;
+  }
+
+  async setItem(key: string, value: string): Promise<void> {
+    this.storage.set(key, value);
+  }
+
+  async removeItem(key: string): Promise<void> {
+    this.storage.delete(key);
+  }
+}
+
+/**
+ * Token management with storage abstraction
+ */
+export class TokenManager {
+  private readonly ACCESS_TOKEN_KEY = 'plinto_access_token';
+  private readonly REFRESH_TOKEN_KEY = 'plinto_refresh_token';
+  private readonly EXPIRES_AT_KEY = 'plinto_token_expires_at';
+
+  constructor(private storage: TokenStorage) {}
+
+  async setTokens(tokenData: {
+    access_token: string;
+    refresh_token: string;
+    expires_at: number;
+  }): Promise<void> {
+    await Promise.all([
+      this.storage.setItem(this.ACCESS_TOKEN_KEY, tokenData.access_token),
+      this.storage.setItem(this.REFRESH_TOKEN_KEY, tokenData.refresh_token),
+      this.storage.setItem(this.EXPIRES_AT_KEY, tokenData.expires_at.toString())
+    ]);
+  }
+
+  async getAccessToken(): Promise<string | null> {
+    return this.storage.getItem(this.ACCESS_TOKEN_KEY);
+  }
+
+  async getRefreshToken(): Promise<string | null> {
+    return this.storage.getItem(this.REFRESH_TOKEN_KEY);
+  }
+
+  async clearTokens(): Promise<void> {
+    await Promise.all([
+      this.storage.removeItem(this.ACCESS_TOKEN_KEY),
+      this.storage.removeItem(this.REFRESH_TOKEN_KEY),
+      this.storage.removeItem(this.EXPIRES_AT_KEY)
+    ]);
+  }
+
+  async hasValidTokens(): Promise<boolean> {
+    const [accessToken, expiresAt] = await Promise.all([
+      this.getAccessToken(),
+      this.storage.getItem(this.EXPIRES_AT_KEY)
+    ]);
+
+    if (!accessToken || !expiresAt) {
+      return false;
+    }
+
+    const expiryTime = parseInt(expiresAt, 10);
+    return Date.now() < expiryTime;
+  }
+}

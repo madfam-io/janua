@@ -1,0 +1,222 @@
+name: Documentation Validation
+
+on:
+  push:
+    paths:
+      - 'docs/**'
+      - 'apps/docs/**'
+      - '!**/node_modules/**'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'apps/docs/**'
+      - '!**/node_modules/**'
+  schedule:
+    # Run weekly on Monday at 9am UTC
+    - cron: '0 9 * * 1'
+
+jobs:
+  validate-structure:
+    name: Validate Documentation Structure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: |
+          npm install -g glob chalk
+          yarn install --frozen-lockfile
+
+      - name: Check documentation structure
+        run: |
+          echo "Checking for forbidden directories..."
+          if [ -d "docs/quickstart" ]; then
+            echo "::error::Forbidden directory 'docs/quickstart' exists - should be removed"
+            exit 1
+          fi
+
+          echo "Checking for required directories..."
+          for dir in "docs/internal" "docs/drafts" "docs/archive" "apps/docs/content"; do
+            if [ ! -d "$dir" ]; then
+              echo "::warning::Required directory '$dir' is missing"
+            fi
+          done
+
+      - name: Run documentation validation
+        run: node scripts/validate-docs.js
+        continue-on-error: true
+
+      - name: Upload validation report
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: docs-validation-report
+          path: docs-validation-report.json
+
+  check-duplicates:
+    name: Check for Duplicate Content
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Find duplicate files
+        run: |
+          echo "Checking for duplicate filenames..."
+          duplicates=$(find docs apps/docs -name "*.md" -o -name "*.mdx" | \
+            xargs -I {} basename {} | \
+            sort | uniq -d)
+
+          if [ ! -z "$duplicates" ]; then
+            echo "::error::Duplicate files found:"
+            echo "$duplicates"
+            exit 1
+          fi
+
+      - name: Check for identical content
+        run: |
+          echo "Checking for files with identical content..."
+          identical=$(find docs apps/docs -name "*.md" -o -name "*.mdx" | \
+            xargs -I {} md5sum {} 2>/dev/null | \
+            sort | uniq -d -w 32)
+
+          if [ ! -z "$identical" ]; then
+            echo "::warning::Files with identical content detected"
+            echo "$identical"
+          fi
+
+  check-sensitive-info:
+    name: Check for Sensitive Information
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: Check for API keys and tokens
+        run: |
+          echo "Scanning for potential sensitive information..."
+          patterns="api[_-]?key|secret|password|token|private[_-]?key"
+
+          found=$(grep -rE "$patterns" docs apps/docs \
+            --include="*.md" --include="*.mdx" \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git | head -20)
+
+          if [ ! -z "$found" ]; then
+            echo "::warning::Potential sensitive information detected:"
+            echo "$found" | head -5
+          fi
+
+  check-broken-links:
+    name: Check for Broken Links
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Link Checker
+        uses: lycheeverse/lychee-action@v1
+        with:
+          args: >
+            --verbose
+            --no-progress
+            --exclude-mail
+            --exclude "localhost"
+            --exclude "127.0.0.1"
+            --exclude "example.com"
+            docs/**/*.md
+            apps/docs/**/*.md
+            apps/docs/**/*.mdx
+          fail: false
+
+      - name: Upload link check results
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: link-check-results
+          path: lychee-out.md
+
+  validate-drafts:
+    name: Validate Draft Age
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Check draft age
+        run: |
+          if [ -d "docs/drafts" ]; then
+            echo "Checking age of draft documents..."
+            old_drafts=$(find docs/drafts -name "*.md" -o -name "*.mdx" -mtime +30)
+
+            if [ ! -z "$old_drafts" ]; then
+              echo "::warning::Old drafts found (>30 days):"
+              echo "$old_drafts"
+              echo "Consider promoting or archiving these drafts"
+            fi
+          fi
+
+  quality-metrics:
+    name: Documentation Quality Metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Calculate metrics
+        run: |
+          echo "## Documentation Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count documentation files
+          internal_count=$(find docs -name "*.md" -o -name "*.mdx" | wc -l)
+          public_count=$(find apps/docs -name "*.md" -o -name "*.mdx" | wc -l)
+
+          echo "- Internal docs: $internal_count files" >> $GITHUB_STEP_SUMMARY
+          echo "- Public docs: $public_count files" >> $GITHUB_STEP_SUMMARY
+
+          # Check for TODOs in public docs
+          todo_count=$(grep -r "TODO\|FIXME" apps/docs --include="*.md" --include="*.mdx" | wc -l)
+          echo "- TODOs in public docs: $todo_count" >> $GITHUB_STEP_SUMMARY
+
+          # Count drafts
+          if [ -d "docs/drafts" ]; then
+            draft_count=$(find docs/drafts -name "*.md" -o -name "*.mdx" | wc -l)
+            echo "- Pending drafts: $draft_count" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Documentation coverage
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Coverage Check" >> $GITHUB_STEP_SUMMARY
+
+          # Check if key SDK docs exist
+          sdks=("typescript" "python" "go" "react" "vue" "nextjs")
+          for sdk in "${sdks[@]}"; do
+            if find apps/docs -name "*${sdk}*" | grep -q .; then
+              echo "- ✅ ${sdk} SDK documented" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- ⚠️ ${sdk} SDK documentation missing" >> $GITHUB_STEP_SUMMARY
+            fi
+          done

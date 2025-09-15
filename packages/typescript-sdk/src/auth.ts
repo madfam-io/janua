@@ -37,7 +37,7 @@ export class Auth {
   constructor(
     private http: HttpClient,
     private tokenManager: TokenManager,
-    private onSignIn?: () => void,
+    private onSignIn?: (data?: any) => void,
     private onSignOut?: () => void
   ) {}
 
@@ -52,9 +52,9 @@ export class Auth {
 
     const passwordValidation = ValidationUtils.validatePassword(request.password);
     if (!passwordValidation.isValid) {
-      throw new ValidationError('Password validation failed', {
-        violations: { password: passwordValidation.errors }
-      });
+      throw new ValidationError('Password validation failed', 
+        passwordValidation.errors.map(err => ({ field: 'password', message: err }))
+      );
     }
 
     if (request.username && !ValidationUtils.isValidUsername(request.username)) {
@@ -68,7 +68,7 @@ export class Auth {
       await this.tokenManager.setTokens({
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in
+        expires_at: Date.now() + (response.data.expires_in * 1000)
       });
     }
 
@@ -117,7 +117,7 @@ export class Auth {
       await this.tokenManager.setTokens({
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in
+        expires_at: Date.now() + (response.data.expires_in * 1000)
       });
     }
 
@@ -177,7 +177,7 @@ export class Auth {
       await this.tokenManager.setTokens({
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
-        expires_in: (response.data as any).expires_in
+        expires_at: Date.now() + ((response.data as any).expires_in * 1000)
       });
     }
     
@@ -248,9 +248,9 @@ export class Auth {
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
     const passwordValidation = ValidationUtils.validatePassword(newPassword);
     if (!passwordValidation.isValid) {
-      throw new ValidationError('Password validation failed', {
-        violations: { password: passwordValidation.errors }
-      });
+      throw new ValidationError('Password validation failed', 
+        passwordValidation.errors.map(err => ({ field: 'password', message: err }))
+      );
     }
 
     const response = await this.http.post<{ message: string }>('/api/v1/auth/password/confirm', {
@@ -268,9 +268,9 @@ export class Auth {
   async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
     const passwordValidation = ValidationUtils.validatePassword(newPassword);
     if (!passwordValidation.isValid) {
-      throw new ValidationError('Password validation failed', {
-        violations: { password: passwordValidation.errors }
-      });
+      throw new ValidationError('Password validation failed', 
+        passwordValidation.errors.map(err => ({ field: 'password', message: err }))
+      );
     }
 
     const response = await this.http.put<{ message: string }>('/api/v1/auth/password/change', {
@@ -325,7 +325,7 @@ export class Auth {
       await this.tokenManager.setTokens({
         access_token: response.data.tokens.access_token,
         refresh_token: response.data.tokens.refresh_token,
-        expires_in: response.data.tokens.expires_in
+        expires_at: Date.now() + (response.data.tokens.expires_in * 1000)
       });
     }
 
@@ -370,7 +370,7 @@ export class Auth {
       await this.tokenManager.setTokens({
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in
+        expires_at: Date.now() + (response.data.expires_in * 1000)
       });
     }
 
@@ -530,7 +530,7 @@ export class Auth {
       await this.tokenManager.setTokens({
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in
+        expires_at: Date.now() + (response.data.expires_in * 1000)
       });
     }
 
@@ -577,7 +577,7 @@ export class Auth {
       await this.tokenManager.setTokens({
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in
+        expires_at: Date.now() + (response.data.expires_in * 1000)
       });
     }
 
@@ -732,7 +732,7 @@ export class Auth {
       await this.tokenManager.setTokens({
         access_token: response.data.tokens.access_token,
         refresh_token: response.data.tokens.refresh_token,
-        expires_in: response.data.tokens.expires_in
+        expires_at: Date.now() + (response.data.tokens.expires_in * 1000)
       });
     }
 

@@ -2,169 +2,175 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom scrollbar styles */
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 217 91% 60%;
-    --radius: 0.5rem;
+  /* Light mode scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 217 91% 60%;
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-400 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
+
+  /* Dark mode scrollbar */
+  .dark ::-webkit-scrollbar-track {
+    @apply bg-gray-800;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    @apply bg-gray-600;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
   }
 }
 
+/* Smooth scrolling */
 @layer base {
-  * {
-    @apply border-border;
+  html {
+    scroll-behavior: smooth;
   }
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-}
-
-/* Typography for documentation */
-.prose {
-  @apply text-gray-700 dark:text-gray-300;
-}
-
-.prose h1,
-.prose h2,
-.prose h3,
-.prose h4,
-.prose h5,
-.prose h6 {
-  @apply text-gray-900 dark:text-white font-semibold;
-}
-
-.prose h1 {
-  @apply text-3xl mt-8 mb-4;
-}
-
-.prose h2 {
-  @apply text-2xl mt-8 mb-4;
-}
-
-.prose h3 {
-  @apply text-xl mt-6 mb-3;
-}
-
-.prose p {
-  @apply mb-4 leading-7;
-}
-
-.prose ul,
-.prose ol {
-  @apply mb-4 pl-6;
-}
-
-.prose li {
-  @apply mb-2;
-}
-
-.prose code {
-  @apply bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono;
-}
-
-.prose pre {
-  @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4;
-}
-
-.prose pre code {
-  @apply bg-transparent p-0 text-inherit;
-}
-
-.prose a {
-  @apply text-blue-600 dark:text-blue-400 hover:underline;
-}
-
-.prose blockquote {
-  @apply border-l-4 border-gray-300 dark:border-gray-700 pl-4 italic my-4;
-}
-
-.prose table {
-  @apply w-full my-4;
-}
-
-.prose th {
-  @apply text-left font-semibold p-2 border-b border-gray-300 dark:border-gray-700;
-}
-
-.prose td {
-  @apply p-2 border-b border-gray-200 dark:border-gray-800;
-}
-
-/* Scrollbar styles */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-gray-100 dark:bg-gray-900;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-gray-400 dark:bg-gray-600 rounded;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-500 dark:bg-gray-500;
 }
 
 /* Focus styles */
-*:focus-visible {
-  @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-950;
+@layer base {
+  [tabindex]:focus-visible,
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    @apply outline-none ring-2 ring-indigo-500 ring-offset-2;
+  }
+
+  .dark [tabindex]:focus-visible,
+  .dark a:focus-visible,
+  .dark button:focus-visible,
+  .dark input:focus-visible,
+  .dark select:focus-visible,
+  .dark textarea:focus-visible {
+    @apply ring-indigo-400 ring-offset-gray-900;
+  }
 }
 
-/* Animation classes */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+/* Prose customization for markdown content */
+@layer components {
+  .prose-docs {
+    @apply prose prose-gray max-w-none dark:prose-invert;
+    @apply prose-headings:scroll-mt-20 prose-headings:font-bold;
+    @apply prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-h4:text-lg;
+    @apply prose-p:leading-relaxed;
+    @apply prose-a:text-indigo-600 prose-a:no-underline prose-a:font-medium hover:prose-a:underline;
+    @apply dark:prose-a:text-indigo-400;
+    @apply prose-strong:font-semibold prose-strong:text-gray-900 dark:prose-strong:text-gray-100;
+    @apply prose-code:rounded-md prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5;
+    @apply prose-code:text-gray-800 prose-code:font-medium;
+    @apply prose-code:before:content-[''] prose-code:after:content-[''];
+    @apply dark:prose-code:bg-gray-800 dark:prose-code:text-gray-200;
+    @apply prose-pre:bg-gray-900 prose-pre:text-gray-100;
+    @apply prose-blockquote:border-l-indigo-500 prose-blockquote:bg-gray-50;
+    @apply dark:prose-blockquote:border-l-indigo-400 dark:prose-blockquote:bg-gray-900;
+    @apply prose-table:overflow-hidden prose-table:rounded-lg prose-table:border prose-table:border-gray-200;
+    @apply dark:prose-table:border-gray-700;
+    @apply prose-thead:bg-gray-50 dark:prose-thead:bg-gray-800;
+    @apply prose-th:font-semibold prose-th:text-left;
+    @apply prose-img:rounded-lg prose-img:shadow-lg;
   }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out;
+/* Animations */
+@layer utilities {
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-up {
+    from {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-down {
+    from {
+      transform: translateY(-10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+  }
+
+  .animate-slide-down {
+    animation: slide-down 0.3s ease-out;
+  }
+}
+
+/* Code syntax highlighting overrides */
+@layer components {
+  /* Line numbers */
+  .line-numbers {
+    counter-reset: line;
+  }
+
+  .line-numbers > span {
+    counter-increment: line;
+  }
+
+  .line-numbers > span:before {
+    content: counter(line);
+    @apply mr-4 inline-block w-4 text-right text-gray-500;
+  }
+
+  /* Highlighted lines */
+  .highlight-line {
+    @apply -mx-4 bg-gray-800/50 px-4;
+  }
+}
+
+/* Loading skeleton */
+@layer components {
+  .skeleton {
+    @apply animate-pulse rounded-md bg-gray-200 dark:bg-gray-700;
+  }
+}
+
+/* Utility classes */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .fade-edge {
+    mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent);
+  }
 }
