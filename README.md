@@ -495,4 +495,4 @@ See [DEVELOPMENT.md](./DEVELOPMENT.md) for complete contribution guidelines.
 
 © **Aureo Labs** (a **MADFAM** company). All rights reserved during alpha
 
-Commercial and open‑core options will be announced at GA
+Commercial and open‑core options will be announced at GA.
