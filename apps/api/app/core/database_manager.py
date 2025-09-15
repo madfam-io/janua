@@ -50,7 +50,15 @@ class DatabaseManager:
             })
         else:
             # PostgreSQL for development/production
+            # Convert DATABASE_URL to use asyncpg driver for async operations
             database_url = settings.DATABASE_URL
+            if database_url.startswith("postgresql://"):
+                # Replace postgresql:// with postgresql+asyncpg://
+                database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif database_url.startswith("postgres://"):
+                # Handle legacy postgres:// URLs
+                database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
             engine_kwargs.update({
                 "pool_size": settings.DATABASE_POOL_SIZE,
                 "max_overflow": settings.DATABASE_MAX_OVERFLOW,
