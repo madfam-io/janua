@@ -254,7 +254,7 @@ class AdminNotificationService:
             </h2>
 
             <div style="color: #4b5563; font-size: 16px; line-height: 24px; margin: 0 0 24px 0;">
-                {notification.message.replace('\n', '<br>')}
+                {notification.message.replace(chr(10), '<br>')}
             </div>
 
             {'<div style="background: #f9fafb; border-radius: 6px; padding: 16px; margin: 16px 0;"><h3 style="color: #1f2937; font-size: 16px; margin: 0 0 12px 0;">Additional Details</h3><pre style="color: #4b5563; font-size: 14px; white-space: pre-wrap; margin: 0;">' + str(notification.data) + '</pre></div>' if notification.data else ''}

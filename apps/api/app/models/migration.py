@@ -1,12 +1,11 @@
 # Migration models - placeholder for enterprise features
 from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text, Integer, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 import uuid
 import enum
 
-Base = declarative_base()
+from . import Base
 
 class MigrationStatus(str, enum.Enum):
     PENDING = "pending"
@@ -44,7 +43,7 @@ class MigratedUser(Base):
     external_id = Column(String(255))
     plinto_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     status = Column(SQLEnum(MigrationStatus))
-    metadata = Column(JSONB, default={})
+    migration_metadata = Column(JSONB, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class MigrationLog(Base):

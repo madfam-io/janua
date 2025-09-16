@@ -1,44 +1,40 @@
-fastapi==0.109.0
-uvicorn[standard]==0.25.0
-python-jose[cryptography]==3.3.0
-PyJWT==2.8.0
-passlib[bcrypt]==1.7.4
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
 python-multipart==0.0.6
-email-validator==2.1.0
-aiosmtplib==3.0.1
-asyncpg==0.29.0
-psycopg2-binary==2.9.9
-redis==5.0.1
-alembic==1.13.0
-sqlalchemy==2.0.23
+python-jose[cryptography]==3.3.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
-python-dotenv==1.0.0
-httpx==0.25.0
-prometheus-client==0.19.0
-opentelemetry-api==1.22.0
-opentelemetry-sdk==1.22.0
-opentelemetry-instrumentation-fastapi==0.43b0
-python-dateutil==2.8.2
-webauthn==2.2.0
-slowapi==0.1.9
-tenacity==8.2.3
-structlog==23.2.0
-gunicorn==21.2.0
-sentry-sdk[fastapi]==1.40.0
-jinja2==3.1.2
-boto3==1.34.11
-cryptography==41.0.7
-# SAML/XML dependencies with compatible versions
-lxml==5.1.0
-xmlsec==1.3.14
-python3-saml==1.16.0
-sendgrid==6.11.0
+
+# Database
+sqlalchemy==2.0.23
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+alembic==1.12.1
+
+# Authentication & Security
+passlib[bcrypt]==1.7.4
+pyjwt==2.8.0
 pyotp==2.9.0
-qrcode[pil]==7.4.2
-aiofiles==23.2.1
-aiohttp==3.9.1
-geoip2==4.8.0
-python-magic==0.4.27
-psutil==5.9.8
-numpy==1.26.3
+qrcode==7.4.2
+python-decouple==3.8
+
+# Redis
+redis==5.0.1
+aioredis==2.0.1
+
+# Email
+sendgrid==6.10.0
+python-postmark==0.6.0
+
+# Utilities
+slowapi==0.1.9
+httpx==0.25.2
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Development & Testing (optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+black==23.11.0

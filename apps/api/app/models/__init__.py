@@ -28,7 +28,7 @@ class User(Base):
     last_name = Column(String(255))
     phone = Column(String(50))
     avatar_url = Column(String(500))
-    metadata = Column(JSONB, default={})
+    user_metadata = Column(JSONB, default={})
     last_login = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -39,6 +39,16 @@ class Organization(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     slug = Column(String(255), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class OrganizationMember(Base):
+    __tablename__ = "organization_members"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    role = Column(String(50), default="member")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -85,7 +95,7 @@ class ActivityLog(Base):
     resource_id = Column(String(255))
     ip_address = Column(String(50))
     user_agent = Column(Text)
-    metadata = Column(JSONB, default={})
+    activity_metadata = Column(JSONB, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Session(Base):
@@ -100,3 +110,76 @@ class Session(Base):
     expires_at = Column(DateTime, nullable=False)
     last_activity = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class OAuthProvider(str, enum.Enum):
+    GOOGLE = "google"
+    GITHUB = "github"
+    MICROSOFT = "microsoft"
+    APPLE = "apple"
+
+class OAuthAccount(Base):
+    __tablename__ = "oauth_accounts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    provider = Column(SQLEnum(OAuthProvider), nullable=False)
+    provider_account_id = Column(String(255), nullable=False)
+    access_token = Column(Text)
+    refresh_token = Column(Text)
+    expires_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Passkey(Base):
+    __tablename__ = "passkeys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    credential_id = Column(String(500), unique=True, nullable=False)
+    public_key = Column(Text, nullable=False)
+    counter = Column(Integer, default=0)
+    device_type = Column(String(255))
+    backed_up = Column(Boolean, default=False)
+    transports = Column(JSONB, default=[])
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime)
+
+class OrganizationInvitation(Base):
+    __tablename__ = "organization_invitations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    email = Column(String(255), nullable=False)
+    role = Column(String(50), default="member")
+    token = Column(String(255), unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    accepted_at = Column(DateTime)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class OrganizationRole(str, enum.Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+    VIEWER = "viewer"
+
+class OrganizationCustomRole(Base):
+    __tablename__ = "organization_custom_roles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    permissions = Column(JSONB, default=[])
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# Association table for many-to-many relationship
+from sqlalchemy import Table
+
+organization_members = Table(
+    'organization_members_association',
+    Base.metadata,
+    Column('organization_id', UUID(as_uuid=True), ForeignKey('organizations.id')),
+    Column('user_id', UUID(as_uuid=True), ForeignKey('users.id')),
+    Column('created_at', DateTime, default=datetime.utcnow)
+)
