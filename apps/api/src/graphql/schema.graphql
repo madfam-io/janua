@@ -1,0 +1,822 @@
+# Plinto GraphQL Schema
+# Complete identity platform API with all features
+
+scalar DateTime
+scalar JSON
+scalar Upload
+
+# ==================== ENUMS ====================
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum MFAType {
+  TOTP
+  SMS
+  EMAIL
+  WEBAUTHN
+  HARDWARE
+  BACKUP_CODES
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+  GUEST
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  PAUSED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum WebhookStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  DLQ
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum AuditEventType {
+  USER_LOGIN
+  USER_LOGOUT
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  PERMISSION_GRANTED
+  PERMISSION_REVOKED
+  ORGANIZATION_CREATED
+  ORGANIZATION_UPDATED
+  POLICY_CREATED
+  POLICY_UPDATED
+  SECURITY_ALERT
+}
+
+enum PolicyEffect {
+  ALLOW
+  DENY
+}
+
+enum SessionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+# ==================== TYPES ====================
+
+type User {
+  id: ID!
+  email: String!
+  name: String
+  avatar: String
+  status: UserStatus!
+  emailVerified: Boolean!
+  mfaEnabled: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  lastLoginAt: DateTime
+  
+  # Relations
+  organizations: [OrganizationMember!]!
+  sessions: [Session!]!
+  apiKeys: [ApiKey!]!
+  passkeys: [Passkey!]!
+  mfaMethods: [MFAMethod!]!
+  auditLogs(limit: Int = 10, offset: Int = 0): [AuditLog!]!
+}
+
+type Organization {
+  id: ID!
+  name: String!
+  slug: String!
+  logo: String
+  description: String
+  website: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  
+  # Relations
+  members(role: OrganizationRole): [OrganizationMember!]!
+  teams: [Team!]!
+  invitations(status: InvitationStatus): [Invitation!]!
+  subscription: Subscription
+  webhooks: [Webhook!]!
+  policies: [Policy!]!
+  apiKeys: [ApiKey!]!
+  auditLogs(limit: Int = 10, offset: Int = 0): [AuditLog!]!
+  
+  # Stats
+  memberCount: Int!
+  teamCount: Int!
+  usage: UsageSummary!
+}
+
+type OrganizationMember {
+  id: ID!
+  user: User!
+  organization: Organization!
+  role: OrganizationRole!
+  permissions: [String!]!
+  teams: [Team!]!
+  joinedAt: DateTime!
+  lastActiveAt: DateTime
+  status: UserStatus!
+}
+
+type Team {
+  id: ID!
+  name: String!
+  description: String
+  organization: Organization!
+  parentTeam: Team
+  leadUser: User
+  members: [OrganizationMember!]!
+  permissions: [String!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  memberCount: Int!
+}
+
+type Session {
+  id: ID!
+  user: User!
+  status: SessionStatus!
+  ipAddress: String!
+  userAgent: String!
+  deviceFingerprint: String
+  location: Location
+  createdAt: DateTime!
+  expiresAt: DateTime!
+  lastActivityAt: DateTime!
+  refreshToken: String
+  riskScore: Float!
+}
+
+type Location {
+  country: String
+  city: String
+  latitude: Float
+  longitude: Float
+}
+
+type ApiKey {
+  id: ID!
+  name: String!
+  key: String! # Only shown once on creation
+  maskedKey: String!
+  user: User
+  organization: Organization
+  permissions: [String!]!
+  rateLimit: RateLimit
+  lastUsedAt: DateTime
+  expiresAt: DateTime
+  createdAt: DateTime!
+  status: UserStatus!
+}
+
+type Passkey {
+  id: ID!
+  name: String!
+  user: User!
+  deviceType: String!
+  backedUp: Boolean!
+  transports: [String!]!
+  createdAt: DateTime!
+  lastUsedAt: DateTime
+}
+
+type MFAMethod {
+  id: ID!
+  type: MFAType!
+  enabled: Boolean!
+  verified: Boolean!
+  primary: Boolean!
+  configuredAt: DateTime!
+  lastUsedAt: DateTime
+  metadata: JSON
+}
+
+type Invitation {
+  id: ID!
+  organization: Organization!
+  email: String!
+  role: OrganizationRole!
+  permissions: [String!]
+  inviter: User!
+  status: InvitationStatus!
+  createdAt: DateTime!
+  expiresAt: DateTime!
+  acceptedAt: DateTime
+  customMessage: String
+}
+
+type Webhook {
+  id: ID!
+  organization: Organization!
+  name: String!
+  url: String!
+  events: [String!]!
+  headers: JSON
+  enabled: Boolean!
+  secret: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  
+  # Stats
+  deliveryRate: Float!
+  recentDeliveries: [WebhookDelivery!]!
+}
+
+type WebhookDelivery {
+  id: ID!
+  webhook: Webhook!
+  eventType: String!
+  status: WebhookStatus!
+  attempts: Int!
+  lastAttemptAt: DateTime!
+  nextRetryAt: DateTime
+  responseCode: Int
+  responseTime: Int
+  error: String
+}
+
+type Policy {
+  id: ID!
+  organization: Organization!
+  name: String!
+  description: String
+  effect: PolicyEffect!
+  principal: String!
+  action: [String!]!
+  resource: [String!]!
+  condition: JSON
+  priority: Int!
+  enabled: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type AuditLog {
+  id: ID!
+  organization: Organization
+  user: User
+  eventType: AuditEventType!
+  action: String!
+  resource: String
+  resourceId: String
+  ipAddress: String!
+  userAgent: String
+  metadata: JSON
+  riskScore: Float
+  timestamp: DateTime!
+}
+
+type Subscription {
+  id: ID!
+  organization: Organization!
+  plan: SubscriptionPlan!
+  status: SubscriptionStatus!
+  billingCycle: BillingCycle!
+  currentPeriodStart: DateTime!
+  currentPeriodEnd: DateTime!
+  trialStart: DateTime
+  trialEnd: DateTime
+  canceledAt: DateTime
+  paymentMethod: PaymentMethod
+  discount: Discount
+  
+  # Usage
+  usage: UsageSummary!
+  invoices: [Invoice!]!
+}
+
+type SubscriptionPlan {
+  id: ID!
+  name: String!
+  displayName: String!
+  description: String!
+  priceMonthly: Float!
+  priceYearly: Float!
+  currency: String!
+  features: [PlanFeature!]!
+  quotas: PlanQuotas!
+  trialDays: Int
+}
+
+type PlanFeature {
+  name: String!
+  description: String!
+  enabled: Boolean!
+  value: String
+}
+
+type PlanQuotas {
+  maxUsers: Int!
+  maxApiCallsPerMonth: Int!
+  maxStorageGB: Int!
+  maxOrganizations: Int!
+  maxProjects: Int!
+  maxWebhooks: Int!
+  maxAuditRetentionDays: Int!
+  maxSsoConnections: Int!
+  maxCustomRoles: Int!
+  rateLimitPerSecond: Int!
+  dataExportEnabled: Boolean!
+  customDomainEnabled: Boolean!
+  advancedAnalyticsEnabled: Boolean!
+  prioritySupport: Boolean!
+}
+
+type PaymentMethod {
+  id: ID!
+  type: String!
+  lastFour: String
+  brand: String
+  expMonth: Int
+  expYear: Int
+  isDefault: Boolean!
+}
+
+type Discount {
+  id: ID!
+  type: String!
+  value: Float!
+  duration: String!
+  appliedAt: DateTime!
+  expiresAt: DateTime
+}
+
+type Invoice {
+  id: ID!
+  organization: Organization!
+  invoiceNumber: String!
+  status: String!
+  amountDue: Float!
+  amountPaid: Float!
+  currency: String!
+  periodStart: DateTime!
+  periodEnd: DateTime!
+  dueDate: DateTime!
+  paidAt: DateTime
+  lineItems: [InvoiceLineItem!]!
+  pdfUrl: String
+}
+
+type InvoiceLineItem {
+  id: ID!
+  description: String!
+  amount: Float!
+  quantity: Int!
+  unitPrice: Float!
+  type: String!
+}
+
+type UsageSummary {
+  periodStart: DateTime!
+  periodEnd: DateTime!
+  apiCalls: UsageMetric!
+  activeUsers: UsageMetric!
+  storage: UsageMetric!
+  webhooksSent: UsageMetric!
+  auditEvents: UsageMetric!
+  dataTransfer: UsageMetric!
+  warnings: [UsageWarning!]!
+  overageCharges: Float!
+}
+
+type UsageMetric {
+  current: Float!
+  limit: Float!
+  percentage: Float!
+  projected: Float!
+  unit: String!
+}
+
+type UsageWarning {
+  metric: String!
+  level: String!
+  message: String!
+  currentPercentage: Float!
+}
+
+type RateLimit {
+  windowMs: Int!
+  maxRequests: Int!
+  remaining: Int!
+  resetAt: DateTime!
+}
+
+type Analytics {
+  users: UserAnalytics!
+  organizations: OrganizationAnalytics!
+  security: SecurityAnalytics!
+  performance: PerformanceAnalytics!
+}
+
+type UserAnalytics {
+  totalUsers: Int!
+  activeUsers: Int!
+  newUsersToday: Int!
+  growthRate: Float!
+  retentionRate: Float!
+  averageSessionDuration: Int!
+  topCountries: [CountryStats!]!
+}
+
+type OrganizationAnalytics {
+  totalOrganizations: Int!
+  activeOrganizations: Int!
+  averageTeamSize: Float!
+  topPlans: [PlanStats!]!
+  revenue: RevenueStats!
+}
+
+type SecurityAnalytics {
+  totalLoginAttempts: Int!
+  failedLoginAttempts: Int!
+  mfaAdoptionRate: Float!
+  suspiciousActivities: Int!
+  topThreats: [ThreatInfo!]!
+}
+
+type PerformanceAnalytics {
+  averageResponseTime: Float!
+  p95ResponseTime: Float!
+  p99ResponseTime: Float!
+  errorRate: Float!
+  uptime: Float!
+  apiCallVolume: [ApiCallStats!]!
+}
+
+type CountryStats {
+  country: String!
+  count: Int!
+  percentage: Float!
+}
+
+type PlanStats {
+  plan: String!
+  count: Int!
+  revenue: Float!
+}
+
+type RevenueStats {
+  mrr: Float!
+  arr: Float!
+  growth: Float!
+  churnRate: Float!
+}
+
+type ThreatInfo {
+  type: String!
+  count: Int!
+  severity: String!
+}
+
+type ApiCallStats {
+  endpoint: String!
+  calls: Int!
+  averageTime: Float!
+  errorRate: Float!
+}
+
+# ==================== INPUTS ====================
+
+input CreateUserInput {
+  email: String!
+  password: String!
+  name: String
+  avatar: String
+}
+
+input UpdateUserInput {
+  name: String
+  avatar: String
+  email: String
+}
+
+input CreateOrganizationInput {
+  name: String!
+  slug: String
+  description: String
+  website: String
+  logo: String
+}
+
+input UpdateOrganizationInput {
+  name: String
+  description: String
+  website: String
+  logo: String
+}
+
+input CreateTeamInput {
+  name: String!
+  description: String
+  parentTeamId: ID
+  leadUserId: ID
+  permissions: [String!]
+}
+
+input InviteMemberInput {
+  organizationId: ID!
+  email: String!
+  role: OrganizationRole!
+  permissions: [String!]
+  teams: [ID!]
+  customMessage: String
+}
+
+input CreateWebhookInput {
+  organizationId: ID!
+  name: String!
+  url: String!
+  events: [String!]!
+  headers: JSON
+  enabled: Boolean
+}
+
+input CreatePolicyInput {
+  organizationId: ID!
+  name: String!
+  description: String
+  effect: PolicyEffect!
+  principal: String!
+  action: [String!]!
+  resource: [String!]!
+  condition: JSON
+  priority: Int
+}
+
+input CreateApiKeyInput {
+  name: String!
+  organizationId: ID
+  permissions: [String!]
+  expiresAt: DateTime
+}
+
+input PaginationInput {
+  limit: Int = 20
+  offset: Int = 0
+  orderBy: String
+  orderDirection: String
+}
+
+input DateRangeInput {
+  start: DateTime!
+  end: DateTime!
+}
+
+# ==================== QUERIES ====================
+
+type Query {
+  # User queries
+  me: User
+  user(id: ID!): User
+  users(pagination: PaginationInput): [User!]!
+  
+  # Organization queries
+  organization(id: ID!): Organization
+  organizationBySlug(slug: String!): Organization
+  myOrganizations: [Organization!]!
+  
+  # Team queries
+  team(id: ID!): Team
+  organizationTeams(organizationId: ID!): [Team!]!
+  
+  # Session queries
+  mySessions: [Session!]!
+  session(id: ID!): Session
+  
+  # API Key queries
+  myApiKeys: [ApiKey!]!
+  organizationApiKeys(organizationId: ID!): [ApiKey!]!
+  
+  # MFA queries
+  myMfaMethods: [MFAMethod!]!
+  mfaRecoveryCodes: [String!]!
+  
+  # Invitation queries
+  invitation(token: String!): Invitation
+  organizationInvitations(organizationId: ID!, status: InvitationStatus): [Invitation!]!
+  
+  # Webhook queries
+  webhook(id: ID!): Webhook
+  organizationWebhooks(organizationId: ID!): [Webhook!]!
+  webhookDeliveries(webhookId: ID!, limit: Int): [WebhookDelivery!]!
+  
+  # Policy queries
+  policy(id: ID!): Policy
+  organizationPolicies(organizationId: ID!): [Policy!]!
+  evaluatePolicy(principal: String!, action: String!, resource: String!): Boolean!
+  
+  # Audit queries
+  auditLogs(
+    organizationId: ID
+    userId: ID
+    eventType: AuditEventType
+    dateRange: DateRangeInput
+    pagination: PaginationInput
+  ): [AuditLog!]!
+  
+  # Subscription queries
+  subscriptionPlans: [SubscriptionPlan!]!
+  organizationSubscription(organizationId: ID!): Subscription
+  organizationInvoices(organizationId: ID!): [Invoice!]!
+  usageSummary(organizationId: ID!): UsageSummary!
+  
+  # Analytics queries
+  analytics(organizationId: ID, dateRange: DateRangeInput): Analytics!
+  userAnalytics(userId: ID!, dateRange: DateRangeInput): UserAnalytics!
+  securityAnalytics(organizationId: ID, dateRange: DateRangeInput): SecurityAnalytics!
+  performanceAnalytics(dateRange: DateRangeInput): PerformanceAnalytics!
+  
+  # Rate limit query
+  myRateLimit: RateLimit!
+}
+
+# ==================== MUTATIONS ====================
+
+type Mutation {
+  # User mutations
+  signUp(input: CreateUserInput!): AuthPayload!
+  signIn(email: String!, password: String!): AuthPayload!
+  signOut: Boolean!
+  updateProfile(input: UpdateUserInput!): User!
+  changePassword(currentPassword: String!, newPassword: String!): Boolean!
+  requestPasswordReset(email: String!): Boolean!
+  resetPassword(token: String!, newPassword: String!): Boolean!
+  verifyEmail(token: String!): Boolean!
+  deleteAccount(password: String!): Boolean!
+  
+  # Organization mutations
+  createOrganization(input: CreateOrganizationInput!): Organization!
+  updateOrganization(id: ID!, input: UpdateOrganizationInput!): Organization!
+  deleteOrganization(id: ID!, confirmationCode: String!): Boolean!
+  transferOwnership(organizationId: ID!, newOwnerId: ID!): Organization!
+  
+  # Team mutations
+  createTeam(organizationId: ID!, input: CreateTeamInput!): Team!
+  updateTeam(id: ID!, input: CreateTeamInput!): Team!
+  deleteTeam(id: ID!): Boolean!
+  addTeamMember(teamId: ID!, userId: ID!): Team!
+  removeTeamMember(teamId: ID!, userId: ID!): Team!
+  
+  # Member management
+  inviteMember(input: InviteMemberInput!): Invitation!
+  acceptInvitation(token: String!): OrganizationMember!
+  declineInvitation(token: String!): Boolean!
+  cancelInvitation(id: ID!): Boolean!
+  resendInvitation(id: ID!): Invitation!
+  updateMemberRole(memberId: ID!, role: OrganizationRole!): OrganizationMember!
+  removeMember(organizationId: ID!, userId: ID!): Boolean!
+  
+  # Session mutations
+  refreshSession(refreshToken: String!): AuthPayload!
+  revokeSession(id: ID!): Boolean!
+  revokeAllSessions: Boolean!
+  
+  # API Key mutations
+  createApiKey(input: CreateApiKeyInput!): ApiKey!
+  rotateApiKey(id: ID!): ApiKey!
+  revokeApiKey(id: ID!): Boolean!
+  
+  # Passkey mutations
+  createPasskeyChallenge: PasskeyChallenge!
+  registerPasskey(challenge: String!, credential: JSON!): Passkey!
+  authenticateWithPasskey(challenge: String!, credential: JSON!): AuthPayload!
+  updatePasskeyName(id: ID!, name: String!): Passkey!
+  deletePasskey(id: ID!, password: String!): Boolean!
+  
+  # MFA mutations
+  enableMfa(type: MFAType!): MfaSetup!
+  verifyMfa(type: MFAType!, code: String!): Boolean!
+  disableMfa(type: MFAType!, password: String!): Boolean!
+  generateRecoveryCodes: [String!]!
+  
+  # Webhook mutations
+  createWebhook(input: CreateWebhookInput!): Webhook!
+  updateWebhook(id: ID!, input: CreateWebhookInput!): Webhook!
+  deleteWebhook(id: ID!): Boolean!
+  testWebhook(id: ID!): WebhookDelivery!
+  retryWebhookDelivery(deliveryId: ID!): WebhookDelivery!
+  
+  # Policy mutations
+  createPolicy(input: CreatePolicyInput!): Policy!
+  updatePolicy(id: ID!, input: CreatePolicyInput!): Policy!
+  deletePolicy(id: ID!): Boolean!
+  togglePolicy(id: ID!, enabled: Boolean!): Policy!
+  
+  # Subscription mutations
+  subscribeToPlan(organizationId: ID!, planId: ID!, billingCycle: BillingCycle!): Subscription!
+  updateSubscription(organizationId: ID!, planId: ID!): Subscription!
+  cancelSubscription(organizationId: ID!, immediate: Boolean): Boolean!
+  resumeSubscription(organizationId: ID!): Subscription!
+  updatePaymentMethod(organizationId: ID!, paymentMethodId: String!): PaymentMethod!
+  
+  # Admin mutations (requires admin role)
+  impersonateUser(userId: ID!): AuthPayload!
+  suspendUser(userId: ID!, reason: String!): User!
+  unsuspendUser(userId: ID!): User!
+  deleteUser(userId: ID!): Boolean!
+  createCustomPlan(input: JSON!): SubscriptionPlan!
+  issueCredit(organizationId: ID!, amount: Float!, description: String!): Invoice!
+}
+
+# ==================== SUBSCRIPTIONS ====================
+
+type Subscription {
+  # User events
+  userUpdated(userId: ID!): User!
+  userStatusChanged(userId: ID!): User!
+  
+  # Organization events
+  organizationUpdated(organizationId: ID!): Organization!
+  memberJoined(organizationId: ID!): OrganizationMember!
+  memberLeft(organizationId: ID!): OrganizationMember!
+  memberRoleChanged(organizationId: ID!): OrganizationMember!
+  
+  # Team events
+  teamUpdated(teamId: ID!): Team!
+  teamMemberAdded(teamId: ID!): Team!
+  teamMemberRemoved(teamId: ID!): Team!
+  
+  # Session events
+  sessionCreated(userId: ID!): Session!
+  sessionRevoked(userId: ID!): Session!
+  suspiciousActivity(userId: ID!): SecurityAlert!
+  
+  # Webhook events
+  webhookDelivered(webhookId: ID!): WebhookDelivery!
+  webhookFailed(webhookId: ID!): WebhookDelivery!
+  
+  # Audit events
+  auditLogCreated(organizationId: ID!): AuditLog!
+  securityAlert(organizationId: ID!): SecurityAlert!
+  
+  # Usage events
+  quotaWarning(organizationId: ID!): UsageWarning!
+  quotaExceeded(organizationId: ID!): UsageWarning!
+  
+  # Real-time analytics
+  analyticsUpdate(organizationId: ID!): Analytics!
+}
+
+# ==================== SPECIAL TYPES ====================
+
+type AuthPayload {
+  user: User!
+  accessToken: String!
+  refreshToken: String!
+  expiresAt: DateTime!
+}
+
+type MfaSetup {
+  secret: String!
+  qrCode: String!
+  backupCodes: [String!]!
+}
+
+type PasskeyChallenge {
+  challenge: String!
+  timeout: Int!
+  rpId: String!
+  userVerification: String!
+}
+
+type SecurityAlert {
+  id: ID!
+  type: String!
+  severity: String!
+  message: String!
+  metadata: JSON!
+  timestamp: DateTime!
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

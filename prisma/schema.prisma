@@ -1,0 +1,1052 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// TENANT & ORGANIZATION MODELS
+// =============================================================================
+
+model Tenant {
+  id                    String   @id @default(cuid())
+  name                  String
+  slug                  String   @unique
+  domain                String?  @unique
+  subdomain             String?  @unique
+
+  // Database isolation configuration
+  database_host         String?
+  database_port         Int?
+  database_name         String?
+  database_schema       String?
+
+  // Storage configuration
+  storage_bucket        String?
+  storage_prefix        String?
+
+  // Feature flags and limits
+  features              Json     @default("{}")
+  limits                Json     @default("{}")
+  settings              Json     @default("{}")
+  metadata              Json     @default("{}")
+
+  // Billing and plan information
+  billing_plan          String   @default("free")
+  isolation_level       String   @default("shared") // shared, semi-isolated, fully-isolated
+
+  status                String   @default("active") // active, suspended, deleted
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  // Relations
+  users                 User[]
+  teams                 Team[]
+  billing_subscriptions BillingSubscription[]
+  audit_logs            AuditLog[]
+  sessions              Session[]
+  roles                 Role[]
+
+  @@map("tenants")
+  @@index([slug])
+  @@index([domain])
+  @@index([subdomain])
+  @@index([status])
+  @@index([billing_plan])
+}
+
+// =============================================================================
+// USER MANAGEMENT MODELS
+// =============================================================================
+
+model User {
+  id                   String   @id @default(cuid())
+  tenant_id            String
+  email                String
+  email_verified       Boolean  @default(false)
+  email_verified_at    DateTime?
+
+  // Profile information
+  first_name           String?
+  last_name            String?
+  display_name         String?
+  avatar_url           String?
+  phone                String?
+  phone_verified       Boolean  @default(false)
+  phone_verified_at    DateTime?
+
+  // Authentication
+  password_hash        String?
+  password_salt        String?
+  password_updated_at  DateTime?
+
+  // Account status
+  status               String   @default("active") // active, suspended, deleted
+  locked_at            DateTime?
+  locked_reason        String?
+  login_attempts       Int      @default(0)
+  last_login_at        DateTime?
+  last_login_ip        String?
+
+  // Multi-factor authentication
+  mfa_enabled          Boolean  @default(false)
+  mfa_secret           String?
+  mfa_backup_codes     String[] @default([])
+  mfa_recovery_codes   String[] @default([])
+
+  // Preferences and metadata
+  language             String   @default("en")
+  timezone             String   @default("UTC")
+  preferences          Json     @default("{}")
+  metadata             Json     @default("{}")
+
+  // Audit fields
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  created_by           String?
+  updated_by           String?
+
+  // Relations
+  tenant               Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  team_memberships     TeamMember[]
+  role_assignments     RoleAssignment[]
+  sessions             Session[]
+  mfa_methods          MfaMethod[]
+  passkeys            Passkey[]
+  audit_logs_actor     AuditLog[] @relation("ActorAudits")
+  audit_logs_created   AuditLog[] @relation("CreatedByAudits")
+  payment_customers    PaymentCustomer[]
+  billing_alerts       BillingAlert[]
+
+  @@map("users")
+  @@unique([tenant_id, email])
+  @@index([email])
+  @@index([status])
+  @@index([tenant_id])
+  @@index([last_login_at])
+  @@index([created_at])
+}
+
+model MfaMethod {
+  id                   String   @id @default(cuid())
+  user_id              String
+  type                 String   // totp, sms, email, webauthn, hardware, backup_codes
+  enabled              Boolean  @default(false)
+  verified             Boolean  @default(false)
+  primary              Boolean  @default(false)
+
+  // Type-specific configuration
+  totp_secret          String?
+  phone_number         String?
+  email_address        String?
+  hardware_token_id    String?
+
+  // Security metadata
+  last_used_at         DateTime?
+  verification_count   Int      @default(0)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  // Relations
+  user                 User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("mfa_methods")
+  @@index([user_id])
+  @@index([type])
+  @@index([enabled])
+}
+
+model Passkey {
+  id                     String   @id @default(cuid())
+  user_id                String
+  credential_id          String   @unique
+  credential_public_key  String
+  counter                BigInt   @default(0)
+  name                   String?
+  transports             String[] @default([])
+
+  // Device information
+  device_type            String   // platform, cross-platform, unknown
+  backed_up              Boolean  @default(false)
+
+  // Usage tracking
+  created_at             DateTime @default(now())
+  last_used_at           DateTime?
+
+  // Relations
+  user                   User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("passkeys")
+  @@index([user_id])
+  @@index([device_type])
+  @@index([last_used_at])
+}
+
+// =============================================================================
+// TEAM MANAGEMENT MODELS
+// =============================================================================
+
+model Team {
+  id               String   @id @default(cuid())
+  tenant_id        String
+  name             String
+  slug             String
+  description      String?
+  avatar_url       String?
+  parent_team_id   String?
+
+  // Configuration
+  settings         Json     @default("{}")
+  metadata         Json     @default("{}")
+  is_default       Boolean  @default(false)
+
+  // Audit fields
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+  created_by       String
+
+  // Relations
+  tenant           Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  parent_team      Team?       @relation("TeamHierarchy", fields: [parent_team_id], references: [id])
+  child_teams      Team[]      @relation("TeamHierarchy")
+  members          TeamMember[]
+  invitations      TeamInvitation[]
+  resources        TeamResource[]
+  projects         TeamProject[]
+
+  @@map("teams")
+  @@unique([tenant_id, slug])
+  @@index([tenant_id])
+  @@index([parent_team_id])
+  @@index([created_at])
+}
+
+model TeamMember {
+  id           String   @id @default(cuid())
+  team_id      String
+  user_id      String
+  role         String   // owner, lead, member, viewer, guest
+  permissions  String[] @default([])
+  is_lead      Boolean  @default(false)
+
+  // Invitation tracking
+  invited_by   String?
+  joined_at    DateTime @default(now())
+
+  // Metadata
+  metadata     Json     @default("{}")
+
+  // Relations
+  team         Team     @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("team_members")
+  @@unique([team_id, user_id])
+  @@index([team_id])
+  @@index([user_id])
+  @@index([role])
+}
+
+model TeamInvitation {
+  id             String   @id @default(cuid())
+  team_id        String
+  email          String
+  role           String
+  permissions    String[] @default([])
+  token          String   @unique
+
+  // Invitation details
+  invited_by     String
+  status         String   @default("pending") // pending, accepted, expired, cancelled
+  message        String?
+
+  // Timestamps
+  created_at     DateTime @default(now())
+  expires_at     DateTime
+  accepted_at    DateTime?
+
+  // Relations
+  team           Team     @relation(fields: [team_id], references: [id], onDelete: Cascade)
+
+  @@map("team_invitations")
+  @@index([team_id])
+  @@index([email])
+  @@index([status])
+  @@index([expires_at])
+}
+
+model TeamProject {
+  id           String   @id @default(cuid())
+  team_id      String
+  project_id   String
+  access_level String   // read, write, admin
+
+  // Assignment details
+  assigned_at  DateTime @default(now())
+  assigned_by  String
+
+  // Metadata
+  metadata     Json     @default("{}")
+
+  // Relations
+  team         Team     @relation(fields: [team_id], references: [id], onDelete: Cascade)
+
+  @@map("team_projects")
+  @@unique([team_id, project_id])
+  @@index([team_id])
+  @@index([project_id])
+}
+
+model TeamResource {
+  id            String   @id @default(cuid())
+  team_id       String
+  resource_type String
+  resource_id   String
+  permissions   String[] @default([])
+  constraints   Json     @default("{}")
+
+  // Assignment details
+  assigned_at   DateTime @default(now())
+  assigned_by   String
+
+  // Relations
+  team          Team     @relation(fields: [team_id], references: [id], onDelete: Cascade)
+
+  @@map("team_resources")
+  @@unique([team_id, resource_type, resource_id])
+  @@index([team_id])
+  @@index([resource_type])
+}
+
+// =============================================================================
+// RBAC MODELS
+// =============================================================================
+
+model Role {
+  id               String   @id @default(cuid())
+  tenant_id        String
+  name             String
+  description      String?
+  permissions      Json     @default("[]") // Array of Permission objects
+  parent_role_id   String?
+
+  // Role configuration
+  is_system        Boolean  @default(false)
+  is_default       Boolean  @default(false)
+  priority         Int      @default(100)
+  constraints      Json     @default("{}")
+
+  // Metadata
+  metadata         Json     @default("{}")
+
+  // Audit fields
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+  created_by       String
+
+  // Relations
+  tenant           Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  parent_role      Role?    @relation("RoleHierarchy", fields: [parent_role_id], references: [id])
+  child_roles      Role[]   @relation("RoleHierarchy")
+  assignments      RoleAssignment[]
+
+  @@map("roles")
+  @@unique([tenant_id, name])
+  @@index([tenant_id])
+  @@index([is_system])
+  @@index([is_default])
+  @@index([priority])
+}
+
+model RoleAssignment {
+  id               String   @id @default(cuid())
+  role_id          String
+  principal_type   String   // user, team, service
+  principal_id     String
+  tenant_id        String
+
+  // Scope configuration
+  scope_type       String?  // organization, team, project, resource
+  scope_id         String?
+
+  // Assignment conditions
+  conditions       Json     @default("[]") // Array of condition objects
+  expires_at       DateTime?
+
+  // Assignment details
+  assigned_by      String
+  assigned_at      DateTime @default(now())
+
+  // Relations
+  role             Role     @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  user             User?    @relation(fields: [principal_id], references: [id], onDelete: Cascade)
+
+  @@map("role_assignments")
+  @@unique([role_id, principal_type, principal_id, scope_type, scope_id])
+  @@index([role_id])
+  @@index([principal_type, principal_id])
+  @@index([tenant_id])
+  @@index([expires_at])
+}
+
+model Policy {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  name          String
+  document      Json     // PolicyDocument with statements
+
+  // Policy metadata
+  version       String   @default("1.0")
+  description   String?
+
+  // Audit fields
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  created_by    String
+
+  @@map("policies")
+  @@unique([tenant_id, name])
+  @@index([tenant_id])
+}
+
+model PolicyAttachment {
+  id              String   @id @default(cuid())
+  policy_id       String
+  target_type     String   // role, user, team
+  target_id       String
+
+  // Attachment details
+  attached_by     String
+  attached_at     DateTime @default(now())
+
+  // Relations
+  policy          Policy   @relation(fields: [policy_id], references: [id], onDelete: Cascade)
+
+  @@map("policy_attachments")
+  @@unique([policy_id, target_type, target_id])
+  @@index([policy_id])
+  @@index([target_type, target_id])
+}
+
+// =============================================================================
+// SESSION MANAGEMENT MODELS
+// =============================================================================
+
+model Session {
+  id                        String   @id @default(cuid())
+  user_id                   String
+  tenant_id                 String?
+  device_id                 String
+  device_fingerprint        String
+
+  // Network information
+  ip_address                String
+  user_agent                String
+  location_country          String?
+  location_region           String?
+  location_city             String?
+  location_latitude         Float?
+  location_longitude        Float?
+
+  // Session lifecycle
+  created_at                DateTime @default(now())
+  last_activity_at          DateTime @default(now())
+  expires_at                DateTime
+
+  // Token management
+  refresh_token             String   @unique
+  refresh_token_family      String
+  refresh_token_expires_at  DateTime
+  access_token_jti          String?
+
+  // Session state
+  is_active                 Boolean  @default(true)
+  revoked                   Boolean  @default(false)
+  revoked_at                DateTime?
+  revoked_reason            String?
+
+  // Security flags
+  mfa_verified              Boolean  @default(false)
+  suspicious_activity       Boolean  @default(false)
+  high_risk                 Boolean  @default(false)
+  requires_reauthentication Boolean  @default(false)
+
+  // Metadata
+  metadata                  Json     @default("{}")
+
+  // Relations
+  user                      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  tenant                    Tenant?  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  anomaly_reports           SessionAnomalyReport[]
+
+  @@map("sessions")
+  @@index([user_id])
+  @@index([tenant_id])
+  @@index([device_fingerprint])
+  @@index([is_active])
+  @@index([expires_at])
+  @@index([refresh_token_family])
+  @@index([last_activity_at])
+}
+
+model SessionAnomalyReport {
+  id                  String   @id @default(cuid())
+  session_id          String
+  anomalies           Json     // Array of SessionAnomaly objects
+  risk_score          Float
+  recommended_action  String   // allow, challenge, block, revoke
+  detected_at         DateTime @default(now())
+
+  // Relations
+  session             Session  @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@map("session_anomaly_reports")
+  @@index([session_id])
+  @@index([risk_score])
+  @@index([detected_at])
+}
+
+// =============================================================================
+// PAYMENT & BILLING MODELS
+// =============================================================================
+
+model PaymentCustomer {
+  id                  String   @id @default(cuid())
+  user_id             String
+  email               String
+  name                String
+  phone               String?
+
+  // Address information
+  address_line1       String?
+  address_line2       String?
+  address_city        String?
+  address_state       String?
+  address_postal_code String?
+  address_country     String?
+
+  // Tax information
+  tax_type            String?  // rfc, vat, gst, ein, abn
+  tax_id              String?
+  tax_name            String?
+  tax_address_line1   String?
+  tax_address_line2   String?
+  tax_address_city    String?
+  tax_address_state   String?
+  tax_address_postal_code String?
+  tax_address_country String?
+  tax_verified        Boolean  @default(false)
+
+  // Provider-specific customer IDs
+  stripe_customer_id  String?
+  conekta_customer_id String?
+  fungies_customer_id String?
+
+  // Default payment method
+  default_payment_method_id String?
+
+  // Audit fields
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  // Relations
+  user                User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  payment_methods     PaymentMethod[]
+  payment_intents     PaymentIntent[]
+  checkout_sessions   CheckoutSession[]
+
+  @@map("payment_customers")
+  @@unique([user_id])
+  @@index([email])
+  @@index([stripe_customer_id])
+  @@index([conekta_customer_id])
+  @@index([fungies_customer_id])
+}
+
+model PaymentMethod {
+  id                         String   @id @default(cuid())
+  customer_id                String
+  provider                   String   // stripe, conekta, fungies
+  provider_payment_method_id String?
+  type                       String   // card, oxxo, spei, bank_transfer, paypal, crypto, wire
+
+  // Card details (if applicable)
+  card_brand                 String?
+  card_last4                 String?
+  card_exp_month             Int?
+  card_exp_year              Int?
+
+  // Bank details (if applicable)
+  bank_name                  String?
+  bank_account_last4         String?
+
+  // Other details
+  wallet_address             String?
+  reference                  String?
+
+  // Status
+  is_default                 Boolean  @default(false)
+
+  // Metadata
+  metadata                   Json     @default("{}")
+
+  // Audit fields
+  created_at                 DateTime @default(now())
+
+  // Relations
+  customer                   PaymentCustomer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  @@map("payment_methods")
+  @@index([customer_id])
+  @@index([provider])
+  @@index([type])
+  @@index([is_default])
+}
+
+model PaymentIntent {
+  id                    String   @id @default(cuid())
+  customer_id           String
+  provider              String   // stripe, conekta, fungies
+  provider_intent_id    String?
+
+  // Payment details
+  amount                Int      // Amount in smallest currency unit (cents)
+  currency              String   // ISO 4217 currency code
+  description           String?
+
+  // Status
+  status                String   @default("pending") // pending, processing, succeeded, failed, canceled, refunded
+
+  // Payment method
+  payment_method_id     String?
+
+  // Error information
+  error_code            String?
+  error_message         String?
+  error_provider_details Json?
+
+  // Metadata
+  metadata              Json     @default("{}")
+
+  // Audit fields
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  // Relations
+  customer              PaymentCustomer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  @@map("payment_intents")
+  @@index([customer_id])
+  @@index([provider])
+  @@index([status])
+  @@index([created_at])
+}
+
+model CheckoutSession {
+  id                  String   @id @default(cuid())
+  customer_id         String
+  provider            String   // stripe, conekta, fungies
+  provider_session_id String?
+
+  // Session details
+  amount              Int      // Total amount in smallest currency unit
+  currency            String
+  success_url         String
+  cancel_url          String
+
+  // Line items
+  line_items          Json     // Array of LineItem objects
+
+  // Status
+  status              String   @default("open") // open, complete, expired
+  payment_intent_id   String?
+
+  // Expiration
+  expires_at          DateTime
+
+  // Metadata
+  metadata            Json     @default("{}")
+
+  // Audit fields
+  created_at          DateTime @default(now())
+
+  // Relations
+  customer            PaymentCustomer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  @@map("checkout_sessions")
+  @@index([customer_id])
+  @@index([provider])
+  @@index([status])
+  @@index([expires_at])
+}
+
+// =============================================================================
+// BILLING MODELS
+// =============================================================================
+
+model BillingPlan {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  display_name        String
+  description         String
+
+  // Pricing
+  price_amount        Int      // Amount in smallest currency unit
+  price_currency      String   @default("USD")
+  price_interval      String   // monthly, yearly, one-time
+  price_interval_count Int     @default(1)
+
+  // Features and limits
+  features            Json     @default("{}")
+  limits              Json     @default("{}")
+
+  // Provider integration
+  stripe_price_id     String?
+  stripe_product_id   String?
+
+  // Status
+  is_active           Boolean  @default(true)
+  is_default          Boolean  @default(false)
+
+  // Metadata
+  metadata            Json     @default("{}")
+
+  // Audit fields
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  // Relations
+  subscriptions       BillingSubscription[]
+
+  @@map("billing_plans")
+  @@index([is_active])
+  @@index([is_default])
+}
+
+model BillingSubscription {
+  id                      String   @id @default(cuid())
+  tenant_id               String
+  plan_id                 String
+
+  // Subscription details
+  status                  String   @default("active") // trialing, active, past_due, canceled, unpaid, incomplete
+  quantity                Int      @default(1)
+
+  // Period management
+  current_period_start    DateTime
+  current_period_end      DateTime
+  trial_start             DateTime?
+  trial_end               DateTime?
+  cancel_at               DateTime?
+  canceled_at             DateTime?
+
+  // Provider integration
+  stripe_subscription_id  String?
+  stripe_customer_id      String?
+
+  // Payment method
+  payment_method_id       String?
+
+  // Discount
+  discount_coupon_id      String?
+  discount_percent_off    Int?
+  discount_amount_off     Int?
+  discount_valid_until    DateTime?
+
+  // Metadata
+  metadata                Json     @default("{}")
+
+  // Audit fields
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  // Relations
+  tenant                  Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  plan                    BillingPlan @relation(fields: [plan_id], references: [id])
+  invoices                BillingInvoice[]
+
+  @@map("billing_subscriptions")
+  @@unique([tenant_id])
+  @@index([plan_id])
+  @@index([status])
+  @@index([current_period_end])
+  @@index([trial_end])
+}
+
+model BillingInvoice {
+  id                  String   @id @default(cuid())
+  subscription_id     String
+  tenant_id           String
+  invoice_number      String   @unique
+
+  // Invoice details
+  status              String   @default("draft") // draft, open, paid, void, uncollectible
+  amount_due          Int      // Amount in smallest currency unit
+  amount_paid         Int      @default(0)
+  currency            String   @default("USD")
+
+  // Period
+  period_start        DateTime
+  period_end          DateTime
+  due_date            DateTime?
+  paid_at             DateTime?
+
+  // Provider integration
+  stripe_invoice_id   String?
+
+  // Line items
+  line_items          Json     @default("[]") // Array of InvoiceLineItem objects
+
+  // URLs
+  pdf_url             String?
+  hosted_invoice_url  String?
+
+  // Audit fields
+  created_at          DateTime @default(now())
+
+  // Relations
+  subscription        BillingSubscription @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+
+  @@map("billing_invoices")
+  @@index([subscription_id])
+  @@index([tenant_id])
+  @@index([status])
+  @@index([due_date])
+  @@index([period_end])
+}
+
+model BillingAlert {
+  id                  String   @id @default(cuid())
+  tenant_id           String
+  user_id             String?
+  type                String   // usage_limit, payment_failed, subscription_ending, trial_ending
+  severity            String   // info, warning, critical
+
+  // Alert details
+  message             String
+  details             Json     @default("{}")
+
+  // Acknowledgment
+  acknowledged        Boolean  @default(false)
+  acknowledged_by     String?
+  acknowledged_at     DateTime?
+
+  // Audit fields
+  created_at          DateTime @default(now())
+
+  // Relations
+  user                User?    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("billing_alerts")
+  @@index([tenant_id])
+  @@index([type])
+  @@index([severity])
+  @@index([acknowledged])
+  @@index([created_at])
+}
+
+model UsageRecord {
+  id             String   @id @default(cuid())
+  tenant_id      String
+  metric         String
+  quantity       Int
+  unit           String   @default("unit")
+  timestamp      DateTime @default(now())
+
+  // Metadata
+  metadata       Json     @default("{}")
+
+  @@map("usage_records")
+  @@index([tenant_id])
+  @@index([metric])
+  @@index([timestamp])
+  @@index([tenant_id, metric, timestamp])
+}
+
+// =============================================================================
+// AUDIT & MONITORING MODELS
+// =============================================================================
+
+model AuditLog {
+  id                String   @id @default(cuid())
+  tenant_id         String?
+
+  // Actor information
+  actor_id          String
+  actor_type        String   // user, system, api_key, service_account
+  actor_email       String?
+  actor_ip_address  String?
+  actor_user_agent  String?
+
+  // Action details
+  action            String
+
+  // Resource information
+  resource_type     String
+  resource_id       String?
+  resource_name     String?
+
+  // Event details
+  details           Json     @default("{}")
+  outcome           String   // success, failure, error
+
+  // Risk and compliance
+  risk_score        Float?
+  compliance_flags  String[] @default([])
+
+  // Session context
+  session_id        String?
+  correlation_id    String?
+  request_id        String?
+
+  // Metadata
+  metadata          Json     @default("{}")
+
+  // Timestamp
+  timestamp         DateTime @default(now())
+
+  // Relations
+  tenant            Tenant?  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  actor_user        User?    @relation("ActorAudits", fields: [actor_id], references: [id], onDelete: SetNull)
+  created_by_user   User?    @relation("CreatedByAudits", fields: [actor_id], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+  @@index([tenant_id])
+  @@index([actor_id])
+  @@index([action])
+  @@index([resource_type])
+  @@index([outcome])
+  @@index([timestamp])
+  @@index([risk_score])
+  @@index([compliance_flags])
+  @@index([tenant_id, timestamp])
+  @@index([actor_id, timestamp])
+}
+
+// =============================================================================
+// SYSTEM & CONFIGURATION MODELS
+// =============================================================================
+
+model SystemConfiguration {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  value         Json
+  description   String?
+  category      String?
+  is_secret     Boolean  @default(false)
+
+  // Audit fields
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  updated_by    String
+
+  @@map("system_configurations")
+  @@index([category])
+  @@index([is_secret])
+}
+
+model ApiKey {
+  id            String   @id @default(cuid())
+  tenant_id     String?
+  user_id       String?
+  name          String
+  key_hash      String   @unique
+  key_prefix    String
+
+  // Permissions and scope
+  permissions   String[] @default([])
+  scope         Json     @default("{}")
+
+  // Status and limits
+  is_active     Boolean  @default(true)
+  rate_limit    Int?
+
+  // Usage tracking
+  last_used_at  DateTime?
+  usage_count   Int      @default(0)
+
+  // Expiration
+  expires_at    DateTime?
+
+  // Audit fields
+  created_at    DateTime @default(now())
+  created_by    String
+
+  @@map("api_keys")
+  @@index([tenant_id])
+  @@index([user_id])
+  @@index([is_active])
+  @@index([expires_at])
+  @@index([key_prefix])
+}
+
+model WebhookEndpoint {
+  id            String   @id @default(cuid())
+  tenant_id     String?
+  url           String
+  secret        String
+  events        String[] @default([])
+
+  // Status
+  is_active     Boolean  @default(true)
+
+  // Retry configuration
+  max_retries   Int      @default(3)
+  retry_delay   Int      @default(1000) // milliseconds
+
+  // Audit fields
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  created_by    String
+
+  // Relations
+  deliveries    WebhookDelivery[]
+
+  @@map("webhook_endpoints")
+  @@index([tenant_id])
+  @@index([is_active])
+}
+
+model WebhookDelivery {
+  id                String   @id @default(cuid())
+  webhook_endpoint_id String
+  event_type        String
+  payload           Json
+
+  // Delivery status
+  status            String   @default("pending") // pending, success, failed, retrying
+  http_status_code  Int?
+  response_body     String?
+  error_message     String?
+
+  // Retry tracking
+  attempts          Int      @default(0)
+  next_retry_at     DateTime?
+
+  // Timing
+  created_at        DateTime @default(now())
+  delivered_at      DateTime?
+
+  // Relations
+  webhook_endpoint  WebhookEndpoint @relation(fields: [webhook_endpoint_id], references: [id], onDelete: Cascade)
+
+  @@map("webhook_deliveries")
+  @@index([webhook_endpoint_id])
+  @@index([status])
+  @@index([event_type])
+  @@index([next_retry_at])
+  @@index([created_at])
+}
+
+// =============================================================================
+// ADDITIONAL INDEXES FOR PERFORMANCE
+// =============================================================================
+
+// Composite indexes for common query patterns
+// These are defined within the models above using @@index([...])
