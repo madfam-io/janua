@@ -4,7 +4,7 @@ Authentication router for v1 API
 
 from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import secrets
@@ -42,7 +42,8 @@ class SignUpRequest(BaseModel):
     last_name: Optional[str] = Field(None, max_length=100)
     username: Optional[str] = Field(None, min_length=3, max_length=50)
     
-    @validator('username')
+    @field_validator('username')
+    @classmethod
     def validate_username(cls, v):
         if v and not v.replace('_', '').replace('-', '').isalnum():
             raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
@@ -54,11 +55,11 @@ class SignInRequest(BaseModel):
     username: Optional[str] = None
     password: str
     
-    @validator('username')
-    def validate_credentials(cls, v, values):
-        if not v and not values.get('email'):
+    @model_validator(mode='after')
+    def validate_credentials(self):
+        if not self.username and not self.email:
             raise ValueError('Either email or username must be provided')
-        return v
+        return self
 
 
 class RefreshTokenRequest(BaseModel):

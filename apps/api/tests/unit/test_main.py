@@ -54,9 +54,12 @@ class TestHealthEndpoints:
     """Test health and status endpoints."""
     
     @pytest.mark.asyncio
-    async def test_health_endpoint(self, test_client: AsyncClient):
+    async def test_health_endpoint(self):
         """Test the health check endpoint."""
-        response = await test_client.get("/health")
+        from httpx import AsyncClient
+        from app.main import app
+        async with AsyncClient(app=app, base_url="http://testserver") as client:
+            response = await client.get("/health")
         
         assert response.status_code == 200
         data = response.json()
@@ -66,20 +69,23 @@ class TestHealthEndpoints:
         assert "environment" in data
     
     @pytest.mark.asyncio
-    async def test_ready_endpoint_success(self, test_client: AsyncClient):
+    async def test_ready_endpoint_success(self):
         """Test the readiness check endpoint when services are healthy."""
+        from httpx import AsyncClient
+        from app.main import app
         with patch('app.main.engine') as mock_engine, \
-             patch('app.main.redis_client') as mock_redis:
-            
+             patch('app.main.redis_test_client') as mock_redis:
+
             # Mock successful database connection
             mock_conn = AsyncMock()
             mock_engine.connect.return_value.__aenter__.return_value = mock_conn
             mock_conn.execute.return_value = None
-            
+
             # Mock successful Redis connection
             mock_redis.ping.return_value = True
-            
-            response = await test_client.get("/ready")
+
+            async with AsyncClient(app=app, base_url="http://testserver") as client:
+                response = await client.get("/ready")
             
             assert response.status_code == 200
             data = response.json()
@@ -89,18 +95,21 @@ class TestHealthEndpoints:
             assert data["redis"] is True
     
     @pytest.mark.asyncio
-    async def test_ready_endpoint_degraded(self, test_client: AsyncClient):
+    async def test_ready_endpoint_degraded(self):
         """Test the readiness check endpoint when services are unhealthy."""
+        from httpx import AsyncClient
+        from app.main import app
         with patch('app.main.engine') as mock_engine, \
-             patch('app.main.redis_client') as mock_redis:
-            
+             patch('app.main.redis_test_client') as mock_redis:
+
             # Mock failed database connection
             mock_engine.connect.side_effect = Exception("DB connection failed")
-            
+
             # Mock failed Redis connection
             mock_redis.ping.side_effect = Exception("Redis connection failed")
-            
-            response = await test_client.get("/ready")
+
+            async with AsyncClient(app=app, base_url="http://testserver") as client:
+                response = await client.get("/ready")
             
             assert response.status_code == 200
             data = response.json()
@@ -114,9 +123,12 @@ class TestOpenIDEndpoints:
     """Test OpenID Connect discovery endpoints."""
     
     @pytest.mark.asyncio
-    async def test_openid_configuration(self, test_client: AsyncClient):
+    async def test_openid_configuration(self):
         """Test OpenID Connect configuration endpoint."""
-        response = await test_client.get("/.well-known/openid-configuration")
+        from httpx import AsyncClient
+        from app.main import app
+        async with AsyncClient(app=app, base_url="http://testserver") as client:
+            response = await client.get("/.well-known/openid-configuration")
         
         assert response.status_code == 200
         data = response.json()
@@ -143,7 +155,7 @@ class TestOpenIDEndpoints:
         assert data["jwks_uri"].startswith("http")
     
     @pytest.mark.asyncio
-    async def test_jwks_endpoint(self, test_client: AsyncClient):
+    async def test_jwks_endpoint(self):
         """Test JWKS endpoint."""
         response = await test_client.get("/.well-known/jwks.json")
         
@@ -159,7 +171,7 @@ class TestTestEndpoints:
     """Test debugging/test endpoints."""
     
     @pytest.mark.asyncio
-    async def test_test_endpoint(self, test_client: AsyncClient):
+    async def test_test_endpoint(self):
         """Test the simple test endpoint."""
         response = await test_client.get("/test")
         
@@ -170,7 +182,7 @@ class TestTestEndpoints:
         assert "auth_router_included" in data
     
     @pytest.mark.asyncio
-    async def test_test_json_endpoint(self, test_client: AsyncClient):
+    async def test_test_json_endpoint(self):
         """Test the JSON test endpoint."""
         test_data = {"test": "data", "number": 42}
         
@@ -186,7 +198,7 @@ class TestMiddleware:
     """Test middleware behavior."""
     
     @pytest.mark.asyncio
-    async def test_cors_middleware(self, test_client: AsyncClient):
+    async def test_cors_middleware(self):
         """Test CORS middleware configuration."""
         response = await test_client.options("/health")
         
@@ -194,7 +206,7 @@ class TestMiddleware:
         assert "access-control-allow-origin" in response.headers
     
     @pytest.mark.asyncio
-    async def test_process_time_header(self, test_client: AsyncClient):
+    async def test_process_time_header(self):
         """Test that process time header is added."""
         response = await test_client.get("/health")
         
@@ -204,13 +216,13 @@ class TestMiddleware:
         assert process_time >= 0
     
     @pytest.mark.asyncio
-    async def test_trusted_host_middleware(self, test_client: AsyncClient):
+    async def test_trusted_host_middleware(self):
         """Test trusted host middleware behavior."""
         # Test with valid host
         response = await test_client.get("/health")
         assert response.status_code == 200
         
-        # Test with invalid host (would need custom client configuration)
+        # Test with invalid host (would need custom test_client configuration)
         # This is more of an integration test, but validates the concept
 
 

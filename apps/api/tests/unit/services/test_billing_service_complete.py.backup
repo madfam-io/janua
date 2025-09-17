@@ -1,0 +1,775 @@
+"""
+Complete unit tests for BillingService to achieve 100% coverage
+"""
+
+import pytest
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from app.services.billing_service import (
+    BillingService,
+    BillingPlan,
+    BillingInterval,
+    SubscriptionStatus,
+    Usage,
+    Invoice,
+    PaymentMethod,
+    BillingError
+)
+
+
+class TestBillingServiceInitialization:
+    """Test billing service initialization."""
+
+    def test_billing_service_init(self):
+        """Test billing service initialization."""
+        service = BillingService()
+        assert hasattr(service, 'stripe')
+        assert hasattr(service, 'db')
+        assert service.webhook_secret is not None
+
+    @pytest.mark.asyncio
+    async def test_initialize_stripe(self):
+        """Test Stripe initialization."""
+        service = BillingService()
+
+        with patch('stripe.api_key') as mock_api_key:
+            await service.initialize()
+            # Stripe API key should be set during initialization
+
+
+class TestSubscriptionManagement:
+    """Test subscription management functionality."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = BillingService()
+        self.service.db = AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_create_subscription_success(self):
+        """Test creating subscription successfully."""
+        organization_id = "org-123"
+        plan = BillingPlan.PRO
+        interval = BillingInterval.MONTHLY
+
+        with patch('stripe.Customer.create') as mock_customer, \
+             patch('stripe.Subscription.create') as mock_subscription:
+
+            mock_customer.return_value = {
+                'id': 'cus_test123',
+                'email': 'test@example.com'
+            }
+
+            mock_subscription.return_value = {
+                'id': 'sub_test123',
+                'status': 'active',
+                'current_period_start': 1609459200,  # 2021-01-01
+                'current_period_end': 1612137600,    # 2021-02-01
+                'plan': {'id': 'pro_monthly'},
+                'customer': 'cus_test123'
+            }
+
+            self.service.db.execute = AsyncMock()
+
+            result = await self.service.create_subscription(
+                organization_id=organization_id,
+                plan=plan,
+                interval=interval,
+                payment_method_id="pm_test123"
+            )
+
+            assert result['id'] == 'sub_test123'
+            assert result['status'] == 'active'
+
+            # Verify database call
+            self.service.db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_create_subscription_stripe_error(self):
+        """Test creating subscription with Stripe error."""
+        organization_id = "org-123"
+        plan = BillingPlan.PRO
+        interval = BillingInterval.MONTHLY
+
+        with patch('stripe.Customer.create') as mock_customer:
+            mock_customer.side_effect = Exception("Card declined")
+
+            with pytest.raises(BillingError, match="Failed to create subscription"):
+                await self.service.create_subscription(
+                    organization_id=organization_id,
+                    plan=plan,
+                    interval=interval,
+                    payment_method_id="pm_invalid"
+                )
+
+    @pytest.mark.asyncio
+    async def test_update_subscription_plan(self):
+        """Test updating subscription plan."""
+        subscription_id = "sub_test123"
+        new_plan = BillingPlan.ENTERPRISE
+
+        with patch('stripe.Subscription.retrieve') as mock_retrieve, \
+             patch('stripe.Subscription.modify') as mock_modify:
+
+            mock_retrieve.return_value = {
+                'id': 'sub_test123',
+                'items': {'data': [{'id': 'si_test123', 'price': {'id': 'pro_monthly'}}]}
+            }
+
+            mock_modify.return_value = {
+                'id': 'sub_test123',
+                'status': 'active',
+                'plan': {'id': 'enterprise_monthly'}
+            }
+
+            self.service.db.execute = AsyncMock()
+
+            result = await self.service.update_subscription(
+                subscription_id=subscription_id,
+                plan=new_plan
+            )
+
+            assert result['id'] == 'sub_test123'
+            assert result['plan']['id'] == 'enterprise_monthly'
+
+            mock_modify.assert_called_once()
+            self.service.db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cancel_subscription(self):
+        """Test canceling subscription."""
+        subscription_id = "sub_test123"
+        immediately = True
+
+        with patch('stripe.Subscription.delete') as mock_delete:
+            mock_delete.return_value = {
+                'id': 'sub_test123',
+                'status': 'canceled',
+                'canceled_at': 1609459200
+            }
+
+            self.service.db.execute = AsyncMock()
+
+            result = await self.service.cancel_subscription(
+                subscription_id=subscription_id,
+                immediately=immediately
+            )
+
+            assert result['status'] == 'canceled'
+            assert result['canceled_at'] == 1609459200
+
+            mock_delete.assert_called_once_with(subscription_id)
+            self.service.db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cancel_subscription_at_period_end(self):
+        """Test canceling subscription at period end."""
+        subscription_id = "sub_test123"
+        immediately = False
+
+        with patch('stripe.Subscription.modify') as mock_modify:
+            mock_modify.return_value = {
+                'id': 'sub_test123',
+                'status': 'active',
+                'cancel_at_period_end': True
+            }
+
+            self.service.db.execute = AsyncMock()
+
+            result = await self.service.cancel_subscription(
+                subscription_id=subscription_id,
+                immediately=immediately
+            )
+
+            assert result['cancel_at_period_end'] is True
+
+            mock_modify.assert_called_once_with(
+                subscription_id,
+                cancel_at_period_end=True
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_subscription_status(self):
+        """Test getting subscription status."""
+        organization_id = "org-123"
+
+        self.service.db.fetchrow = AsyncMock(return_value={
+            'id': 'sub_test123',
+            'status': 'active',
+            'plan': 'pro',
+            'current_period_end': datetime.now() + timedelta(days=15)
+        })
+
+        status = await self.service.get_subscription_status(organization_id)
+
+        assert status['id'] == 'sub_test123'
+        assert status['status'] == 'active'
+        assert status['plan'] == 'pro'
+
+        self.service.db.fetchrow.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_reactivate_subscription(self):
+        """Test reactivating canceled subscription."""
+        subscription_id = "sub_test123"
+
+        with patch('stripe.Subscription.modify') as mock_modify:
+            mock_modify.return_value = {
+                'id': 'sub_test123',
+                'status': 'active',
+                'cancel_at_period_end': False
+            }
+
+            self.service.db.execute = AsyncMock()
+
+            result = await self.service.reactivate_subscription(subscription_id)
+
+            assert result['status'] == 'active'
+            assert result['cancel_at_period_end'] is False
+
+            mock_modify.assert_called_once_with(
+                subscription_id,
+                cancel_at_period_end=False
+            )
+
+
+class TestUsageTracking:
+    """Test usage tracking functionality."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = BillingService()
+        self.service.db = AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_record_usage(self):
+        """Test recording usage."""
+        organization_id = "org-123"
+        metric_name = "api_calls"
+        quantity = 100
+
+        self.service.db.execute = AsyncMock()
+
+        await self.service.record_usage(
+            organization_id=organization_id,
+            metric_name=metric_name,
+            quantity=quantity
+        )
+
+        self.service.db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_current_usage(self):
+        """Test getting current usage."""
+        organization_id = "org-123"
+
+        self.service.db.fetch = AsyncMock(return_value=[
+            {
+                'metric_name': 'api_calls',
+                'quantity': 1500,
+                'period_start': datetime.now().replace(day=1),
+                'period_end': datetime.now()
+            },
+            {
+                'metric_name': 'storage_gb',
+                'quantity': 25,
+                'period_start': datetime.now().replace(day=1),
+                'period_end': datetime.now()
+            }
+        ])
+
+        usage = await self.service.get_current_usage(organization_id)
+
+        assert len(usage) == 2
+        assert usage[0]['metric_name'] == 'api_calls'
+        assert usage[0]['quantity'] == 1500
+        assert usage[1]['metric_name'] == 'storage_gb'
+        assert usage[1]['quantity'] == 25
+
+    @pytest.mark.asyncio
+    async def test_check_usage_limits(self):
+        """Test checking usage limits."""
+        organization_id = "org-123"
+
+        # Mock current usage
+        self.service.db.fetch = AsyncMock(return_value=[
+            {
+                'metric_name': 'api_calls',
+                'quantity': 9500,  # Close to limit
+            }
+        ])
+
+        # Mock subscription with limits
+        self.service.db.fetchrow = AsyncMock(return_value={
+            'plan': 'pro',
+            'limits': {
+                'api_calls': 10000,
+                'storage_gb': 100
+            }
+        })
+
+        limits_check = await self.service.check_usage_limits(organization_id)
+
+        assert 'api_calls' in limits_check
+        assert limits_check['api_calls']['used'] == 9500
+        assert limits_check['api_calls']['limit'] == 10000
+        assert limits_check['api_calls']['percentage'] == 95.0
+
+    @pytest.mark.asyncio
+    async def test_usage_overage_calculation(self):
+        """Test calculating usage overage."""
+        organization_id = "org-123"
+
+        # Mock usage that exceeds limits
+        self.service.db.fetch = AsyncMock(return_value=[
+            {
+                'metric_name': 'api_calls',
+                'quantity': 12000,  # Over limit
+            }
+        ])
+
+        self.service.db.fetchrow = AsyncMock(return_value={
+            'plan': 'pro',
+            'limits': {
+                'api_calls': 10000
+            },
+            'overage_rates': {
+                'api_calls': 0.001  # $0.001 per extra call
+            }
+        })
+
+        overage = await self.service.calculate_overage_charges(organization_id)
+
+        assert overage['api_calls']['overage_quantity'] == 2000
+        assert overage['api_calls']['overage_charge'] == 2.0
+
+
+class TestPaymentMethods:
+    """Test payment method management."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = BillingService()
+        self.service.db = AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_add_payment_method(self):
+        """Test adding payment method."""
+        customer_id = "cus_test123"
+        payment_method_id = "pm_test123"
+
+        with patch('stripe.PaymentMethod.attach') as mock_attach:
+            mock_attach.return_value = {
+                'id': 'pm_test123',
+                'type': 'card',
+                'card': {
+                    'brand': 'visa',
+                    'last4': '4242',
+                    'exp_month': 12,
+                    'exp_year': 2025
+                }
+            }
+
+            result = await self.service.add_payment_method(
+                customer_id=customer_id,
+                payment_method_id=payment_method_id
+            )
+
+            assert result['id'] == 'pm_test123'
+            assert result['card']['last4'] == '4242'
+
+            mock_attach.assert_called_once_with(
+                payment_method_id,
+                customer=customer_id
+            )
+
+    @pytest.mark.asyncio
+    async def test_set_default_payment_method(self):
+        """Test setting default payment method."""
+        customer_id = "cus_test123"
+        payment_method_id = "pm_test123"
+
+        with patch('stripe.Customer.modify') as mock_modify:
+            mock_modify.return_value = {
+                'id': 'cus_test123',
+                'invoice_settings': {
+                    'default_payment_method': 'pm_test123'
+                }
+            }
+
+            result = await self.service.set_default_payment_method(
+                customer_id=customer_id,
+                payment_method_id=payment_method_id
+            )
+
+            assert result['invoice_settings']['default_payment_method'] == 'pm_test123'
+
+            mock_modify.assert_called_once_with(
+                customer_id,
+                invoice_settings={'default_payment_method': payment_method_id}
+            )
+
+    @pytest.mark.asyncio
+    async def test_remove_payment_method(self):
+        """Test removing payment method."""
+        payment_method_id = "pm_test123"
+
+        with patch('stripe.PaymentMethod.detach') as mock_detach:
+            mock_detach.return_value = {
+                'id': 'pm_test123',
+                'customer': None
+            }
+
+            result = await self.service.remove_payment_method(payment_method_id)
+
+            assert result['customer'] is None
+
+            mock_detach.assert_called_once_with(payment_method_id)
+
+    @pytest.mark.asyncio
+    async def test_list_payment_methods(self):
+        """Test listing payment methods."""
+        customer_id = "cus_test123"
+
+        with patch('stripe.PaymentMethod.list') as mock_list:
+            mock_list.return_value = {
+                'data': [
+                    {
+                        'id': 'pm_test123',
+                        'type': 'card',
+                        'card': {'last4': '4242'}
+                    },
+                    {
+                        'id': 'pm_test456',
+                        'type': 'card',
+                        'card': {'last4': '1234'}
+                    }
+                ]
+            }
+
+            payment_methods = await self.service.list_payment_methods(customer_id)
+
+            assert len(payment_methods['data']) == 2
+            assert payment_methods['data'][0]['id'] == 'pm_test123'
+
+            mock_list.assert_called_once_with(
+                customer=customer_id,
+                type='card'
+            )
+
+
+class TestInvoicing:
+    """Test invoicing functionality."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = BillingService()
+        self.service.db = AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_create_invoice(self):
+        """Test creating invoice."""
+        customer_id = "cus_test123"
+        amount = Decimal('99.99')
+        description = "Pro plan - Monthly"
+
+        with patch('stripe.InvoiceItem.create') as mock_item, \
+             patch('stripe.Invoice.create') as mock_invoice, \
+             patch('stripe.Invoice.finalize_invoice') as mock_finalize:
+
+            mock_item.return_value = {'id': 'ii_test123'}
+
+            mock_invoice.return_value = {
+                'id': 'in_test123',
+                'status': 'draft',
+                'amount_due': 9999,  # Stripe uses cents
+                'customer': 'cus_test123'
+            }
+
+            mock_finalize.return_value = {
+                'id': 'in_test123',
+                'status': 'open',
+                'amount_due': 9999
+            }
+
+            result = await self.service.create_invoice(
+                customer_id=customer_id,
+                amount=amount,
+                description=description
+            )
+
+            assert result['id'] == 'in_test123'
+            assert result['status'] == 'open'
+
+            mock_item.assert_called_once()
+            mock_invoice.assert_called_once()
+            mock_finalize.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_pay_invoice(self):
+        """Test paying invoice."""
+        invoice_id = "in_test123"
+
+        with patch('stripe.Invoice.pay') as mock_pay:
+            mock_pay.return_value = {
+                'id': 'in_test123',
+                'status': 'paid',
+                'paid_at': 1609459200
+            }
+
+            result = await self.service.pay_invoice(invoice_id)
+
+            assert result['status'] == 'paid'
+            assert result['paid_at'] == 1609459200
+
+            mock_pay.assert_called_once_with(invoice_id)
+
+    @pytest.mark.asyncio
+    async def test_get_invoice_history(self):
+        """Test getting invoice history."""
+        customer_id = "cus_test123"
+
+        with patch('stripe.Invoice.list') as mock_list:
+            mock_list.return_value = {
+                'data': [
+                    {
+                        'id': 'in_test123',
+                        'status': 'paid',
+                        'amount_paid': 9999,
+                        'created': 1609459200
+                    },
+                    {
+                        'id': 'in_test456',
+                        'status': 'open',
+                        'amount_due': 19999,
+                        'created': 1612137600
+                    }
+                ]
+            }
+
+            invoices = await self.service.get_invoice_history(customer_id)
+
+            assert len(invoices['data']) == 2
+            assert invoices['data'][0]['status'] == 'paid'
+            assert invoices['data'][1]['status'] == 'open'
+
+            mock_list.assert_called_once_with(customer=customer_id)
+
+    @pytest.mark.asyncio
+    async def test_void_invoice(self):
+        """Test voiding invoice."""
+        invoice_id = "in_test123"
+
+        with patch('stripe.Invoice.void_invoice') as mock_void:
+            mock_void.return_value = {
+                'id': 'in_test123',
+                'status': 'void'
+            }
+
+            result = await self.service.void_invoice(invoice_id)
+
+            assert result['status'] == 'void'
+
+            mock_void.assert_called_once_with(invoice_id)
+
+
+class TestWebhookHandling:
+    """Test webhook handling functionality."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = BillingService()
+        self.service.db = AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_handle_subscription_updated_webhook(self):
+        """Test handling subscription updated webhook."""
+        event_data = {
+            'type': 'customer.subscription.updated',
+            'data': {
+                'object': {
+                    'id': 'sub_test123',
+                    'status': 'active',
+                    'current_period_start': 1609459200,
+                    'current_period_end': 1612137600
+                }
+            }
+        }
+
+        self.service.db.execute = AsyncMock()
+
+        await self.service.handle_webhook_event(event_data)
+
+        # Should update subscription in database
+        self.service.db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_invoice_payment_succeeded_webhook(self):
+        """Test handling invoice payment succeeded webhook."""
+        event_data = {
+            'type': 'invoice.payment_succeeded',
+            'data': {
+                'object': {
+                    'id': 'in_test123',
+                    'subscription': 'sub_test123',
+                    'amount_paid': 9999,
+                    'status': 'paid'
+                }
+            }
+        }
+
+        self.service.db.execute = AsyncMock()
+
+        await self.service.handle_webhook_event(event_data)
+
+        # Should record payment and update subscription
+        assert self.service.db.execute.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_handle_payment_failed_webhook(self):
+        """Test handling payment failed webhook."""
+        event_data = {
+            'type': 'invoice.payment_failed',
+            'data': {
+                'object': {
+                    'id': 'in_test123',
+                    'subscription': 'sub_test123',
+                    'attempt_count': 2
+                }
+            }
+        }
+
+        self.service.db.execute = AsyncMock()
+
+        await self.service.handle_webhook_event(event_data)
+
+        # Should update subscription status and send notification
+        self.service.db.execute.assert_called()
+
+    def test_verify_webhook_signature_valid(self):
+        """Test verifying valid webhook signature."""
+        payload = '{"test": "data"}'
+        signature = 'valid_signature'
+
+        with patch('stripe.Webhook.construct_event') as mock_construct:
+            mock_construct.return_value = {'type': 'test.event'}
+
+            result = self.service.verify_webhook_signature(payload, signature)
+
+            assert result['type'] == 'test.event'
+            mock_construct.assert_called_once_with(
+                payload,
+                signature,
+                self.service.webhook_secret
+            )
+
+    def test_verify_webhook_signature_invalid(self):
+        """Test verifying invalid webhook signature."""
+        payload = '{"test": "data"}'
+        signature = 'invalid_signature'
+
+        with patch('stripe.Webhook.construct_event') as mock_construct:
+            mock_construct.side_effect = Exception("Invalid signature")
+
+            with pytest.raises(BillingError, match="Invalid webhook signature"):
+                self.service.verify_webhook_signature(payload, signature)
+
+
+class TestBillingAnalytics:
+    """Test billing analytics functionality."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = BillingService()
+        self.service.db = AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_get_revenue_metrics(self):
+        """Test getting revenue metrics."""
+        start_date = datetime.now() - timedelta(days=30)
+        end_date = datetime.now()
+
+        self.service.db.fetchrow = AsyncMock(return_value={
+            'total_revenue': Decimal('15000.00'),
+            'subscription_count': 150,
+            'average_revenue_per_user': Decimal('100.00')
+        })
+
+        metrics = await self.service.get_revenue_metrics(start_date, end_date)
+
+        assert metrics['total_revenue'] == Decimal('15000.00')
+        assert metrics['subscription_count'] == 150
+        assert metrics['average_revenue_per_user'] == Decimal('100.00')
+
+    @pytest.mark.asyncio
+    async def test_get_churn_rate(self):
+        """Test calculating churn rate."""
+        self.service.db.fetchrow = AsyncMock(return_value={
+            'canceled_subscriptions': 15,
+            'total_subscriptions': 150
+        })
+
+        churn_rate = await self.service.get_churn_rate()
+
+        assert churn_rate == 10.0  # 15/150 * 100
+
+    @pytest.mark.asyncio
+    async def test_get_plan_distribution(self):
+        """Test getting plan distribution."""
+        self.service.db.fetch = AsyncMock(return_value=[
+            {'plan': 'free', 'count': 500},
+            {'plan': 'pro', 'count': 100},
+            {'plan': 'enterprise', 'count': 20}
+        ])
+
+        distribution = await self.service.get_plan_distribution()
+
+        assert len(distribution) == 3
+        assert distribution[0]['plan'] == 'free'
+        assert distribution[0]['count'] == 500
+
+
+class TestErrorHandling:
+    """Test error handling scenarios."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = BillingService()
+        self.service.db = AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_handle_stripe_card_error(self):
+        """Test handling Stripe card errors."""
+        with patch('stripe.Customer.create') as mock_customer:
+            mock_customer.side_effect = Exception("Your card was declined.")
+
+            with pytest.raises(BillingError, match="Failed to create subscription"):
+                await self.service.create_subscription(
+                    organization_id="org-123",
+                    plan=BillingPlan.PRO,
+                    interval=BillingInterval.MONTHLY,
+                    payment_method_id="pm_invalid"
+                )
+
+    @pytest.mark.asyncio
+    async def test_handle_database_error(self):
+        """Test handling database errors."""
+        self.service.db.execute = AsyncMock(side_effect=Exception("Database connection failed"))
+
+        with pytest.raises(Exception, match="Database connection failed"):
+            await self.service.record_usage(
+                organization_id="org-123",
+                metric_name="api_calls",
+                quantity=100
+            )
+
+    @pytest.mark.asyncio
+    async def test_handle_missing_subscription(self):
+        """Test handling missing subscription."""
+        self.service.db.fetchrow = AsyncMock(return_value=None)
+
+        status = await self.service.get_subscription_status("nonexistent-org")
+
+        assert status is None

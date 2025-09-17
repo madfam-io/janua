@@ -14,7 +14,7 @@ class TestDatabaseFunctions:
     """Test database utility functions."""
     
     @pytest.mark.asyncio
-    async def test_get_db_success(self, test_db_session):
+    async def test_get_db_success(self, db_session):
         """Test successful database session retrieval."""
         # Mock the AsyncSessionLocal
         with patch('app.core.database.AsyncSessionLocal') as mock_session_local:

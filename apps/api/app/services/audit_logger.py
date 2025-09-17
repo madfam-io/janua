@@ -15,9 +15,9 @@ from botocore.exceptions import ClientError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
-from app.core.config import settings
+from app.config import settings
 from app.core.logging import logger
-from app.models.audit import AuditLog, AuditEventType
+from app.models import AuditLog
 
 
 class AuditEventType(str, Enum):
@@ -172,20 +172,18 @@ class AuditLogger:
         """Store audit entry in database"""
         
         audit_log = AuditLog(
-            event_id=entry["event_id"],
+            id=entry["event_id"],
             event_type=entry["event_type"],
             tenant_id=entry["tenant_id"],
-            identity_id=entry.get("identity_id"),
-            organization_id=entry.get("organization_id"),
+            user_id=entry.get("identity_id"),
             resource_type=entry.get("resource_type"),
             resource_id=entry.get("resource_id"),
             details=entry.get("details", {}),
             ip_address=entry.get("ip_address"),
             user_agent=entry.get("user_agent"),
-            severity=entry["severity"],
-            hash=entry["hash"],
+            current_hash=entry["hash"],
             previous_hash=entry["previous_hash"],
-            created_at=datetime.fromisoformat(entry["timestamp"])
+            timestamp=datetime.fromisoformat(entry["timestamp"])
         )
         
         self.db.add(audit_log)
@@ -277,9 +275,9 @@ class AuditLogger:
         """Get the hash of the previous audit entry for this tenant"""
         
         result = await self.db.execute(
-            select(AuditLog.hash)
+            select(AuditLog.current_hash)
             .where(AuditLog.tenant_id == tenant_id)
-            .order_by(AuditLog.created_at.desc())
+            .order_by(AuditLog.timestamp.desc())
             .limit(1)
         )
         
@@ -314,12 +312,12 @@ class AuditLogger:
         # Build query
         query = select(AuditLog).where(
             AuditLog.tenant_id == tenant_id
-        ).order_by(AuditLog.created_at.asc())
-        
+        ).order_by(AuditLog.timestamp.asc())
+
         if start_date:
-            query = query.where(AuditLog.created_at >= start_date)
+            query = query.where(AuditLog.timestamp >= start_date)
         if end_date:
-            query = query.where(AuditLog.created_at <= end_date)
+            query = query.where(AuditLog.timestamp <= end_date)
         
         result = await self.db.execute(query)
         logs = result.scalars().all()
@@ -345,30 +343,30 @@ class AuditLogger:
             
             # Recalculate hash and verify
             entry = {
-                "event_id": log.event_id,
+                "event_id": str(log.id),
                 "event_type": log.event_type,
-                "tenant_id": log.tenant_id,
-                "identity_id": log.identity_id,
-                "timestamp": log.created_at.isoformat(),
+                "tenant_id": str(log.tenant_id),
+                "identity_id": str(log.user_id) if log.user_id else None,
+                "timestamp": log.timestamp.isoformat(),
                 "previous_hash": log.previous_hash
             }
-            
+
             calculated_hash = self._calculate_hash(entry)
-            
-            if calculated_hash != log.hash:
+
+            if calculated_hash != log.current_hash:
                 valid = False
                 broken_at = i
                 break
             
-            previous_hash = log.hash
+            previous_hash = log.current_hash
         
         return {
             "valid": valid,
             "message": "Hash chain is valid" if valid else f"Hash chain broken at index {broken_at}",
             "count": len(logs),
             "broken_at": broken_at,
-            "first_log": logs[0].created_at.isoformat() if logs else None,
-            "last_log": logs[-1].created_at.isoformat() if logs else None
+            "first_log": logs[0].timestamp.isoformat() if logs else None,
+            "last_log": logs[-1].timestamp.isoformat() if logs else None
         }
     
     async def export_logs(
@@ -387,10 +385,10 @@ class AuditLogger:
             select(AuditLog).where(
                 and_(
                     AuditLog.tenant_id == tenant_id,
-                    AuditLog.created_at >= start_date,
-                    AuditLog.created_at <= end_date
+                    AuditLog.timestamp >= start_date,
+                    AuditLog.timestamp <= end_date
                 )
-            ).order_by(AuditLog.created_at.asc())
+            ).order_by(AuditLog.timestamp.asc())
         )
         
         logs = result.scalars().all()
@@ -404,18 +402,16 @@ class AuditLogger:
             "count": len(logs),
             "logs": [
                 {
-                    "event_id": log.event_id,
+                    "event_id": str(log.id),
                     "event_type": log.event_type,
-                    "identity_id": log.identity_id,
-                    "organization_id": log.organization_id,
+                    "identity_id": str(log.user_id) if log.user_id else None,
                     "resource_type": log.resource_type,
                     "resource_id": log.resource_id,
                     "details": log.details,
                     "ip_address": log.ip_address,
                     "user_agent": log.user_agent,
-                    "severity": log.severity,
-                    "timestamp": log.created_at.isoformat(),
-                    "hash": log.hash
+                    "timestamp": log.timestamp.isoformat(),
+                    "hash": log.current_hash
                 }
                 for log in logs
             ]
@@ -463,6 +459,80 @@ class AuditLogger:
                 raise
         
         return export_id
+
+    async def log_authentication(
+        self,
+        user_id: str,
+        event_type: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        **kwargs
+    ):
+        """Log authentication events"""
+        await self.log(
+            event_type=AuditEventType.AUTH_SIGNIN,
+            tenant_id="default",
+            identity_id=user_id,
+            details={"auth_event_type": event_type},
+            ip_address=ip_address,
+            user_agent=user_agent,
+            severity="info"
+        )
+
+    async def log_authorization(
+        self,
+        user_id: str,
+        resource: str,
+        action: str,
+        ip_address: Optional[str] = None,
+        **kwargs
+    ):
+        """Log authorization events"""
+        await self.log(
+            event_type=AuditEventType.SECURITY_ACCESS_DENIED,
+            tenant_id="default",
+            identity_id=user_id,
+            resource_type="api_resource",
+            details={"resource": resource, "action": action},
+            ip_address=ip_address,
+            severity="info"
+        )
+
+    async def log_data_access(
+        self,
+        user_id: str,
+        resource_type: str,
+        resource_id: str,
+        action: str,
+        **kwargs
+    ):
+        """Log data access events"""
+        await self.log(
+            event_type=AuditEventType.USER_UPDATE,
+            tenant_id="default",
+            identity_id=user_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details={"action": action},
+            severity="info"
+        )
+
+    async def log_security_event(
+        self,
+        event_type: str,
+        user_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        severity: str = "medium",
+        **kwargs
+    ):
+        """Log security events"""
+        await self.log(
+            event_type=AuditEventType.SECURITY_SUSPICIOUS_ACTIVITY,
+            tenant_id="default",
+            identity_id=user_id,
+            details={"security_event_type": event_type, **(details or {})},
+            severity=severity
+        )
 
 
 class AuditMiddleware:

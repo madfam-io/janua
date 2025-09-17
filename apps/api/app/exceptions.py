@@ -132,3 +132,19 @@ class RateLimitError(PlintoAPIException):
             error_code="RATE_LIMIT_ERROR",
             details=details
         )
+
+
+class ExternalServiceError(PlintoAPIException):
+    """Raised when external service calls fail"""
+    
+    def __init__(
+        self,
+        message: str = "External service error",
+        details: Optional[Dict[str, Any]] = None
+    ):
+        super().__init__(
+            message=message,
+            status_code=502,
+            error_code="EXTERNAL_SERVICE_ERROR",
+            details=details
+        )

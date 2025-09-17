@@ -523,7 +523,7 @@ class Query:
     ) -> List[AuditLog]:
         """Query audit logs."""
         db = info.context["db"]
-        from app.models.audit_log import AuditLog as AuditLogModel
+        from app.models import AuditLog as AuditLogModel
         
         query = db.query(AuditLogModel)
         

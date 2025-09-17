@@ -20,16 +20,22 @@ class TestJWTServiceWorking:
             mock_settings.JWT_ALGORITHM = "HS256"
             mock_settings.ACCESS_TOKEN_EXPIRE_MINUTES = 30
             mock_settings.REFRESH_TOKEN_EXPIRE_DAYS = 30
+            mock_settings.JWT_ISSUER = "test-issuer"
+            mock_settings.JWT_AUDIENCE = "test-audience"
             
-            service = JWTService()
-            service.redis = Mock()
+            # Create mock database and redis
+            mock_db = Mock()
+            mock_redis = Mock()
+            
+            service = JWTService(mock_db, mock_redis)
             return service
     
-    def test_create_token(self, jwt_service):
+    @pytest.mark.asyncio
+    async def test_create_token(self, jwt_service):
         """Test token creation"""
-        token = jwt_service.create_access_token(
-            subject="user123",
-            claims={"role": "user"}
+        token = await jwt_service.create_access_token(
+            identity_id="user123",
+            additional_claims={"role": "user"}
         )
         
         assert token is not None
@@ -44,16 +50,17 @@ class TestJWTServiceWorking:
         assert decoded["sub"] == "user123"
         assert decoded["role"] == "user"
     
-    def test_verify_token(self, jwt_service):
+    @pytest.mark.asyncio
+    async def test_verify_token(self, jwt_service):
         """Test token verification"""
         # Create a token
-        token = jwt_service.create_access_token(
-            subject="user123",
-            claims={"role": "user"}
+        token = await jwt_service.create_access_token(
+            identity_id="user123",
+            additional_claims={"role": "user"}
         )
         
         # Verify it
-        payload = jwt_service.verify_token(token)
+        payload = await jwt_service.verify_token(token)
         assert payload is not None
         assert payload["sub"] == "user123"
     

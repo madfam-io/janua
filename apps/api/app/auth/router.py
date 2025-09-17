@@ -5,6 +5,9 @@ from typing import Optional
 from uuid import UUID
 import structlog
 
+# Initialize logger first
+logger = structlog.get_logger(__name__)
+
 from app.config import settings
 from app.core.database import get_db
 from app.core.redis import get_redis, RateLimiter, SessionStore

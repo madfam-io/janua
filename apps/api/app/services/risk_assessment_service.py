@@ -10,17 +10,42 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
-import numpy as np
-from sklearn.ensemble import IsolationForest
-import geoip2.database
-import user_agents
+try:
+    import numpy as np
+    from sklearn.ensemble import IsolationForest
+    import geoip2.database
+    import user_agents
+    ML_AVAILABLE = True
+    # Type aliases for when ML is available
+    NDArray = np.ndarray
+except ImportError:
+    ML_AVAILABLE = False
+    np = None
+    IsolationForest = None
+    # Fallback type alias when ML is not available
+    NDArray = Any
 
 from ..models import User, Session
-from ..models.zero_trust import (
-    RiskAssessment, RiskLevel, DeviceProfile, DeviceTrustLevel,
-    AccessPolicy, AccessDecision, BehaviorBaseline, ThreatIntelligence,
-    PolicyEvaluation, AdaptiveChallenge, AuthenticationMethod
-)
+try:
+    from ..models.zero_trust import (
+        RiskAssessment, RiskLevel, DeviceProfile, DeviceTrustLevel,
+        AccessPolicy, AccessDecision, BehaviorBaseline, ThreatIntelligence,
+        PolicyEvaluation, AdaptiveChallenge, AuthenticationMethod
+    )
+    ZERO_TRUST_MODELS_AVAILABLE = True
+except ImportError:
+    ZERO_TRUST_MODELS_AVAILABLE = False
+    RiskAssessment = None
+    RiskLevel = None
+    DeviceProfile = None
+    DeviceTrustLevel = None
+    AccessPolicy = None
+    AccessDecision = None
+    BehaviorBaseline = None
+    ThreatIntelligence = None
+    PolicyEvaluation = None
+    AdaptiveChallenge = None
+    AuthenticationMethod = None
 from ..database import get_db
 
 logger = logging.getLogger(__name__)
@@ -679,7 +704,7 @@ class RiskAssessmentService:
         user_id: str,
         ip_address: str,
         user_agent: str
-    ) -> Optional[np.ndarray]:
+    ) -> Optional[NDArray]:
         """Extract features for ML-based anomaly detection"""
         # Extract numerical features for anomaly detection
         return None

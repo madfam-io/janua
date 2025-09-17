@@ -35,109 +35,118 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_ready_endpoint_all_services_healthy(self, test_client):
         """Test ready endpoint when all services are healthy."""
-        with patch('app.main.engine') as mock_engine, \
-             patch('app.main.redis_client') as mock_redis:
-            
-            # Mock successful database connection
-            mock_conn = AsyncMock()
-            mock_engine.connect.return_value.__aenter__.return_value = mock_conn
-            mock_engine.connect.return_value.__aexit__.return_value = None
-            
+        with patch('app.main.get_database_health') as mock_db_health, \
+             patch('app.main.get_redis_client') as mock_redis_client:
+
+            # Mock successful database health check
+            mock_db_health.return_value = {"healthy": True}
+
             # Mock successful Redis connection
+            mock_redis = AsyncMock()
             mock_redis.ping = AsyncMock(return_value=True)
-            
+            mock_redis.close = AsyncMock()
+            mock_redis_client.return_value = mock_redis
+
             response = await test_client.get("/ready")
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             assert data["status"] == "ready"
-            assert data["database"] is True
+            assert data["database"]["healthy"] is True
             assert data["redis"] is True
     
     @pytest.mark.asyncio
     async def test_ready_endpoint_database_unhealthy(self, test_client):
         """Test ready endpoint when database is unhealthy."""
-        with patch('app.main.engine') as mock_engine, \
-             patch('app.main.redis_client') as mock_redis:
-            
-            # Mock failed database connection
-            mock_engine.connect.side_effect = Exception("Database connection failed")
-            
+        with patch('app.main.get_database_health') as mock_db_health, \
+             patch('app.main.get_redis_client') as mock_redis_client:
+
+            # Mock failed database health check
+            mock_db_health.side_effect = Exception("Database connection failed")
+
             # Mock successful Redis connection
+            mock_redis = AsyncMock()
             mock_redis.ping = AsyncMock(return_value=True)
-            
+            mock_redis.close = AsyncMock()
+            mock_redis_client.return_value = mock_redis
+
             response = await test_client.get("/ready")
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             assert data["status"] == "degraded"
-            assert data["database"] is False
+            assert data["database"]["healthy"] is False
             assert data["redis"] is True
     
     @pytest.mark.asyncio
     async def test_ready_endpoint_redis_unhealthy(self, test_client):
         """Test ready endpoint when Redis is unhealthy."""
-        with patch('app.main.engine') as mock_engine, \
-             patch('app.main.redis_client') as mock_redis:
-            
-            # Mock successful database connection
-            mock_conn = AsyncMock()
-            mock_engine.connect.return_value.__aenter__.return_value = mock_conn
-            mock_engine.connect.return_value.__aexit__.return_value = None
-            
+        with patch('app.main.get_database_health') as mock_db_health, \
+             patch('app.main.get_redis_client') as mock_redis_client:
+
+            # Mock successful database health check
+            mock_db_health.return_value = {"healthy": True}
+
             # Mock failed Redis connection
+            mock_redis = AsyncMock()
             mock_redis.ping = AsyncMock(side_effect=Exception("Redis connection failed"))
-            
+            mock_redis.close = AsyncMock()
+            mock_redis_client.return_value = mock_redis
+
             response = await test_client.get("/ready")
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             assert data["status"] == "degraded"
-            assert data["database"] is True
+            assert data["database"]["healthy"] is True
             assert data["redis"] is False
     
     @pytest.mark.asyncio
     async def test_ready_endpoint_all_services_unhealthy(self, test_client):
         """Test ready endpoint when all services are unhealthy."""
-        with patch('app.main.engine') as mock_engine, \
-             patch('app.main.redis_client') as mock_redis:
-            
-            # Mock failed database connection
-            mock_engine.connect.side_effect = Exception("Database connection failed")
-            
-            # Mock failed Redis connection  
+        with patch('app.main.get_database_health') as mock_db_health, \
+             patch('app.main.get_redis_client') as mock_redis_client:
+
+            # Mock failed database health check
+            mock_db_health.side_effect = Exception("Database connection failed")
+
+            # Mock failed Redis connection
+            mock_redis = AsyncMock()
             mock_redis.ping = AsyncMock(side_effect=Exception("Redis connection failed"))
-            
+            mock_redis.close = AsyncMock()
+            mock_redis_client.return_value = mock_redis
+
             response = await test_client.get("/ready")
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             assert data["status"] == "degraded"
-            assert data["database"] is False
+            assert data["database"]["healthy"] is False
             assert data["redis"] is False
     
     @pytest.mark.asyncio
     async def test_ready_endpoint_no_redis_client(self, test_client):
         """Test ready endpoint when Redis client is None."""
-        with patch('app.main.engine') as mock_engine, \
-             patch('app.main.redis_client', None):
-            
-            # Mock successful database connection
-            mock_conn = AsyncMock()
-            mock_engine.connect.return_value.__aenter__.return_value = mock_conn
-            mock_engine.connect.return_value.__aexit__.return_value = None
-            
+        with patch('app.main.get_database_health') as mock_db_health, \
+             patch('app.main.get_redis_client') as mock_redis_client:
+
+            # Mock successful database health check
+            mock_db_health.return_value = {"healthy": True}
+
+            # Mock get_redis_client returning None or raising exception
+            mock_redis_client.side_effect = Exception("Redis not available")
+
             response = await test_client.get("/ready")
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             assert data["status"] == "degraded"
-            assert data["database"] is True
+            assert data["database"]["healthy"] is True
             assert data["redis"] is False
 
 
@@ -210,7 +219,7 @@ class TestOpenIDEndpoints:
     @pytest.mark.asyncio
     async def test_openid_configuration_with_custom_base_url(self, test_client):
         """Test OpenID configuration with custom BASE_URL."""
-        with patch('app.config.settings') as mock_settings:
+        with patch('app.main.settings') as mock_settings:
             mock_settings.BASE_URL = "https://custom.domain.com"
             mock_settings.JWT_ISSUER = "https://custom.domain.com"
             
@@ -229,7 +238,7 @@ class TestOpenIDEndpoints:
     @pytest.mark.asyncio
     async def test_openid_configuration_empty_base_url(self, test_client):
         """Test OpenID configuration with empty BASE_URL fallback."""
-        with patch('app.config.settings') as mock_settings:
+        with patch('app.main.settings') as mock_settings:
             mock_settings.BASE_URL = ""
             mock_settings.JWT_ISSUER = "https://plinto.dev"
             

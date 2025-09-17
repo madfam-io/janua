@@ -180,7 +180,7 @@ class OAuthService:
                     logger.error(f"Failed to get user info: {response.text}")
                     return None
                 
-                user_info = response.json()
+                user_info = await response.json()
                 
                 # GitHub requires separate email endpoint
                 if provider == OAuthProvider.GITHUB and "email_url" in config:

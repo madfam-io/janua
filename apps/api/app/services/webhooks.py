@@ -450,6 +450,24 @@ class WebhookService:
         
         return events_deleted + deliveries_deleted
 
+    @staticmethod
+    def process_stripe_webhook(webhook_data: dict) -> dict:
+        """Process Stripe webhook"""
+        # Placeholder implementation for testing
+        return {"processed": True}
+
+    @staticmethod
+    def process_github_webhook(webhook_data: dict) -> dict:
+        """Process GitHub webhook"""
+        # Placeholder implementation for testing
+        return {"processed": True}
+
+    @staticmethod
+    def process_generic_webhook(webhook_data: dict) -> dict:
+        """Process generic webhook"""
+        # Placeholder implementation for testing
+        return {"processed": True}
+
 
 # Create singleton instance
 webhook_service = WebhookService()

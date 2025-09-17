@@ -19,14 +19,30 @@ if hasattr(settings, 'DATABASE_URL') and settings.DATABASE_URL:
     else:
         async_database_url = database_url
 
-    engine = create_async_engine(
-        async_database_url,
-        echo=settings.DEBUG if hasattr(settings, 'DEBUG') else False,
-        poolclass=NullPool if hasattr(settings, 'ENVIRONMENT') and settings.ENVIRONMENT == "test" else None,
-        pool_pre_ping=True,
-        pool_size=5,
-        max_overflow=10,
-    )
+    # Configure engine parameters based on database type
+    engine_kwargs = {
+        "echo": settings.DEBUG if hasattr(settings, 'DEBUG') else False,
+        "pool_pre_ping": True,
+    }
+
+    # Add pooling parameters only for non-SQLite databases
+    if "sqlite" not in async_database_url:
+        engine_kwargs.update({
+            "pool_size": 5,
+            "max_overflow": 10,
+        })
+    else:
+        # Use NullPool for SQLite to avoid connection sharing issues
+        engine_kwargs["poolclass"] = NullPool
+
+    # Override poolclass for test environment and remove PostgreSQL-specific params
+    if hasattr(settings, 'ENVIRONMENT') and settings.ENVIRONMENT == "test":
+        engine_kwargs["poolclass"] = NullPool
+        # Remove PostgreSQL-specific pool parameters for SQLite
+        engine_kwargs.pop("pool_size", None)
+        engine_kwargs.pop("max_overflow", None)
+
+    engine = create_async_engine(async_database_url, **engine_kwargs)
 
     # Create sync engine for migrations and some operations
     sync_engine = create_engine(

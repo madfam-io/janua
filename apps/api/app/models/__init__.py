@@ -29,7 +29,9 @@ class User(Base):
     phone = Column(String(50))
     avatar_url = Column(String(500))
     user_metadata = Column(JSONB, default={})
+    tenant_id = Column(UUID(as_uuid=True), index=True)  # For multi-tenancy support
     last_login = Column(DateTime)
+    is_active = Column(Boolean, default=True)  # Add is_active field used by auth service
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -39,6 +41,15 @@ class Organization(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     slug = Column(String(255), unique=True, nullable=False, index=True)
+    subscription_tier = Column(String(100), default="community")  # For tenant/organization billing
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))  # Organization owner
+    billing_plan = Column(String(100), default="free")  # Billing plan
+    billing_email = Column(String(255))  # Billing contact
+    billing_customer_id = Column(String(255), index=True)  # External billing provider customer ID
+    logo_url = Column(String(500))  # Organization logo
+    description = Column(Text)  # Organization description
+    settings = Column(JSONB, default={})  # Organization settings
+    org_metadata = Column(JSONB, default={})  # Additional metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -49,6 +60,7 @@ class OrganizationMember(Base):
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     role = Column(String(50), default="member")
+    joined_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -70,6 +82,7 @@ class PasswordReset(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     token = Column(String(255), unique=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
     used_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -105,8 +118,15 @@ class Session(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     token = Column(String(500), unique=True, nullable=False)
     refresh_token = Column(String(500), unique=True)
+    access_token_jti = Column(String(255), unique=True)  # JWT token identifier
+    refresh_token_jti = Column(String(255), unique=True)  # Refresh token identifier
+    refresh_token_family = Column(String(255), index=True)  # Token family for rotation
     ip_address = Column(String(50))
     user_agent = Column(Text)
+    device_name = Column(String(255))  # Device identification
+    is_active = Column(Boolean, default=True)  # Session active status
+    revoked_at = Column(DateTime)  # When session was revoked
+    revoked_reason = Column(String(255))  # Reason for revocation
     expires_at = Column(DateTime, nullable=False)
     last_activity = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -183,3 +203,157 @@ organization_members = Table(
     Column('user_id', UUID(as_uuid=True), ForeignKey('users.id')),
     Column('created_at', DateTime, default=datetime.utcnow)
 )
+
+class Policy(Base):
+    __tablename__ = "policies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    rules = Column(JSONB, default={})
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Webhook(Base):
+    __tablename__ = "webhooks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    url = Column(String(500), nullable=False)
+    events = Column(JSONB, default=[])
+    secret = Column(String(255))
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    email = Column(String(255), nullable=False)
+    role = Column(String(50), default="member")
+    status = Column(String(50), default="pending")
+    token = Column(String(255), unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    accepted_at = Column(DateTime)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    tenant_id = Column(UUID(as_uuid=True), index=True)  # Multi-tenancy support
+    event_type = Column(String(255), nullable=False)  # Renamed from action for auth service
+    event_data = Column(Text)  # JSON string of event data
+    resource_type = Column(String(255))
+    resource_id = Column(String(255))
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    ip_address = Column(String(50))
+    user_agent = Column(Text)
+    details = Column(JSONB, default={})
+    previous_hash = Column(String(255))  # For audit chain integrity
+    current_hash = Column(String(255))  # Current entry hash (renamed from hash)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# Webhook models
+class WebhookEventType(str, enum.Enum):
+    USER_CREATED = "user.created"
+    USER_UPDATED = "user.updated"
+    USER_DELETED = "user.deleted"
+    USER_SIGNED_IN = "user.signed_in"
+    USER_SIGNED_OUT = "user.signed_out"
+    ORGANIZATION_CREATED = "organization.created"
+    ORGANIZATION_UPDATED = "organization.updated"
+    ORGANIZATION_DELETED = "organization.deleted"
+    INVITATION_CREATED = "invitation.created"
+    INVITATION_ACCEPTED = "invitation.accepted"
+    PAYMENT_SUCCESS = "payment.success"
+    PAYMENT_FAILED = "payment.failed"
+    SUBSCRIPTION_CREATED = "subscription.created"
+    SUBSCRIPTION_UPDATED = "subscription.updated"
+    SUBSCRIPTION_CANCELLED = "subscription.cancelled"
+    SYSTEM_ALERT = "system.alert"
+
+class WebhookStatus(str, enum.Enum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    RETRYING = "retrying"
+
+class WebhookEndpoint(Base):
+    __tablename__ = "webhook_endpoints"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    url = Column(String(500), nullable=False)
+    secret = Column(String(255))
+    events = Column(JSONB, default=[])
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class WebhookEvent(Base):
+    __tablename__ = "webhook_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    type = Column(String(255), nullable=False)
+    data = Column(JSONB, default={})
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class WebhookDelivery(Base):
+    __tablename__ = "webhook_deliveries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    webhook_endpoint_id = Column(UUID(as_uuid=True), ForeignKey("webhook_endpoints.id"), nullable=False)
+    webhook_event_id = Column(UUID(as_uuid=True), ForeignKey("webhook_events.id"), nullable=False)
+    status = Column(SQLEnum(WebhookStatus), default=WebhookStatus.PENDING)
+    attempts = Column(Integer, default=0)
+    last_attempt = Column(DateTime)
+    next_retry_at = Column(DateTime)
+    response_status = Column(Integer)
+    response_body = Column(Text)
+    error_message = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# JWT Token models
+class TokenClaims(Base):
+    __tablename__ = "token_claims"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    claims = Column(JSONB, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+class TokenPair(Base):
+    __tablename__ = "token_pairs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    access_token = Column(Text, nullable=False)
+    refresh_token = Column(Text, nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+class CheckoutSession(Base):
+    __tablename__ = "checkout_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(String(255), unique=True, nullable=False)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    price_id = Column(String(255), nullable=False)
+    provider = Column(String(50), nullable=False)  # "conekta" or "fungies"
+    status = Column(String(50), default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    session_metadata = Column(Text)  # JSON string for additional data

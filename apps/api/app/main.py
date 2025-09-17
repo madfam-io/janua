@@ -139,8 +139,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # if not settings.DEBUG:
 #     app.add_middleware(HTTPSRedirectMiddleware)
 
-# Add trusted host middleware 
+# Add trusted host middleware
 allowed_hosts = ["plinto.dev", "*.plinto.dev", "plinto-api.railway.app", "healthcheck.railway.app", "*.railway.app", "localhost", "127.0.0.1"]
+# Add test host for integration tests
+if settings.ENVIRONMENT == "test":
+    allowed_hosts.extend(["test", "testserver", "testclient"])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
 # Add security headers middleware
@@ -196,7 +199,45 @@ def root():
 # Health check
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT
+    }
+
+# Test endpoints for debugging
+@app.get("/test")
+def test_endpoint():
+    return {
+        "status": "test endpoint working",
+        "auth_router_included": True
+    }
+
+@app.post("/test-json")
+async def test_json_endpoint(data: dict):
+    return {"received": data}
+
+# OpenID Connect discovery endpoints
+@app.get("/.well-known/openid-configuration")
+def openid_configuration():
+    base_url = settings.BASE_URL or "https://api.plinto.dev"
+    return {
+        "issuer": settings.BASE_URL or "https://plinto.dev",
+        "authorization_endpoint": f"{base_url}/auth/authorize",
+        "token_endpoint": f"{base_url}/auth/token",
+        "userinfo_endpoint": f"{base_url}/auth/userinfo",
+        "jwks_uri": f"{base_url}/.well-known/jwks.json",
+        "response_types_supported": ["code", "id_token", "code id_token"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+        "scopes_supported": ["openid", "profile", "email"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+        "claims_supported": ["sub", "email", "name", "given_name", "family_name", "picture"]
+    }
+
+@app.get("/.well-known/jwks.json")
+def jwks():
+    return {"keys": []}
 
 # Performance metrics endpoint
 @app.get("/metrics/performance")

@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
     # Aliases for compatibility
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
     ALGORITHM: str = Field(default="HS256")
     
     # Security
@@ -76,6 +77,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = Field(default=True)
     RATE_LIMIT_PER_MINUTE: int = Field(default=60)
     RATE_LIMIT_PER_HOUR: int = Field(default=1000)
+    RATE_LIMIT_WHITELIST: str = Field(default="127.0.0.1,::1", description="Comma-separated list of IPs exempt from rate limiting")
     
     # Email
     EMAIL_ENABLED: bool = Field(default=False)
@@ -118,6 +120,9 @@ class Settings(BaseSettings):
     CLOUDFLARE_R2_ACCESS_KEY: Optional[str] = Field(default=None)
     CLOUDFLARE_R2_SECRET_KEY: Optional[str] = Field(default=None)
     CLOUDFLARE_R2_BUCKET: str = Field(default="plinto-audit")
+    R2_ENDPOINT: Optional[str] = Field(default=None, description="Cloudflare R2 endpoint URL")
+    R2_ACCESS_KEY_ID: Optional[str] = Field(default=None, description="Cloudflare R2 access key ID")
+    R2_SECRET_ACCESS_KEY: Optional[str] = Field(default=None, description="Cloudflare R2 secret access key")
     
     # Monitoring
     SENTRY_DSN: Optional[str] = Field(default=None)

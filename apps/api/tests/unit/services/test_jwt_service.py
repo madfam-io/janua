@@ -10,7 +10,7 @@ from jose import jwt, JWTError
 import json
 
 from app.services.jwt_service import JWTService
-from app.models.token import TokenClaims, TokenPair
+from app.models import TokenClaims, TokenPair
 from app.exceptions import AuthenticationError, TokenError
 
 

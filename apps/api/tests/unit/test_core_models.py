@@ -72,7 +72,7 @@ def test_audit_log_model_structure(mock_env):
         # Check AuditLog model attributes
         assert hasattr(AuditLog, '__tablename__')
         assert hasattr(AuditLog, 'id')
-        assert hasattr(AuditLog, 'action')
+        assert hasattr(AuditLog, 'event_type')  # Updated from 'action' to 'event_type'
         assert hasattr(AuditLog, 'timestamp')
 
     except ImportError as e:

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 from app.services.auth_service import AuthService
-from app.models.user import User, Session, Tenant
+from app.models import User, Session, Organization
 from app.exceptions import AuthenticationError, ValidationError
 
 

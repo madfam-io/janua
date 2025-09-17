@@ -105,6 +105,16 @@ class User(Base):
     invitations_sent = relationship("OrganizationInvitation", foreign_keys="OrganizationInvitation.invited_by", back_populates="inviter")
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
 
+    @property
+    def is_suspended(self) -> bool:
+        """Check if user is suspended based on status"""
+        return self.status == UserStatus.SUSPENDED
+
+    @property
+    def is_active(self) -> bool:
+        """Check if user is active based on status"""
+        return self.status == UserStatus.ACTIVE
+
 
 class Session(Base):
     __tablename__ = 'sessions'
