@@ -22,6 +22,63 @@ import { OrganizationList } from '@/components/organizations/organization-list'
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('overview')
+  const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    // Check authentication and load user data
+    const initializeDashboard = async () => {
+      try {
+        const token = getCookie('plinto_token')
+        if (!token) {
+          window.location.href = '/login'
+          return
+        }
+
+        const storedUser = localStorage.getItem('plinto_user')
+        if (storedUser) {
+          setUser(JSON.parse(storedUser))
+        }
+        
+        setIsLoading(false)
+      } catch (error) {
+        console.error('Failed to initialize dashboard:', error)
+        window.location.href = '/login'
+      }
+    }
+
+    initializeDashboard()
+  }, [])
+
+  const handleLogout = () => {
+    // Clear authentication
+    document.cookie = 'plinto_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
+    localStorage.removeItem('plinto_user')
+    window.location.href = '/login'
+  }
+
+  // Helper function to get cookie value
+  const getCookie = (name: string): string | null => {
+    if (typeof document === 'undefined') return null
+    
+    const value = `; ${document.cookie}`
+    const parts = value.split(`; ${name}=`)
+    if (parts.length === 2) {
+      return parts.pop()?.split(';').shift() || null
+    }
+    return null
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -34,7 +91,7 @@ export default function DashboardPage() {
               <div>
                 <h1 className="text-2xl font-bold">Plinto Dashboard</h1>
                 <p className="text-sm text-muted-foreground">
-                  Manage your identity platform
+                  Welcome back, {user?.name || user?.email || 'User'}
                 </p>
               </div>
             </div>
@@ -42,6 +99,9 @@ export default function DashboardPage() {
               <Button variant="outline" size="sm">
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                Sign out
               </Button>
             </div>
           </div>
