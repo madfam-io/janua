@@ -141,6 +141,3 @@ export function RecentActivity() {
     </div>
   )
 }
-    </div>
-  )
-}

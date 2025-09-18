@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@plinto/ui'
 import { Button } from '@plinto/ui'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@plinto/ui'

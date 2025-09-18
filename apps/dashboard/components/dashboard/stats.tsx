@@ -172,6 +172,3 @@ export function DashboardStats() {
     </div>
   )
 }
-    </div>
-  )
-}
