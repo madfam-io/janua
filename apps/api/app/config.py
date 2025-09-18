@@ -154,8 +154,10 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET_KEY", mode="before")
     @classmethod
     def validate_jwt_secret(cls, v):
-        # Note: We can't access other field values in v2, so we'll validate in model_validate if needed
-        return v or "development-secret-key"
+        # Only use default if no value provided at all (not even empty string)
+        if v is None:
+            return "development-secret-key"
+        return v
     
     @field_validator("SECRET_KEY", mode="before")
     @classmethod

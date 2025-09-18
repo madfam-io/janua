@@ -8,12 +8,17 @@ from unittest.mock import patch
 
 def test_config_imports():
     """Test that config module can be imported"""
+    # Clear any cached settings from previous tests
+    import sys
+    if 'app.config' in sys.modules:
+        del sys.modules['app.config']
+
     with patch.dict(os.environ, {
         'DATABASE_URL': 'postgresql://test:test@localhost:5432/plinto_test',
         'JWT_SECRET_KEY': 'test-secret-key',
         'REDIS_URL': 'redis://localhost:6379/0',
         'ENVIRONMENT': 'test'
-    }):
+    }, clear=True):
         try:
             from app.config import settings
             assert settings.ENVIRONMENT == 'test'
@@ -25,11 +30,16 @@ def test_config_imports():
 
 def test_database_url_format():
     """Test database URL configuration"""
+    # Clear any cached settings from previous tests
+    import sys
+    if 'app.config' in sys.modules:
+        del sys.modules['app.config']
+
     with patch.dict(os.environ, {
         'DATABASE_URL': 'postgresql://user:pass@localhost:5432/db_name',
         'JWT_SECRET_KEY': 'test-secret',
         'ENVIRONMENT': 'test'
-    }):
+    }, clear=True):
         try:
             from app.config import settings
             assert settings.DATABASE_URL.startswith('postgresql')
