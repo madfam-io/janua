@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "description": "Plinto multi-tenant payment platform",
   "private": true,
+  "packageManager": "npm@10.8.2",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:api\"",
