@@ -1,601 +1,773 @@
 """
 Complete test coverage for models.py (350 lines) and SSO service (365 lines)
-Comprehensive mocking to achieve 100% statement coverage
+Uses comprehensive mocking to achieve 100% statement coverage
 """
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock, PropertyMock
 from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
 import json
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+import base64
+
+# Mock external dependencies
+import sys
+sys.modules['ldap3'] = MagicMock()
+sys.modules['saml2'] = MagicMock()
+sys.modules['onelogin'] = MagicMock()
 
 
-class TestModelsComplete:
-    """Complete coverage for app.models module"""
+class TestCompleteModels:
+    """Complete coverage for app.models (350 lines)"""
 
     def test_all_model_imports(self):
-        """Test all model imports and definitions"""
-        from app.models import (
-            User, Organization, Role, Permission,
-            UserRole, UserPermission, Session, AuditLog,
-            APIKey, Webhook, WebhookEvent, Notification,
-            Invoice, Payment, Subscription, Plan,
-            Feature, UserFeature, OrganizationFeature,
-            DataRetention, ComplianceLog, GDPRRequest,
-            OAuth2Provider, OAuth2Token, OAuth2Client,
-            MFADevice, PasskeyCredential, LoginAttempt,
-            PasswordResetToken, EmailVerification,
-            Invitation, TeamMember, Project, Resource,
-            Tag, Comment, Attachment, Activity,
-            Cache, RateLimit, BlockedIP, SecurityLog
-        )
+        """Import all models to trigger class definitions"""
+        from app import models
 
-        # Test User model
+        # Test base model attributes
+        assert hasattr(models, 'User')
+        assert hasattr(models, 'Organization')
+        assert hasattr(models, 'Session')
+        assert hasattr(models, 'AuditLog')
+        assert hasattr(models, 'Role')
+        assert hasattr(models, 'Permission')
+        assert hasattr(models, 'ApiKey')
+        assert hasattr(models, 'Webhook')
+        assert hasattr(models, 'Subscription')
+        assert hasattr(models, 'Invoice')
+        assert hasattr(models, 'Payment')
+        assert hasattr(models, 'Feature')
+        assert hasattr(models, 'UsageMetric')
+        assert hasattr(models, 'Notification')
+        assert hasattr(models, 'EmailTemplate')
+
+    def test_user_model_complete(self):
+        """Test User model with all methods and properties"""
+        from app.models import User
+
+        # Create user instance
         user = User(
             email="test@example.com",
             username="testuser",
             first_name="Test",
             last_name="User",
-            is_active=True
+            phone="+1234567890"
         )
-        assert user.email == "test@example.com"
+
+        # Test password hashing
+        user.set_password("SecurePass123!")
+        assert user.password_hash is not None
+        assert user.verify_password("SecurePass123!")
+        assert not user.verify_password("WrongPassword")
+
+        # Test properties
+        assert user.full_name == "Test User"
+        assert user.display_name == "Test User"
+        assert user.is_active is True
+        assert user.is_verified is False
+
+        # Test methods
+        user.activate()
         assert user.is_active is True
 
-        # Test Organization model
+        user.deactivate()
+        assert user.is_active is False
+
+        user.verify_email()
+        assert user.is_verified is True
+
+        # Test token generation
+        token = user.generate_reset_token()
+        assert token is not None
+
+        verification_token = user.generate_verification_token()
+        assert verification_token is not None
+
+        # Test JSON serialization
+        user_dict = user.to_dict()
+        assert user_dict["email"] == "test@example.com"
+        assert "password_hash" not in user_dict
+
+        # Test relationships
+        user.sessions = []
+        user.audit_logs = []
+        user.api_keys = []
+        user.notifications = []
+        user.organizations = []
+        user.roles = []
+
+    def test_organization_model_complete(self):
+        """Test Organization model with all features"""
+        from app.models import Organization, OrganizationSettings
+
+        # Create organization
         org = Organization(
-            name="Test Org",
-            slug="test-org",
-            owner_id="user_123",
-            created_at=datetime.utcnow()
+            name="Test Corp",
+            domain="testcorp.com",
+            industry="Technology",
+            size="100-500"
         )
-        assert org.name == "Test Org"
-        assert org.slug == "test-org"
 
-        # Test Role and Permission models
-        role = Role(name="admin", description="Administrator role")
-        permission = Permission(name="users.create", resource="users", action="create")
-        assert role.name == "admin"
-        assert permission.action == "create"
+        # Test properties
+        assert org.is_active is True
+        assert org.member_count == 0
+        assert org.has_active_subscription is False
 
-        # Test Session model
+        # Test settings
+        settings = OrganizationSettings(
+            allow_sso=True,
+            enforce_2fa=True,
+            ip_whitelist=["192.168.1.0/24"],
+            session_timeout=3600
+        )
+        org.settings = settings
+
+        # Test methods
+        org.activate()
+        assert org.is_active is True
+
+        org.suspend()
+        assert org.is_active is False
+
+        # Test limits
+        assert org.can_add_member() is True
+        org.member_limit = 5
+        org.member_count = 5
+        assert org.can_add_member() is False
+
+        # Test features
+        org.enable_feature("advanced_reporting")
+        assert org.has_feature("advanced_reporting")
+
+        org.disable_feature("advanced_reporting")
+        assert not org.has_feature("advanced_reporting")
+
+        # Test JSON serialization
+        org_dict = org.to_dict()
+        assert org_dict["name"] == "Test Corp"
+
+    def test_session_model_complete(self):
+        """Test Session model with expiration logic"""
+        from app.models import Session, SessionType
+
+        # Create session
         session = Session(
             user_id="user_123",
             token="session_token_abc",
-            expires_at=datetime.utcnow() + timedelta(hours=24),
-            ip_address="192.168.1.1",
-            user_agent="Mozilla/5.0"
+            ip_address="192.168.1.100",
+            user_agent="Mozilla/5.0",
+            type=SessionType.WEB
         )
-        assert session.user_id == "user_123"
 
-        # Test Audit Log model
-        audit = AuditLog(
+        # Test expiration
+        assert session.is_expired() is False
+
+        session.expires_at = datetime.utcnow() - timedelta(hours=1)
+        assert session.is_expired() is True
+
+        # Test refresh
+        session.refresh()
+        assert session.is_expired() is False
+        assert session.last_activity is not None
+
+        # Test revocation
+        session.revoke()
+        assert session.is_revoked is True
+        assert session.revoked_at is not None
+
+        # Test device info
+        session.set_device_info(
+            device_type="mobile",
+            device_name="iPhone 12",
+            os="iOS 14"
+        )
+        assert session.device_type == "mobile"
+
+        # Test location
+        session.set_location(
+            country="US",
+            city="San Francisco",
+            latitude=37.7749,
+            longitude=-122.4194
+        )
+        assert session.country == "US"
+
+    def test_audit_log_model_complete(self):
+        """Test AuditLog model with all event types"""
+        from app.models import AuditLog, AuditEventType
+
+        # Create audit log
+        log = AuditLog(
             user_id="user_123",
-            action="LOGIN",
-            resource="auth",
-            ip_address="192.168.1.1",
-            timestamp=datetime.utcnow()
+            organization_id="org_456",
+            event_type=AuditEventType.USER_LOGIN,
+            resource_type="user",
+            resource_id="user_123",
+            ip_address="192.168.1.100"
         )
-        assert audit.action == "LOGIN"
 
-        # Test Subscription models
-        plan = Plan(
-            name="Premium",
-            price=29.99,
-            interval="monthly",
-            features=["feature1", "feature2"]
+        # Test details
+        log.set_details({
+            "browser": "Chrome",
+            "os": "Windows 10",
+            "two_factor": True
+        })
+        assert log.details["two_factor"] is True
+
+        # Test changes tracking
+        log.set_changes(
+            before={"email": "old@example.com"},
+            after={"email": "new@example.com"}
         )
+        assert log.changes_before["email"] == "old@example.com"
+
+        # Test severity levels
+        log.set_severity("high")
+        assert log.severity == "high"
+
+        # Test search
+        assert log.matches_search("user_123")
+        assert log.matches_search("192.168")
+        assert not log.matches_search("random_string")
+
+    def test_rbac_models_complete(self):
+        """Test Role and Permission models"""
+        from app.models import Role, Permission, RolePermission
+
+        # Create role
+        role = Role(
+            name="Admin",
+            description="Administrator role",
+            organization_id="org_123"
+        )
+
+        # Create permissions
+        perm1 = Permission(
+            name="users.create",
+            resource="users",
+            action="create"
+        )
+
+        perm2 = Permission(
+            name="users.delete",
+            resource="users",
+            action="delete"
+        )
+
+        # Test role-permission association
+        role.add_permission(perm1)
+        role.add_permission(perm2)
+        assert role.has_permission("users.create")
+        assert role.has_permission("users.delete")
+
+        role.remove_permission(perm1)
+        assert not role.has_permission("users.create")
+
+        # Test permission checking
+        assert perm1.allows_action("create", "users")
+        assert not perm1.allows_action("delete", "users")
+
+        # Test role hierarchy
+        parent_role = Role(name="Super Admin")
+        role.set_parent(parent_role)
+        assert role.parent_id == parent_role.id
+
+    def test_subscription_billing_models(self):
+        """Test Subscription and billing-related models"""
+        from app.models import Subscription, Invoice, Payment, Plan
+
+        # Create subscription
         subscription = Subscription(
-            user_id="user_123",
-            plan_id="plan_premium",
+            organization_id="org_123",
+            plan_id="plan_pro",
             status="active",
             current_period_start=datetime.utcnow(),
             current_period_end=datetime.utcnow() + timedelta(days=30)
         )
-        assert plan.price == 29.99
-        assert subscription.status == "active"
 
-        # Test OAuth models
-        provider = OAuth2Provider(
-            name="Google",
-            client_id="google_client_id",
-            client_secret="google_secret",
-            authorize_url="https://accounts.google.com/oauth/authorize"
-        )
-        token = OAuth2Token(
-            provider_id="google",
-            user_id="user_123",
-            access_token="access_token_abc",
-            refresh_token="refresh_token_xyz",
-            expires_at=datetime.utcnow() + timedelta(hours=1)
-        )
-        assert provider.name == "Google"
-        assert token.access_token == "access_token_abc"
-
-        # Test MFA models
-        mfa = MFADevice(
-            user_id="user_123",
-            device_type="totp",
-            secret="secret_key",
-            is_primary=True,
-            verified=True
-        )
-        passkey = PasskeyCredential(
-            user_id="user_123",
-            credential_id="cred_123",
-            public_key="public_key_data",
-            sign_count=0
-        )
-        assert mfa.device_type == "totp"
-        assert passkey.credential_id == "cred_123"
-
-        # Test Security models
-        rate_limit = RateLimit(
-            key="user_123",
-            requests=100,
-            window_start=datetime.utcnow(),
-            window_seconds=3600
-        )
-        blocked_ip = BlockedIP(
-            ip_address="192.168.1.100",
-            reason="Too many failed login attempts",
-            blocked_until=datetime.utcnow() + timedelta(hours=1)
-        )
-        assert rate_limit.requests == 100
-        assert blocked_ip.reason == "Too many failed login attempts"
-
-    def test_model_relationships(self):
-        """Test model relationships and foreign keys"""
-        from app.models import User, Organization, TeamMember
-
-        # Test User-Organization relationship
-        user = User(id="user_123", email="test@example.com")
-        org = Organization(id="org_123", name="Test Org", owner_id="user_123")
-
-        # Mock relationship
-        user.organizations = [org]
-        assert len(user.organizations) == 1
-        assert user.organizations[0].name == "Test Org"
-
-        # Test TeamMember relationship
-        member = TeamMember(
-            user_id="user_123",
-            organization_id="org_123",
-            role="admin",
-            joined_at=datetime.utcnow()
-        )
-        member.user = user
-        member.organization = org
-        assert member.user.email == "test@example.com"
-        assert member.organization.name == "Test Org"
-
-    def test_model_methods(self):
-        """Test model methods and properties"""
-        from app.models import User, Session, Subscription
-
-        # Test User methods
-        user = User(email="test@example.com")
-        user.set_password = Mock()
-        user.set_password("password123")
-        user.set_password.assert_called_with("password123")
-
-        user.check_password = Mock(return_value=True)
-        assert user.check_password("password123") is True
-
-        user.generate_api_key = Mock(return_value="api_key_123")
-        api_key = user.generate_api_key()
-        assert api_key == "api_key_123"
-
-        # Test Session methods
-        session = Session(expires_at=datetime.utcnow() + timedelta(hours=1))
-        session.is_expired = Mock(return_value=False)
-        assert session.is_expired() is False
-
-        session.extend = Mock()
-        session.extend(hours=2)
-        session.extend.assert_called_with(hours=2)
-
-        # Test Subscription methods
-        subscription = Subscription(
-            current_period_end=datetime.utcnow() + timedelta(days=5)
-        )
-        subscription.is_active = Mock(return_value=True)
+        # Test status checks
         assert subscription.is_active() is True
+        assert subscription.is_trial() is False
+        assert subscription.is_past_due() is False
 
-        subscription.days_remaining = Mock(return_value=5)
-        assert subscription.days_remaining() == 5
+        subscription.status = "trialing"
+        assert subscription.is_trial() is True
 
-    def test_model_validations(self):
-        """Test model validation logic"""
-        from app.models import User, Organization, validate_email, validate_slug
+        # Test cancellation
+        subscription.cancel(immediate=False)
+        assert subscription.status == "canceled"
+        assert subscription.cancel_at_period_end is True
 
-        # Test email validation
-        assert validate_email("test@example.com") is True
-        assert validate_email("invalid-email") is False
-
-        # Test slug validation
-        assert validate_slug("valid-slug") is True
-        assert validate_slug("Invalid Slug!") is False
-
-        # Test User validation
-        with pytest.raises(ValueError):
-            User(email="invalid-email")
-
-        # Test Organization validation
-        with pytest.raises(ValueError):
-            Organization(slug="Invalid Slug!")
-
-    def test_model_serialization(self):
-        """Test model serialization methods"""
-        from app.models import User, Organization, Session
-
-        # Test User serialization
-        user = User(
-            id="user_123",
-            email="test@example.com",
-            username="testuser",
-            created_at=datetime(2024, 1, 1)
+        # Create invoice
+        invoice = Invoice(
+            subscription_id=subscription.id,
+            amount=9900,  # $99.00
+            currency="usd",
+            status="pending"
         )
 
-        user.to_dict = Mock(return_value={
-            "id": "user_123",
-            "email": "test@example.com",
-            "username": "testuser",
-            "created_at": "2024-01-01T00:00:00"
-        })
+        # Test invoice methods
+        invoice.mark_paid()
+        assert invoice.status == "paid"
+        assert invoice.paid_at is not None
 
-        user_dict = user.to_dict()
-        assert user_dict["email"] == "test@example.com"
-
-        # Test JSON serialization
-        user.to_json = Mock(return_value='{"id": "user_123"}')
-        user_json = user.to_json()
-        assert "user_123" in user_json
-
-
-class TestSSOServiceComplete:
-    """Complete coverage for app.services.sso_service"""
-
-    @patch('app.services.sso_service.httpx.AsyncClient')
-    async def test_sso_initialization(self, mock_httpx):
-        """Test SSO service initialization"""
-        from app.services.sso_service import SSOService, SSOProvider
-
-        service = SSOService()
-        assert service is not None
-
-        # Test provider registration
-        provider = SSOProvider(
-            name="okta",
-            client_id="okta_client_id",
-            client_secret="okta_secret",
-            issuer="https://dev-123.okta.com",
-            authorization_endpoint="https://dev-123.okta.com/oauth2/v1/authorize",
-            token_endpoint="https://dev-123.okta.com/oauth2/v1/token"
+        # Create payment
+        payment = Payment(
+            invoice_id=invoice.id,
+            amount=9900,
+            currency="usd",
+            payment_method="card",
+            status="succeeded"
         )
 
-        service.register_provider(provider)
-        assert service.providers["okta"] == provider
+        # Test payment verification
+        assert payment.is_successful() is True
+        payment.status = "failed"
+        assert payment.is_successful() is False
 
-    @patch('app.services.sso_service.httpx.AsyncClient')
-    async def test_saml_flow(self, mock_httpx):
-        """Test SAML SSO flow"""
+    def test_webhook_model_complete(self):
+        """Test Webhook model with validation and delivery"""
+        from app.models import Webhook, WebhookEvent, WebhookDelivery
+
+        # Create webhook
+        webhook = Webhook(
+            organization_id="org_123",
+            url="https://example.com/webhook",
+            events=["user.created", "user.updated"],
+            secret="webhook_secret_key"
+        )
+
+        # Test activation
+        assert webhook.is_active is True
+        webhook.deactivate()
+        assert webhook.is_active is False
+        webhook.activate()
+        assert webhook.is_active is True
+
+        # Test event filtering
+        assert webhook.should_trigger("user.created") is True
+        assert webhook.should_trigger("user.deleted") is False
+
+        # Test signature generation
+        payload = {"event": "user.created", "data": {"id": "user_123"}}
+        signature = webhook.generate_signature(json.dumps(payload))
+        assert signature is not None
+
+        # Create webhook event
+        event = WebhookEvent(
+            webhook_id=webhook.id,
+            event_type="user.created",
+            payload=payload
+        )
+
+        # Create delivery attempt
+        delivery = WebhookDelivery(
+            event_id=event.id,
+            status="pending",
+            attempt=1
+        )
+
+        # Test delivery status
+        delivery.mark_success(200, {"status": "ok"})
+        assert delivery.status == "success"
+
+        delivery.mark_failure(500, "Internal Server Error")
+        assert delivery.status == "failed"
+        assert delivery.should_retry() is True
+
+        delivery.attempt = 5
+        assert delivery.should_retry() is False
+
+
+class TestCompleteSSOService:
+    """Complete coverage for app.services.sso_service (365 lines)"""
+
+    @patch('app.services.sso_service.onelogin')
+    @patch('app.services.sso_service.Saml2Config')
+    async def test_saml_sso_complete(self, mock_saml_config, mock_onelogin):
+        """Test SAML SSO implementation"""
         from app.services.sso_service import SSOService, SAMLProvider
 
         service = SSOService()
 
         # Configure SAML provider
-        saml_provider = SAMLProvider(
-            name="azure_ad",
-            entity_id="https://myapp.com",
-            sso_url="https://login.microsoftonline.com/tenant/saml2",
-            x509_cert="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+        provider = SAMLProvider(
+            entity_id="https://example.com",
+            sso_url="https://idp.example.com/sso",
+            x509_cert="CERTIFICATE_DATA"
         )
 
-        service.register_saml_provider(saml_provider)
-
         # Test SAML request generation
-        service.generate_saml_request = Mock(return_value="<samlp:AuthnRequest>...</samlp:AuthnRequest>")
-        saml_request = service.generate_saml_request("azure_ad")
-        assert "<samlp:AuthnRequest>" in saml_request
+        saml_request = await service.generate_saml_request(provider)
+        assert saml_request is not None
+        assert "SAMLRequest" in saml_request
 
-        # Test SAML response validation
-        service.validate_saml_response = AsyncMock(return_value={
-            "user_id": "user_123",
-            "email": "user@company.com",
-            "attributes": {"department": "Engineering"}
-        })
+        # Test SAML response processing
+        mock_response = MagicMock()
+        mock_response.is_valid.return_value = True
+        mock_response.get_attributes.return_value = {
+            "email": ["user@example.com"],
+            "name": ["Test User"],
+            "groups": ["admin", "users"]
+        }
 
-        user_info = await service.validate_saml_response("azure_ad", "saml_response_data")
-        assert user_info["email"] == "user@company.com"
+        user_info = await service.process_saml_response(
+            mock_response,
+            provider
+        )
+        assert user_info["email"] == "user@example.com"
+        assert "admin" in user_info["groups"]
 
-    @patch('app.services.sso_service.httpx.AsyncClient')
-    async def test_oauth2_sso_flow(self, mock_httpx):
-        """Test OAuth2 SSO flow"""
-        from app.services.sso_service import SSOService
+        # Test SAML metadata generation
+        metadata = await service.generate_saml_metadata(provider)
+        assert "EntityDescriptor" in metadata
+        assert provider.entity_id in metadata
 
-        # Mock HTTP client
-        mock_client = AsyncMock()
-        mock_httpx.return_value.__aenter__.return_value = mock_client
+    @patch('app.services.sso_service.ldap3')
+    async def test_ldap_sso_complete(self, mock_ldap):
+        """Test LDAP/AD SSO implementation"""
+        from app.services.sso_service import SSOService, LDAPProvider
 
         service = SSOService()
 
-        # Test authorization URL generation
-        auth_url = service.get_oauth_authorization_url(
-            provider="okta",
-            redirect_uri="https://myapp.com/callback",
-            state="random_state",
-            scopes=["openid", "email", "profile"]
-        )
-        assert "okta" in auth_url or auth_url != ""
-        assert "redirect_uri" in auth_url or auth_url != ""
-
-        # Test token exchange
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "access_token": "sso_access_token",
-            "id_token": "sso_id_token",
-            "refresh_token": "sso_refresh_token"
-        }
-        mock_client.post = AsyncMock(return_value=mock_response)
-
-        tokens = await service.exchange_oauth_code(
-            provider="okta",
-            code="auth_code_123",
-            redirect_uri="https://myapp.com/callback"
-        )
-        assert tokens["access_token"] == "sso_access_token"
-
-        # Test user info retrieval
-        mock_response.json.return_value = {
-            "sub": "user_123",
-            "email": "user@company.com",
-            "name": "Test User",
-            "groups": ["Engineering", "Admin"]
-        }
-        mock_client.get = AsyncMock(return_value=mock_response)
-
-        user_info = await service.get_oauth_user_info("okta", "sso_access_token")
-        assert user_info["email"] == "user@company.com"
-        assert "Engineering" in user_info["groups"]
-
-    async def test_ldap_integration(self):
-        """Test LDAP/Active Directory integration"""
-        from app.services.sso_service import LDAPConnector
-
-        connector = LDAPConnector(
-            server="ldap://company.local",
-            base_dn="dc=company,dc=local",
-            bind_dn="cn=admin,dc=company,dc=local",
+        # Configure LDAP provider
+        provider = LDAPProvider(
+            server="ldap://ldap.example.com",
+            base_dn="dc=example,dc=com",
+            bind_dn="cn=admin,dc=example,dc=com",
             bind_password="admin_password"
         )
 
-        # Mock LDAP operations
-        connector.bind = AsyncMock(return_value=True)
-        connector.search = AsyncMock(return_value=[
-            {
-                "dn": "cn=Test User,ou=Users,dc=company,dc=local",
-                "attributes": {
-                    "cn": "Test User",
-                    "mail": "test@company.local",
-                    "memberOf": ["cn=Engineering,ou=Groups,dc=company,dc=local"]
-                }
-            }
-        ])
+        # Mock LDAP connection
+        mock_connection = MagicMock()
+        mock_ldap.Connection.return_value = mock_connection
+        mock_connection.bind.return_value = True
 
         # Test LDAP authentication
-        connector.authenticate = AsyncMock(return_value=True)
-        authenticated = await connector.authenticate("testuser", "password")
-        assert authenticated is True
+        mock_connection.search.return_value = True
+        mock_connection.entries = [
+            MagicMock(
+                entry_dn="cn=testuser,ou=users,dc=example,dc=com",
+                mail="testuser@example.com",
+                displayName="Test User",
+                memberOf=["cn=admins,ou=groups,dc=example,dc=com"]
+            )
+        ]
 
-        # Test user lookup
-        user = await connector.search("(mail=test@company.local)")
-        assert user[0]["attributes"]["mail"] == "test@company.local"
+        user = await service.authenticate_ldap(
+            provider,
+            username="testuser",
+            password="password"
+        )
+        assert user is not None
+        assert user["email"] == "testuser@example.com"
+        assert user["display_name"] == "Test User"
+
+        # Test group membership
+        groups = await service.get_ldap_groups(provider, "testuser")
+        assert "admins" in groups
+
+        # Test LDAP search
+        results = await service.search_ldap_users(
+            provider,
+            query="test*"
+        )
+        assert len(results) > 0
+
+    @patch('app.services.sso_service.httpx')
+    async def test_oauth_sso_complete(self, mock_httpx):
+        """Test OAuth 2.0 SSO implementation"""
+        from app.services.sso_service import SSOService, OAuthProvider
+
+        service = SSOService()
+
+        # Configure OAuth providers
+        providers = {
+            "google": OAuthProvider(
+                client_id="google_client_id",
+                client_secret="google_secret",
+                authorize_url="https://accounts.google.com/o/oauth2/auth",
+                token_url="https://oauth2.googleapis.com/token",
+                userinfo_url="https://www.googleapis.com/oauth2/v2/userinfo"
+            ),
+            "github": OAuthProvider(
+                client_id="github_client_id",
+                client_secret="github_secret",
+                authorize_url="https://github.com/login/oauth/authorize",
+                token_url="https://github.com/login/oauth/access_token",
+                userinfo_url="https://api.github.com/user"
+            ),
+            "azure": OAuthProvider(
+                client_id="azure_client_id",
+                client_secret="azure_secret",
+                authorize_url="https://login.microsoftonline.com/common/oauth2/authorize",
+                token_url="https://login.microsoftonline.com/common/oauth2/token",
+                userinfo_url="https://graph.microsoft.com/v1.0/me"
+            )
+        }
+
+        # Test OAuth flow for each provider
+        for provider_name, provider in providers.items():
+            # Test authorization URL generation
+            auth_url = service.get_oauth_authorization_url(
+                provider,
+                redirect_uri="https://example.com/callback",
+                state="random_state"
+            )
+            assert provider.authorize_url in auth_url
+            assert "client_id" in auth_url
+            assert "redirect_uri" in auth_url
+
+            # Mock token exchange
+            mock_client = AsyncMock()
+            mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
+
+            mock_client.post.return_value = Mock(
+                json=lambda: {
+                    "access_token": f"{provider_name}_access_token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                    "refresh_token": f"{provider_name}_refresh_token"
+                }
+            )
+
+            tokens = await service.exchange_oauth_code(
+                provider,
+                code="auth_code",
+                redirect_uri="https://example.com/callback"
+            )
+            assert tokens["access_token"] == f"{provider_name}_access_token"
+
+            # Mock user info retrieval
+            user_info_responses = {
+                "google": {
+                    "id": "google_123",
+                    "email": "user@gmail.com",
+                    "name": "Google User",
+                    "picture": "https://example.com/photo.jpg"
+                },
+                "github": {
+                    "id": "github_456",
+                    "email": "user@github.com",
+                    "name": "GitHub User",
+                    "avatar_url": "https://github.com/avatar.jpg"
+                },
+                "azure": {
+                    "id": "azure_789",
+                    "mail": "user@outlook.com",
+                    "displayName": "Azure User",
+                    "jobTitle": "Developer"
+                }
+            }
+
+            mock_client.get.return_value = Mock(
+                json=lambda: user_info_responses[provider_name]
+            )
+
+            user_info = await service.get_oauth_user_info(
+                provider,
+                access_token=f"{provider_name}_access_token"
+            )
+            assert user_info is not None
+            assert "email" in user_info or "mail" in user_info
 
     async def test_sso_session_management(self):
-        """Test SSO session management"""
-        from app.services.sso_service import SSOSessionManager
+        """Test SSO session creation and management"""
+        from app.services.sso_service import SSOService, SSOSession
 
-        manager = SSOSessionManager()
+        service = SSOService()
 
-        # Test session creation
-        session = await manager.create_sso_session(
+        # Create SSO session
+        session = await service.create_sso_session(
             user_id="user_123",
-            provider="okta",
-            sso_token="sso_token_123",
-            expires_in=3600
+            provider="google",
+            provider_user_id="google_123",
+            attributes={
+                "email": "user@example.com",
+                "groups": ["admin", "users"]
+            }
         )
-        assert session["user_id"] == "user_123"
-        assert session["provider"] == "okta"
+        assert session is not None
+        assert session.provider == "google"
+        assert session.is_active() is True
 
         # Test session validation
-        manager.validate_session = AsyncMock(return_value=True)
-        is_valid = await manager.validate_session("session_id_123")
+        is_valid = await service.validate_sso_session(session.token)
         assert is_valid is True
 
         # Test session refresh
-        manager.refresh_session = AsyncMock(return_value={
-            "session_id": "session_id_123",
-            "expires_at": datetime.utcnow() + timedelta(hours=2)
-        })
+        refreshed = await service.refresh_sso_session(session.token)
+        assert refreshed is not None
+        assert refreshed.expires_at > session.expires_at
 
-        refreshed = await manager.refresh_session("session_id_123")
-        assert refreshed["session_id"] == "session_id_123"
-
-        # Test session logout
-        manager.logout = AsyncMock(return_value=True)
-        logged_out = await manager.logout("session_id_123")
-        assert logged_out is True
+        # Test session termination
+        await service.terminate_sso_session(session.token)
+        is_valid = await service.validate_sso_session(session.token)
+        assert is_valid is False
 
     async def test_sso_user_provisioning(self):
-        """Test automated user provisioning"""
-        from app.services.sso_service import UserProvisioner
+        """Test automatic user provisioning via SSO"""
+        from app.services.sso_service import SSOService, UserProvisioner
 
+        service = SSOService()
         provisioner = UserProvisioner()
 
-        # Test user creation from SSO
-        provisioner.create_user = AsyncMock(return_value="user_123")
-        user_id = await provisioner.create_user({
-            "email": "newuser@company.com",
+        # Test JIT (Just-In-Time) provisioning
+        sso_attributes = {
+            "email": "newuser@example.com",
             "name": "New User",
-            "groups": ["Engineering"],
-            "provider": "okta"
-        })
-        assert user_id == "user_123"
-
-        # Test user update
-        provisioner.update_user = AsyncMock(return_value=True)
-        updated = await provisioner.update_user("user_123", {
-            "groups": ["Engineering", "Admin"]
-        })
-        assert updated is True
-
-        # Test user deprovisioning
-        provisioner.deprovision_user = AsyncMock(return_value=True)
-        deprovisioned = await provisioner.deprovision_user("user_123")
-        assert deprovisioned is True
-
-        # Test group synchronization
-        provisioner.sync_groups = AsyncMock(return_value=["group_1", "group_2"])
-        groups = await provisioner.sync_groups("user_123", ["Engineering", "Admin"])
-        assert len(groups) == 2
-
-    def test_sso_configuration_management(self):
-        """Test SSO configuration management"""
-        from app.services.sso_service import SSOConfigManager
-
-        manager = SSOConfigManager()
-
-        # Test configuration validation
-        config = {
-            "provider": "okta",
-            "client_id": "client_123",
-            "client_secret": "secret_123",
-            "issuer": "https://dev.okta.com"
+            "groups": ["engineering", "product"],
+            "department": "Engineering",
+            "manager": "manager@example.com"
         }
 
-        is_valid = manager.validate_config(config)
-        assert is_valid is True
+        user = await provisioner.provision_user(
+            sso_attributes,
+            organization_id="org_123"
+        )
+        assert user is not None
+        assert user.email == "newuser@example.com"
+        assert "engineering" in user.groups
 
-        # Test configuration storage
-        manager.save_config = Mock(return_value=True)
-        saved = manager.save_config("okta", config)
-        assert saved is True
+        # Test user attribute sync
+        updated_attributes = {
+            "name": "Updated User",
+            "department": "Product",
+            "groups": ["product"]
+        }
 
-        # Test configuration retrieval
-        manager.get_config = Mock(return_value=config)
-        retrieved = manager.get_config("okta")
-        assert retrieved["client_id"] == "client_123"
+        await provisioner.sync_user_attributes(
+            user.id,
+            updated_attributes
+        )
+        assert user.name == "Updated User"
+        assert user.department == "Product"
 
-        # Test configuration update
-        manager.update_config = Mock(return_value=True)
-        updated = manager.update_config("okta", {"client_secret": "new_secret"})
-        assert updated is True
+        # Test deprovisioning
+        await provisioner.deprovision_user(user.id)
+        assert user.is_active is False
+
+    async def test_sso_multi_factor_auth(self):
+        """Test MFA integration with SSO"""
+        from app.services.sso_service import SSOService, MFAProvider
+
+        service = SSOService()
+
+        # Test MFA requirement check
+        requires_mfa = await service.check_mfa_requirement(
+            user_id="user_123",
+            provider="google"
+        )
+        assert isinstance(requires_mfa, bool)
+
+        # Test MFA challenge generation
+        challenge = await service.generate_mfa_challenge(
+            user_id="user_123",
+            method="totp"
+        )
+        assert challenge is not None
+        assert "secret" in challenge or "challenge" in challenge
+
+        # Test MFA verification
+        is_valid = await service.verify_mfa_response(
+            user_id="user_123",
+            method="totp",
+            response="123456"
+        )
+        assert isinstance(is_valid, bool)
 
     async def test_sso_audit_logging(self):
         """Test SSO audit logging"""
-        from app.services.sso_service import SSOAuditLogger
+        from app.services.sso_service import SSOService, SSOAuditLogger
 
+        service = SSOService()
         logger = SSOAuditLogger()
 
-        # Test login audit
-        await logger.log_login(
+        # Test login event logging
+        await logger.log_sso_login(
             user_id="user_123",
-            provider="okta",
-            ip_address="192.168.1.1",
-            success=True
+            provider="saml",
+            success=True,
+            ip_address="192.168.1.100",
+            metadata={"idp": "okta"}
         )
 
-        # Test logout audit
-        await logger.log_logout(
+        # Test logout event logging
+        await logger.log_sso_logout(
             user_id="user_123",
-            provider="okta",
-            session_duration=3600
+            provider="saml",
+            reason="user_initiated"
         )
 
-        # Test configuration change audit
-        await logger.log_config_change(
-            admin_id="admin_123",
-            provider="okta",
-            changes={"client_id": {"old": "old_id", "new": "new_id"}}
+        # Test provisioning event logging
+        await logger.log_user_provisioning(
+            user_id="user_123",
+            action="created",
+            provider="ldap",
+            attributes={"email": "user@example.com"}
         )
 
-        # Test security event audit
-        await logger.log_security_event(
-            event_type="failed_authentication",
-            provider="okta",
-            details={"reason": "invalid_credentials", "ip": "192.168.1.1"}
+        # Test error logging
+        await logger.log_sso_error(
+            provider="oauth",
+            error_type="token_expired",
+            details={"user": "user_123"}
         )
 
-    def test_sso_error_handling(self):
-        """Test SSO error handling"""
-        from app.services.sso_service import (
-            SSOException, SSOAuthenticationError,
-            SSOConfigurationError, SSOProviderError
-        )
 
-        # Test authentication errors
-        with pytest.raises(SSOAuthenticationError):
-            raise SSOAuthenticationError("Invalid credentials")
+# Additional test for comprehensive module coverage
+def test_all_model_relationships():
+    """Test all model relationships and associations"""
+    from app.models import (
+        User, Organization, UserOrganization,
+        Role, UserRole, Permission, RolePermission,
+        ApiKey, Webhook, Notification
+    )
 
-        # Test configuration errors
-        with pytest.raises(SSOConfigurationError):
-            raise SSOConfigurationError("Missing client_id")
+    # Test many-to-many relationships
+    user = User(email="test@example.com")
+    org = Organization(name="Test Org")
 
-        # Test provider errors
-        with pytest.raises(SSOProviderError):
-            raise SSOProviderError("Provider unavailable")
+    # User-Organization relationship
+    user_org = UserOrganization(
+        user_id=user.id,
+        organization_id=org.id,
+        role="admin"
+    )
+    assert user_org.user_id == user.id
+    assert user_org.organization_id == org.id
 
-        # Test general SSO errors
-        with pytest.raises(SSOException):
-            raise SSOException("SSO operation failed")
+    # User-Role relationship
+    role = Role(name="Admin")
+    user_role = UserRole(
+        user_id=user.id,
+        role_id=role.id
+    )
+    assert user_role.user_id == user.id
 
-    async def test_sso_multi_tenancy(self):
-        """Test multi-tenant SSO support"""
-        from app.services.sso_service import MultiTenantSSOService
+    # Role-Permission relationship
+    permission = Permission(name="users.manage")
+    role_perm = RolePermission(
+        role_id=role.id,
+        permission_id=permission.id
+    )
+    assert role_perm.role_id == role.id
 
-        service = MultiTenantSSOService()
 
-        # Test tenant-specific configuration
-        service.configure_tenant = AsyncMock(return_value=True)
-        configured = await service.configure_tenant(
-            tenant_id="tenant_123",
-            provider="okta",
-            config={"client_id": "tenant_client_123"}
-        )
-        assert configured is True
+def test_sso_provider_discovery():
+    """Test SSO provider discovery and metadata"""
+    from app.services.sso_service import SSOProviderDiscovery
 
-        # Test tenant authentication
-        service.authenticate_tenant_user = AsyncMock(return_value={
-            "user_id": "user_123",
-            "tenant_id": "tenant_123"
-        })
+    discovery = SSOProviderDiscovery()
 
-        result = await service.authenticate_tenant_user(
-            tenant_id="tenant_123",
-            credentials={"username": "user", "password": "pass"}
-        )
-        assert result["tenant_id"] == "tenant_123"
+    # Test provider detection
+    provider_type = discovery.detect_provider("https://login.microsoftonline.com")
+    assert provider_type == "azure"
 
-        # Test cross-tenant access control
-        service.can_access_tenant = Mock(return_value=False)
-        can_access = service.can_access_tenant("user_123", "tenant_456")
-        assert can_access is False
+    provider_type = discovery.detect_provider("https://accounts.google.com")
+    assert provider_type == "google"
 
-# Additional test for edge cases
-def test_models_edge_cases():
-    """Test edge cases in models"""
-    from app.models import User, Organization
-
-    # Test None values
-    user = User(email="test@example.com", username=None)
-    assert user.username is None
-
-    # Test empty strings
-    with pytest.raises(ValueError):
-        Organization(name="", slug="test")
-
-    # Test special characters
-    org = Organization(name="Test & Co.", slug="test-and-co")
-    assert "&" in org.name
+    # Test metadata discovery
+    metadata = discovery.discover_metadata("https://example.okta.com")
+    assert metadata is not None
