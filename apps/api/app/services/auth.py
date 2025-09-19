@@ -81,17 +81,17 @@ class AuthService:
             return None
 
     @staticmethod
-    def validate_session(db: Session, jti: str) -> bool:
+    async def validate_session(db: AsyncSession, jti: str) -> bool:
         """Validate if a session is active"""
         # For testing purposes, return True
-        # In real implementation, this would check the database
+        # In real implementation, this would check the database using async session
         return True
 
     @staticmethod
-    def refresh_access_token(db: Session, refresh_token: str) -> Tuple[str, str]:
+    async def refresh_access_token(db: AsyncSession, refresh_token: str) -> Tuple[str, str]:
         """Refresh access token using refresh token"""
         # For testing purposes, return new tokens as tuple (access_token, refresh_token)
-        # In real implementation, this would validate refresh token and create new tokens
+        # In real implementation, this would validate refresh token and create new tokens using async session
         return ("new_access_token", "new_refresh_token")
 
     @classmethod
@@ -133,28 +133,28 @@ class AuthService:
         return True
 
     @staticmethod
-    def update_user(db: Session, user_id: str, user_data: dict) -> dict:
+    async def update_user(db: AsyncSession, user_id: str, user_data: dict) -> dict:
         """Update user information"""
-        # Placeholder implementation for testing
+        # Placeholder implementation for testing using async session
         return {"updated": True}
 
     @staticmethod
-    def delete_user(db: Session, user_id: str) -> dict:
+    async def delete_user(db: AsyncSession, user_id: str) -> dict:
         """Delete a user account"""
-        # Placeholder implementation for testing
+        # Placeholder implementation for testing using async session
         return {"deleted": True}
 
     @staticmethod
-    def get_user_sessions(db: Session, user_id: str) -> list:
+    async def get_user_sessions(db: AsyncSession, user_id: str) -> list:
         """Get all user sessions"""
-        # Placeholder implementation for testing
+        # Placeholder implementation for testing using async session
         return [
             {"session_id": "session_1", "created_at": "2025-01-01T00:00:00"},
             {"session_id": "session_2", "created_at": "2025-01-01T01:00:00"}
         ]
 
     @staticmethod
-    def revoke_session(db: Session, session_id: str) -> dict:
-        """Revoke a specific user session (sync version)"""
-        # Placeholder implementation for testing
+    async def revoke_session(db: AsyncSession, session_id: str) -> dict:
+        """Revoke a specific user session (async version)"""
+        # Placeholder implementation for testing using async session
         return {"revoked": True}

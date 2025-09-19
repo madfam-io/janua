@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 from app.services.auth_service import AuthService
 from app.models import User, Session, Organization
@@ -97,47 +97,60 @@ class TestUserManagement:
         """Test successful user creation."""
         mock_db = AsyncMock()
         mock_redis = AsyncMock()
-        
+
         user_data = {
             "email": "test@example.com",
             "password": "ValidPassword123!",
             "name": "Test User"
         }
-        
+
+        # Mock database to return no existing user
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_execute_result)
+        mock_db.add = MagicMock()  # add() is synchronous in AsyncSession
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
         with patch('app.services.auth_service.get_redis', return_value=mock_redis), \
-             patch.object(AuthService, '_check_email_exists', return_value=False), \
-             patch.object(AuthService, '_create_tenant', return_value=MagicMock(id="tenant_123")):
-            
-            mock_user = MagicMock()
-            mock_user.id = "user_123"
-            mock_user.email = user_data["email"]
-            mock_user.name = user_data["name"]
-            
-            with patch('app.services.auth_service.User', return_value=mock_user):
-                mock_db.add = MagicMock()
-                mock_db.commit = AsyncMock()
-                mock_db.refresh = AsyncMock()
-                
-                result = await AuthService.create_user(mock_db, **user_data)
-                
-                assert result == mock_user
-                mock_db.add.assert_called_once_with(mock_user)
-                mock_db.commit.assert_called_once()
+             patch.object(AuthService, 'create_audit_log', new_callable=AsyncMock) as mock_audit:
+
+            result = await AuthService.create_user(mock_db, **user_data)
+
+            # Verify user was created successfully
+            assert result is not None
+            assert result.email == user_data["email"]
+            assert result.first_name == user_data["name"]
+
+            # Verify database operations
+            mock_db.execute.assert_called_once()
+            mock_db.add.assert_called_once()
+            mock_db.commit.assert_called_once()
+            mock_db.refresh.assert_called_once()
+            mock_audit.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_create_user_email_exists(self):
         """Test user creation with existing email."""
         mock_db = AsyncMock()
-        
+
         user_data = {
             "email": "existing@example.com",
             "password": "ValidPassword123!",
             "name": "Test User"
         }
-        
-        with patch.object(AuthService, '_check_email_exists', return_value=True):
-            with pytest.raises(ValidationError, match="Email already registered"):
-                await AuthService.create_user(mock_db, **user_data)
+
+        # Mock database to return existing user
+        mock_existing_user = MagicMock()
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalar_one_or_none.return_value = mock_existing_user
+        mock_db.execute = AsyncMock(return_value=mock_execute_result)
+
+        # Import the actual exception type
+        from app.exceptions import ConflictError
+
+        with pytest.raises(ConflictError, match="User with this email already exists"):
+            await AuthService.create_user(mock_db, **user_data)
     
     @pytest.mark.asyncio
     async def test_create_user_weak_password(self):
@@ -150,7 +163,7 @@ class TestUserManagement:
             "name": "Test User"
         }
         
-        with pytest.raises(ValidationError, match="Password must be"):
+        with pytest.raises(ValueError, match="Password must be"):
             await AuthService.create_user(mock_db, **user_data)
     
     @pytest.mark.asyncio
@@ -166,9 +179,18 @@ class TestUserManagement:
         mock_user.email = email
         mock_user.password_hash = hashed_password
         mock_user.is_active = True
-        mock_user.email_verified = True
+        mock_user.is_suspended = False
+        mock_user.id = "user_123"
+        mock_user.tenant_id = "tenant_123"
         
-        with patch.object(AuthService, '_get_user_by_email', return_value=mock_user):
+        # Mock database to return the user
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalar_one_or_none.return_value = mock_user
+        mock_db.execute = AsyncMock(return_value=mock_execute_result)
+        mock_db.commit = AsyncMock()
+        
+        # Mock the audit log creation
+        with patch.object(AuthService, 'create_audit_log', new_callable=AsyncMock):
             result = await AuthService.authenticate_user(mock_db, email, password)
             
             assert result == mock_user
@@ -178,9 +200,13 @@ class TestUserManagement:
         """Test authentication with non-existent user."""
         mock_db = AsyncMock()
         
-        with patch.object(AuthService, '_get_user_by_email', return_value=None):
-            with pytest.raises(AuthenticationError, match="Invalid credentials"):
-                await AuthService.authenticate_user(mock_db, "nonexistent@example.com", "password")
+        # Mock database to return no user
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_execute_result)
+        
+        result = await AuthService.authenticate_user(mock_db, "nonexistent@example.com", "password")
+        assert result is None
     
     @pytest.mark.asyncio
     async def test_authenticate_user_wrong_password(self):
@@ -196,11 +222,19 @@ class TestUserManagement:
         mock_user.email = email
         mock_user.password_hash = hashed_password
         mock_user.is_active = True
-        mock_user.email_verified = True
+        mock_user.is_suspended = False
+        mock_user.id = "user_123"
+        mock_user.tenant_id = "tenant_123"
         
-        with patch.object(AuthService, '_get_user_by_email', return_value=mock_user):
-            with pytest.raises(AuthenticationError, match="Invalid credentials"):
-                await AuthService.authenticate_user(mock_db, email, wrong_password)
+        # Mock database to return the user
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalar_one_or_none.return_value = mock_user
+        mock_db.execute = AsyncMock(return_value=mock_execute_result)
+        
+        # Mock the audit log creation
+        with patch.object(AuthService, 'create_audit_log', new_callable=AsyncMock):
+            result = await AuthService.authenticate_user(mock_db, email, wrong_password)
+            assert result is None
     
     @pytest.mark.asyncio
     async def test_authenticate_user_inactive(self):
@@ -215,11 +249,17 @@ class TestUserManagement:
         mock_user.email = email
         mock_user.password_hash = hashed_password
         mock_user.is_active = False
-        mock_user.email_verified = True
+        mock_user.is_suspended = False
+        mock_user.id = "user_123"
+        mock_user.tenant_id = "tenant_123"
         
-        with patch.object(AuthService, '_get_user_by_email', return_value=mock_user):
-            with pytest.raises(AuthenticationError, match="Account is inactive"):
-                await AuthService.authenticate_user(mock_db, email, password)
+        # Mock database to return the user
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalar_one_or_none.return_value = mock_user
+        mock_db.execute = AsyncMock(return_value=mock_execute_result)
+        
+        result = await AuthService.authenticate_user(mock_db, email, password)
+        assert result is None
 
 
 class TestSessionManagement:
@@ -230,28 +270,40 @@ class TestSessionManagement:
         """Test successful session creation."""
         mock_db = AsyncMock()
         mock_redis = AsyncMock()
-        
+
         mock_user = MagicMock()
-        mock_user.id = "user_123"
-        mock_user.tenant_id = "tenant_123"
-        
+        mock_user.id = UUID("12345678-1234-5678-9012-123456789abc")
+        mock_user.tenant_id = UUID("87654321-4321-8765-2109-876543210def")
+
+        # Mock Session model
         mock_session = MagicMock()
-        mock_session.id = "session_123"
-        mock_session.access_token = "access_token_123"
-        mock_session.refresh_token = "refresh_token_123"
-        
-        with patch('app.services.auth_service.get_redis', return_value=mock_redis), \
-             patch('app.services.auth_service.Session', return_value=mock_session), \
-             patch.object(AuthService, '_generate_tokens') as mock_generate:
-            
-            mock_generate.return_value = ("access_token_123", "refresh_token_123")
-            
+        mock_session.id = UUID("12345678-1234-5678-9012-123456789012")
+
+        # Mock the dependencies
+        with patch('app.services.auth_service.get_redis', new_callable=AsyncMock) as mock_get_redis, \
+             patch('app.services.auth_service.Session') as mock_session_class, \
+             patch('app.services.auth_service.SessionStore') as mock_session_store_class, \
+             patch.object(AuthService, 'create_access_token') as mock_create_access, \
+             patch.object(AuthService, 'create_refresh_token') as mock_create_refresh:
+
+            mock_get_redis.return_value = mock_redis
+            mock_session_class.return_value = mock_session
+            mock_session_store = MagicMock()
+            mock_session_store.set = AsyncMock()
+            mock_session_store_class.return_value = mock_session_store
+
+            # Mock token creation
+            mock_create_access.return_value = ("access_token_123", "access_jti_123", datetime.utcnow() + timedelta(hours=1))
+            mock_create_refresh.return_value = ("refresh_token_123", "refresh_jti_123", "family_123", datetime.utcnow() + timedelta(days=30))
+
             mock_db.add = MagicMock()
             mock_db.commit = AsyncMock()
             mock_db.refresh = AsyncMock()
-            
-            access_token, refresh_token, session = await AuthService.create_session(mock_db, mock_user)
-            
+
+            access_token, refresh_token, session = await AuthService.create_session(
+                mock_db, mock_user, ip_address="127.0.0.1", user_agent="test-agent"
+            )
+
             assert access_token == "access_token_123"
             assert refresh_token == "refresh_token_123"
             assert session == mock_session

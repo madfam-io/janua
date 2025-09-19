@@ -10,7 +10,8 @@ const mockRouter = {
   replace: jest.fn(),
 };
 
-jest.mock('../hooks/usePlinto', () => ({
+jest.mock('../provider', () => ({
+  ...jest.requireActual('../provider'),
   usePlinto: () => ({
     signIn: mockSignIn,
     isLoading: false,
