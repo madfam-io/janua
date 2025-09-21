@@ -1,10 +1,10 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { developer-experience } from './developer-experience'
+import { DeveloperExperience } from './developer-experience'
 
-describe('developer-experience', () => {
+describe('DeveloperExperience', () => {
   it('should render without crashing', () => {
-    render(<developer-experience />)
-    expect(screen.getByTestId('developer-experience')).toBeInTheDocument()
+    render(<DeveloperExperience />)
+    expect(screen.getByText('Ship authentication in minutes, not days')).toBeInTheDocument()
   })
 })

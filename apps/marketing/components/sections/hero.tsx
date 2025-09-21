@@ -8,7 +8,7 @@ import Link from 'next/link'
 
 export function HeroSection() {
   const [currentMetric, setCurrentMetric] = useState(0)
-  
+
   const metrics = [
     { value: '<30ms', label: 'Edge Verification', icon: Zap },
     { value: '5 min', label: 'Integration Time', icon: ArrowRight },
@@ -127,7 +127,7 @@ export function HeroSection() {
           <div className="relative bg-gray-900 rounded-2xl shadow-2xl p-8 overflow-hidden">
             {/* Code preview */}
             <div className="font-mono text-sm">
-              <div className="text-gray-500">// 5-minute integration</div>
+              <div className="text-gray-500">{'// 5-minute integration'}</div>
               <div className="mt-2">
                 <span className="text-blue-400">import</span>
                 <span className="text-white"> {'{ '}</span>
@@ -158,7 +158,7 @@ export function HeroSection() {
                 <span className="text-white">)</span>
               </div>
               <div className="mt-4 text-gray-500">
-                // Authentication ready. Ship it! 🚀
+                {'// Authentication ready. Ship it! 🚀'}
               </div>
             </div>
 

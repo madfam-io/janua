@@ -1,10 +1,10 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { pricing-preview } from './pricing-preview'
+import { PricingPreview } from './pricing-preview'
 
-describe('pricing-preview', () => {
+describe('PricingPreview', () => {
   it('should render without crashing', () => {
-    render(<pricing-preview />)
-    expect(screen.getByTestId('pricing-preview')).toBeInTheDocument()
+    render(<PricingPreview />)
+    expect(screen.getByText('Scale with confidence,')).toBeInTheDocument()
   })
 })

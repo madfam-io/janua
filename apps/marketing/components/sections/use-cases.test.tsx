@@ -1,10 +1,10 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { use-cases } from './use-cases'
+import { UseCases } from './use-cases'
 
-describe('use-cases', () => {
+describe('UseCases', () => {
   it('should render without crashing', () => {
-    render(<use-cases />)
-    expect(screen.getByTestId('use-cases')).toBeInTheDocument()
+    render(<UseCases />)
+    expect(screen.getByText('Built for every')).toBeInTheDocument()
   })
 })
