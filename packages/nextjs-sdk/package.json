@@ -7,24 +7,24 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     },
     "./app": {
-      "require": "./dist/app/index.js",
+      "types": "./dist/app/index.d.ts",
       "import": "./dist/app/index.mjs",
-      "types": "./dist/app/index.d.ts"
+      "require": "./dist/app/index.js"
     },
     "./pages": {
-      "require": "./dist/pages/index.js",
+      "types": "./dist/pages/index.d.ts",
       "import": "./dist/pages/index.mjs",
-      "types": "./dist/pages/index.d.ts"
+      "require": "./dist/pages/index.js"
     },
     "./middleware": {
-      "require": "./dist/middleware.js",
+      "types": "./dist/middleware.d.ts",
       "import": "./dist/middleware.mjs",
-      "types": "./dist/middleware.d.ts"
+      "require": "./dist/middleware.js"
     }
   },
   "files": [
@@ -74,7 +74,7 @@
     "next": "^14.0.0",
     "react": "^18.0.0",
     "tsup": "^8.0.0",
-    "typescript": "^5.0.0",
+    "typescript": "^5.3.0",
     "vitest": "^1.0.0"
   },
   "engines": {
