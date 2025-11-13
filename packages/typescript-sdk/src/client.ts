@@ -8,7 +8,8 @@ import type {
   SdkEventType,
   SdkEventHandler,
   User,
-  TokenResponse
+  TokenResponse,
+  Environment
 } from './types';
 import { HttpClient, createHttpClient } from './http-client';
 import { TokenManager, EnvUtils, EventEmitter } from './utils';
@@ -95,17 +96,17 @@ export class PlintoClient extends EventEmitter<SdkEventMap> {
       throw new ConfigurationError('baseURL is required');
     }
 
-    // Set defaults
-    const defaults: Required<PlintoConfig> = {
+    // Set defaults (exclude optional fields from Required type to avoid type conflicts)
+    const defaults = {
       baseURL: '',
-      apiKey: undefined,
+      apiKey: '',
       timeout: 30000,
       retryAttempts: 3,
       retryDelay: 1000,
-      environment: EnvUtils.isBrowser() ? 'browser' : 'node',
+      environment: 'development' as Environment,
       debug: false,
       autoRefreshTokens: true,
-      tokenStorage: 'localStorage',
+      tokenStorage: 'localStorage' as const,
       customStorage: undefined
     };
 
