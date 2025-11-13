@@ -40,20 +40,20 @@ test.describe('Marketing Site Functionality', () => {
   });
 
   test('Interactive components work', async ({ page }) => {
-    // Test SDK tabs
-    const typescriptTab = page.locator('button:has-text("TypeScript")');
+    // Test SDK tabs (use role selector to be more specific)
+    const typescriptTab = page.getByRole('tab', { name: 'TypeScript' });
     if (await typescriptTab.isVisible()) {
       await typescriptTab.click();
     }
-    
+
     // Test pricing toggle (if exists)
-    const monthlyButton = page.locator('button:has-text("Monthly")');
+    const monthlyButton = page.locator('button:has-text("Monthly")').first();
     if (await monthlyButton.isVisible()) {
       await monthlyButton.click();
     }
-    
+
     // Test comparison filters
-    const allFilter = page.locator('button:has-text("All")');
+    const allFilter = page.locator('button:has-text("All")').first();
     if (await allFilter.isVisible()) {
       await allFilter.click();
     }
