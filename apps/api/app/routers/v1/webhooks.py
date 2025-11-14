@@ -159,8 +159,8 @@ async def create_webhook_endpoint(
     
     # Add user association
     endpoint.user_id = current_user.id
-    db.commit()
-    db.refresh(endpoint)
+    await db.commit()
+    await db.refresh(endpoint)
     
     return endpoint
 
@@ -364,8 +364,8 @@ async def regenerate_webhook_secret(
     endpoint.secret = new_secret
     endpoint.updated_at = datetime.utcnow()
     
-    db.commit()
-    db.refresh(endpoint)
+    await db.commit()
+    await db.refresh(endpoint)
     
     return endpoint
 

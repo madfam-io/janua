@@ -115,8 +115,8 @@ async def update_current_user_profile(
     if request.user_metadata is not None:
         current_user.user_metadata = request.user_metadata
     
-    db.commit()
-    db.refresh(current_user)
+    await db.commit()
+    await db.refresh(current_user)
     
     return UserResponse(
         id=str(current_user.id),
@@ -174,7 +174,7 @@ async def upload_avatar(
     # Update user profile
     avatar_url = f"/uploads/avatars/{unique_filename}"
     current_user.profile_image_url = avatar_url
-    db.commit()
+    await db.commit()
     
     return {"profile_image_url": avatar_url}
 
@@ -197,7 +197,7 @@ async def delete_avatar(
         
         # Clear avatar URL
         current_user.profile_image_url = None
-        db.commit()
+        await db.commit()
     
     return {"message": "Avatar deleted successfully"}
 
@@ -384,7 +384,7 @@ async def delete_current_user(
         UserSession.user_id == current_user.id
     ).update({"revoked": True})
     
-    db.commit()
+    await db.commit()
     
     return {"message": "Account deleted successfully"}
 
@@ -426,7 +426,7 @@ async def suspend_user(
         user.user_metadata["suspended_at"] = datetime.utcnow().isoformat()
         user.user_metadata["suspended_by"] = str(current_user.id)
     
-    db.commit()
+    await db.commit()
     
     return {"message": "User suspended successfully"}
 
@@ -466,6 +466,6 @@ async def reactivate_user(
         user.user_metadata["reactivated_at"] = datetime.utcnow().isoformat()
         user.user_metadata["reactivated_by"] = str(current_user.id)
     
-    db.commit()
+    await db.commit()
     
     return {"message": "User reactivated successfully"}

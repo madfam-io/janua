@@ -225,8 +225,8 @@ async def update_invitation(
     if update_data.expires_at is not None:
         invitation.expires_at = update_data.expires_at
     
-    db.commit()
-    db.refresh(invitation)
+    await db.commit()
+    await db.refresh(invitation)
     
     return InvitationResponse(
         id=str(invitation.id),

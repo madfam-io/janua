@@ -504,17 +504,18 @@ def mock_database_dependency():
                 if hasattr(obj, 'is_active') and obj.is_active is None:
                     obj.is_active = True
 
-            def mock_refresh(obj):
-                """Dual-mode refresh that works sync and async"""
+            async def mock_refresh(obj):
+                """Async refresh that populates object fields"""
                 populate_object_fields(obj)
-                return async_noop()  # Returns awaitable
+                return None
 
             mock_session = MagicMock()
             mock_session.add = MagicMock(return_value=None)
-            mock_session.commit = MagicMock(return_value=async_noop())  # Returns awaitable
-            mock_session.refresh = MagicMock(side_effect=mock_refresh)  # Dual-mode
-            mock_session.rollback = MagicMock(return_value=async_noop())
-            mock_session.close = MagicMock(return_value=async_noop())
+            # Use AsyncMock for async operations - it creates new coroutines each call
+            mock_session.commit = AsyncMock(return_value=None)
+            mock_session.refresh = AsyncMock(side_effect=mock_refresh)
+            mock_session.rollback = AsyncMock(return_value=None)
+            mock_session.close = AsyncMock(return_value=None)
             mock_session.execute = AsyncMock()  # Pure async
             mock_session.scalar = AsyncMock()  # Pure async
             mock_session.scalars = AsyncMock()  # Pure async

@@ -279,7 +279,7 @@ async def refresh_session(
     
     # Update last activity
     session.last_activity_at = datetime.utcnow()
-    db.commit()
+    await db.commit()
     
     return {"message": "Session refreshed successfully"}
 

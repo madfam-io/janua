@@ -345,7 +345,7 @@ async def unlink_oauth_account(
         )
         db.add(activity)
         
-        db.commit()
+        await db.commit()
         
         return {
             "message": f"{provider} account unlinked successfully",

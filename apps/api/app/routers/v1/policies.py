@@ -51,8 +51,8 @@ async def create_policy(
     )
     
     db.add(policy)
-    db.commit()
-    db.refresh(policy)
+    await db.commit()
+    await db.refresh(policy)
     
     # Log audit event
     audit_logger = AuditLogger(db)
@@ -155,8 +155,8 @@ async def update_policy(
     # Increment version
     policy.version += 1
     
-    db.commit()
-    db.refresh(policy)
+    await db.commit()
+    await db.refresh(policy)
     
     # Clear cache for this policy
     cache = CacheService()
@@ -209,7 +209,7 @@ async def delete_policy(
     
     # Delete the policy
     db.delete(policy)
-    db.commit()
+    await db.commit()
     
     # Clear cache
     cache = CacheService()
@@ -295,8 +295,8 @@ async def create_role(
     )
     
     db.add(role)
-    db.commit()
-    db.refresh(role)
+    await db.commit()
+    await db.refresh(role)
     
     # Log audit event
     audit_logger = AuditLogger(db)
@@ -388,7 +388,7 @@ async def assign_role_to_user(
     )
     
     db.add(user_role)
-    db.commit()
+    await db.commit()
     
     # Clear permission cache for user
     cache = CacheService()
@@ -436,7 +436,7 @@ async def unassign_role_from_user(
     
     # Delete assignment
     db.delete(user_role)
-    db.commit()
+    await db.commit()
     
     # Clear permission cache for user
     cache = CacheService()

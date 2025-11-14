@@ -179,7 +179,7 @@ async def enable_mfa(
     )
     db.add(activity)
     
-    db.commit()
+    await db.commit()
     
     return MFAEnableResponse(
         secret=secret,
@@ -216,7 +216,7 @@ async def verify_mfa(
     )
     db.add(activity)
     
-    db.commit()
+    await db.commit()
     
     return {"message": "MFA successfully enabled"}
 
@@ -273,7 +273,7 @@ async def disable_mfa(
     )
     db.add(activity)
     
-    db.commit()
+    await db.commit()
     
     return {"message": "MFA successfully disabled"}
 
@@ -312,7 +312,7 @@ async def regenerate_backup_codes(
     )
     db.add(activity)
     
-    db.commit()
+    await db.commit()
     
     return MFABackupCodesResponse(
         backup_codes=backup_codes,
@@ -341,7 +341,7 @@ async def validate_mfa_code(
             details={"method": "totp"}
         )
         db.add(activity)
-        db.commit()
+        await db.commit()
         
         return {"valid": True, "message": "Code is valid"}
     
@@ -376,7 +376,7 @@ async def validate_mfa_code(
                     details={"code_index": i}
                 )
                 db.add(activity)
-                db.commit()
+                await db.commit()
                 
                 return {"valid": True, "message": "Backup code is valid (now consumed)"}
     
@@ -447,7 +447,7 @@ async def initiate_mfa_recovery(
         details={"method": "email"}
     )
     db.add(activity)
-    db.commit()
+    await db.commit()
     
     return {"message": "If MFA is enabled, recovery instructions have been sent"}
 

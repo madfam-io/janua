@@ -335,7 +335,7 @@ async def update_user_admin(
         if request.email_verified:
             user.email_verified_at = datetime.utcnow()
     
-    db.commit()
+    await db.commit()
     
     return {"message": "User updated successfully"}
 
@@ -376,7 +376,7 @@ async def delete_user_admin(
             UserSession.user_id == user.id
         ).update({"revoked": True})
     
-    db.commit()
+    await db.commit()
     
     return {"message": f"User {'permanently' if permanent else 'soft'} deleted"}
 
@@ -456,7 +456,7 @@ async def delete_organization_admin(
     
     # Delete organization (cascade will handle related records)
     db.delete(org)
-    db.commit()
+    await db.commit()
     
     return {"message": "Organization deleted successfully"}
 
@@ -545,7 +545,7 @@ async def revoke_all_sessions_admin(
             UserSession.revoked == False
         ).update({"revoked": True})
     
-    db.commit()
+    await db.commit()
     
     return {"message": f"Revoked {count} sessions"}
 

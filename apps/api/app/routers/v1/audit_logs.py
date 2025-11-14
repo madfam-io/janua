@@ -485,7 +485,7 @@ async def cleanup_old_audit_logs(
         )
     ).delete()
     
-    db.commit()
+    await db.commit()
     
     # Log cleanup action
     audit_logger = AuditLogger(db)

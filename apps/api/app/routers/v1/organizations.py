@@ -207,8 +207,8 @@ async def create_organization(
         )
     )
     
-    db.commit()
-    db.refresh(org)
+    await db.commit()
+    await db.refresh(org)
     
     # Get member count
     member_count = db.query(func.count(organization_members.c.user_id)).filter(
@@ -344,8 +344,8 @@ async def update_organization(
     if request.settings is not None:
         org.settings = request.settings
     
-    db.commit()
-    db.refresh(org)
+    await db.commit()
+    await db.refresh(org)
     
     member_count = db.query(func.count(organization_members.c.user_id)).filter(
         organization_members.c.organization_id == org.id
@@ -394,7 +394,7 @@ async def delete_organization(
     
     # Delete organization (cascade will handle related records)
     db.delete(org)
-    db.commit()
+    await db.commit()
     
     return {"message": "Organization deleted successfully"}
 
@@ -476,7 +476,7 @@ async def update_member_role(
         ).values(role=role)
     )
     
-    db.commit()
+    await db.commit()
     
     return {"message": "Role updated successfully"}
 
@@ -511,7 +511,7 @@ async def remove_member(
         )
     )
     
-    db.commit()
+    await db.commit()
     
     return {"message": "Member removed successfully"}
 
@@ -573,7 +573,7 @@ async def invite_member(
     )
     
     db.add(invitation)
-    db.commit()
+    await db.commit()
     
     # Send invitation email
     # TODO: Implement email sending
@@ -607,7 +607,7 @@ async def accept_invitation(
     # Check expiration
     if invitation.expires_at < datetime.utcnow():
         invitation.status = "expired"
-        db.commit()
+        await db.commit()
         raise HTTPException(status_code=400, detail="Invitation has expired")
     
     # Check email match
@@ -641,7 +641,7 @@ async def accept_invitation(
     invitation.status = "accepted"
     invitation.accepted_at = datetime.utcnow()
     
-    db.commit()
+    await db.commit()
     
     # Get organization details
     org = db.query(Organization).filter(
@@ -734,7 +734,7 @@ async def revoke_invitation(
         raise HTTPException(status_code=400, detail="Can only revoke pending invitations")
     
     db.delete(invitation)
-    db.commit()
+    await db.commit()
     
     return {"message": "Invitation revoked successfully"}
 
@@ -775,8 +775,8 @@ async def create_custom_role(
     )
     
     db.add(role)
-    db.commit()
-    db.refresh(role)
+    await db.commit()
+    await db.refresh(role)
     
     return RoleResponse(
         id=str(role.id),
@@ -894,7 +894,7 @@ async def delete_custom_role(
     # TODO: Check if role is in use by any members
     
     db.delete(role)
-    db.commit()
+    await db.commit()
     
     return {"message": "Role deleted successfully"}
 
@@ -945,6 +945,6 @@ async def transfer_ownership(
         ).values(role=OrganizationRole.ADMIN)
     )
     
-    db.commit()
+    await db.commit()
     
     return {"message": "Ownership transferred successfully"}

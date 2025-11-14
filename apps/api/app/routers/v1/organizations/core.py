@@ -66,8 +66,8 @@ async def create_organization(
         )
     )
 
-    db.commit()
-    db.refresh(org)
+    await db.commit()
+    await db.refresh(org)
 
     # Get member count
     member_count = db.query(func.count(organization_members.c.user_id)).filter(
@@ -207,8 +207,8 @@ async def update_organization(
 
     organization.updated_at = datetime.utcnow()
 
-    db.commit()
-    db.refresh(organization)
+    await db.commit()
+    await db.refresh(organization)
 
     # Get member count
     member_count = db.query(func.count(organization_members.c.user_id)).filter(
@@ -246,7 +246,7 @@ async def delete_organization(
 
     # Delete organization (this will cascade to members via foreign key)
     db.delete(organization)
-    db.commit()
+    await db.commit()
 
     return {"success": True, "message": "Organization deleted successfully"}
 

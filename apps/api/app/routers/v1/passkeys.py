@@ -131,7 +131,7 @@ async def get_registration_options(
     if not current_user.user_metadata:
         current_user.user_metadata = {}
     current_user.user_metadata["webauthn_challenge"] = challenge
-    db.commit()
+    await db.commit()
     
     # Convert to JSON-serializable format
     return {
@@ -227,7 +227,7 @@ async def verify_registration(
     )
     db.add(activity)
     
-    db.commit()
+    await db.commit()
     
     return {
         "verified": True,
@@ -361,7 +361,7 @@ async def verify_authentication(
     )
     db.add(activity)
     
-    db.commit()
+    await db.commit()
     
     return {
         "verified": True,
@@ -423,8 +423,8 @@ async def update_passkey(
         raise HTTPException(status_code=404, detail="Passkey not found")
     
     passkey.name = request.name
-    db.commit()
-    db.refresh(passkey)
+    await db.commit()
+    await db.refresh(passkey)
     
     return PasskeyResponse(
         id=str(passkey.id),
@@ -472,7 +472,7 @@ async def delete_passkey(
     db.add(activity)
     
     db.delete(passkey)
-    db.commit()
+    await db.commit()
     
     return {"message": "Passkey deleted successfully"}
 

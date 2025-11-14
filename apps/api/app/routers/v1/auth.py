@@ -121,7 +121,7 @@ class SignInResponse(BaseModel):
 # Helper functions (get_current_user moved to app.dependencies)
 
 
-def log_activity(db: Session, user_id: str, action: str, details: Dict = None, request: Request = None):
+async def log_activity(db: Session, user_id: str, action: str, details: Dict = None, request: Request = None):
     """Log user activity"""
     activity = ActivityLog(
         user_id=user_id,
@@ -131,7 +131,7 @@ def log_activity(db: Session, user_id: str, action: str, details: Dict = None, r
         user_agent=request.headers.get('user-agent') if request else None
     )
     db.add(activity)
-    db.commit()
+    await db.commit()
 
 
 # Authentication endpoints
@@ -173,8 +173,8 @@ async def sign_up(
         status=UserStatus.ACTIVE
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     
     # Create session
     access_token, refresh_token, session = await AuthService.create_session(
@@ -184,7 +184,7 @@ async def sign_up(
     )
     
     # Log activity
-    log_activity(db, str(user.id), "signup", {"method": "email"}, req)
+    await log_activity(db, str(user.id), "signup", {"method": "email"}, req)
     
     # Send verification email in background
     if settings.EMAIL_ENABLED:
@@ -196,7 +196,7 @@ async def sign_up(
             expires_at=datetime.utcnow() + timedelta(hours=48)
         )
         db.add(verification)
-        db.commit()
+        await db.commit()
         
         background_tasks.add_task(
             EmailService.send_verification_email,
@@ -260,7 +260,7 @@ async def sign_in(
     )
 
     # Log activity
-    log_activity(db, str(user.id), "signin", {"method": "password"}, req)
+    await log_activity(db, str(user.id), "signin", {"method": "password"}, req)
 
     return SignInResponse(
         user=UserResponse(
@@ -346,7 +346,7 @@ async def sign_out(
             AuthService.revoke_session(db, str(session.id))
     
     # Log activity
-    log_activity(db, str(current_user.id), "signout", {})
+    await log_activity(db, str(current_user.id), "signout", {})
     
     return {"message": "Successfully signed out"}
 
@@ -392,7 +392,7 @@ async def forgot_password(
             expires_at=datetime.utcnow() + timedelta(hours=1)
         )
         db.add(reset)
-        db.commit()
+        await db.commit()
         
         # Send email in background
         background_tasks.add_task(
@@ -433,10 +433,10 @@ async def reset_password(
     reset.used = True
     reset.used_at = datetime.utcnow()
     
-    db.commit()
+    await db.commit()
     
     # Log activity
-    log_activity(db, str(user.id), "password_reset", {})
+    await log_activity(db, str(user.id), "password_reset", {})
     
     return {"message": "Password successfully reset"}
 
@@ -459,10 +459,10 @@ async def change_password(
     
     # Update password
     current_user.password_hash = AuthService.hash_password(request.new_password)
-    db.commit()
+    await db.commit()
     
     # Log activity
-    log_activity(db, str(current_user.id), "password_change", {})
+    await log_activity(db, str(current_user.id), "password_change", {})
     
     return {"message": "Password successfully changed"}
 
@@ -502,10 +502,10 @@ async def verify_email(
     verification.verified = True
     verification.verified_at = datetime.utcnow()
     
-    db.commit()
+    await db.commit()
     
     # Log activity
-    log_activity(db, str(user.id), "email_verified", {})
+    await log_activity(db, str(user.id), "email_verified", {})
     
     return {"message": "Email successfully verified"}
 
@@ -534,7 +534,7 @@ async def resend_verification_email(
         expires_at=datetime.utcnow() + timedelta(hours=48)
     )
     db.add(verification)
-    db.commit()
+    await db.commit()
     
     # Send email in background
     background_tasks.add_task(
@@ -575,8 +575,8 @@ async def send_magic_link(
             status=UserStatus.ACTIVE
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
     
     # Create magic link token
     magic_token = secrets.token_urlsafe(32)
@@ -587,7 +587,7 @@ async def send_magic_link(
         expires_at=datetime.utcnow() + timedelta(minutes=15)
     )
     db.add(magic_link)
-    db.commit()
+    await db.commit()
     
     # Send email in background
     background_tasks.add_task(
@@ -638,7 +638,7 @@ async def verify_magic_link(
     )
     
     # Log activity
-    log_activity(db, str(user.id), "signin", {"method": "magic_link"}, req)
+    await log_activity(db, str(user.id), "signin", {"method": "magic_link"}, req)
     
     return SignInResponse(
         user=UserResponse(
