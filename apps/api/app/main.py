@@ -158,14 +158,12 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # Add GLOBAL RATE LIMITING for 100% endpoint coverage
 # This ensures ALL endpoints have rate limiting, not just those with @limiter.limit decorators
-# Temporarily disabled due to FastAPI version compatibility issue
-# redis_url = os.getenv("REDIS_URL", settings.REDIS_URL if hasattr(settings, 'REDIS_URL') else None)
-# app.add_middleware(create_rate_limit_middleware(app, redis_url))
+redis_url = os.getenv("REDIS_URL", settings.REDIS_URL if hasattr(settings, 'REDIS_URL') else None)
+app.add_middleware(create_rate_limit_middleware(app, redis_url))
 
 # Add COMPREHENSIVE INPUT VALIDATION for all endpoints
 # This provides defense-in-depth against injection attacks and malformed input
-# Temporarily disabled due to FastAPI version compatibility issue
-# app.add_middleware(create_input_validation_middleware(app, strict_mode=not settings.DEBUG))
+app.add_middleware(create_input_validation_middleware(app, strict_mode=not settings.DEBUG))
 
 # Add tenant context middleware for multi-tenancy
 app.add_middleware(TenantMiddleware)
@@ -606,6 +604,26 @@ for router_name, router_module in enterprise_routers.items():
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Plinto API...")
+
+    # CRITICAL: Validate SECRET_KEY in production
+    if settings.ENVIRONMENT == "production":
+        default_secret = "development-secret-key-change-in-production"
+        if settings.SECRET_KEY == default_secret:
+            logger.critical("FATAL: Using default SECRET_KEY in production! This is a critical security vulnerability.")
+            raise RuntimeError(
+                "Production deployment detected with default SECRET_KEY. "
+                "Set SECRET_KEY environment variable to a secure random value. "
+                "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+            )
+        logger.info("✅ SECRET_KEY validation passed")
+
+    # Validate JWT_SECRET_KEY if set
+    if hasattr(settings, 'JWT_SECRET_KEY') and settings.JWT_SECRET_KEY:
+        if settings.ENVIRONMENT == "production" and len(settings.JWT_SECRET_KEY) < 32:
+            logger.critical("FATAL: JWT_SECRET_KEY too weak for production (minimum 32 characters)")
+            raise RuntimeError("JWT_SECRET_KEY must be at least 32 characters in production")
+        logger.info("✅ JWT_SECRET_KEY validation passed")
+
     try:
         await init_database()
         logger.info("Database manager initialized successfully")

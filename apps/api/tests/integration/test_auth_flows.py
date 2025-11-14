@@ -29,7 +29,8 @@ class TestAuthenticationFlows:
         """Setup before each test."""
         self.client = AsyncClient(app=app, base_url="http://test")
 
-    def test_auth_router_registration_and_mounting(self):
+    @pytest.mark.asyncio
+    async def test_auth_router_registration_and_mounting(self):
         """Test that auth routers are properly mounted and accessible."""
         # This covers app/routers/v1/auth.py router mounting
 
@@ -44,11 +45,12 @@ class TestAuthenticationFlows:
         ]
 
         for endpoint in auth_endpoints:
-            response = await client.post(endpoint, json={})
+            response = await self.client.post(endpoint, json={})
             # Router should be mounted and endpoint should exist
             assert response.status_code in [200, 400, 401, 422, 429]
 
-    def test_user_registration_flow(self):
+    @pytest.mark.asyncio
+    async def test_user_registration_flow(self):
         """Test complete user registration process."""
         # This covers app/routers/v1/auth.py registration logic
 
@@ -68,12 +70,13 @@ class TestAuthenticationFlows:
                 "name": "Test User"
             }
 
-            response = await client.post("/api/v1/auth/register", json=registration_payload)
+            response = await self.client.post("/api/v1/auth/register", json=registration_payload)
 
             # Registration should execute
             assert response.status_code in [200, 201, 400, 422]
 
-    def test_user_login_flow(self):
+    @pytest.mark.asyncio
+    async def test_user_login_flow(self):
         """Test complete user login process with JWT generation."""
         # This covers app/routers/v1/auth.py login logic and JWT service
 
@@ -94,12 +97,13 @@ class TestAuthenticationFlows:
                 "password": "TestPassword123!"
             }
 
-            response = await client.post("/api/v1/auth/login", json=login_payload)
+            response = await self.client.post("/api/v1/auth/login", json=login_payload)
 
             # Login should execute JWT creation flow
             assert response.status_code in [200, 400, 401, 422]
 
-    def test_jwt_token_validation_flow(self):
+    @pytest.mark.asyncio
+    async def test_jwt_token_validation_flow(self):
         """Test JWT token validation and verification."""
         # This covers app/services/jwt_service.py validation logic
 
@@ -117,7 +121,7 @@ class TestAuthenticationFlows:
             }
 
             # Test protected endpoint with valid token
-            response = await client.get(
+            response = await self.client.get(
                 "/api/v1/users/me",
                 headers={"Authorization": "Bearer fake-valid-token"}
             )
@@ -125,7 +129,8 @@ class TestAuthenticationFlows:
             # JWT validation should execute
             assert response.status_code in [200, 401, 403, 404, 422]
 
-    def test_refresh_token_flow(self):
+    @pytest.mark.asyncio
+    async def test_refresh_token_flow(self):
         """Test refresh token exchange for new access tokens."""
         # This covers JWT refresh logic in auth service
 
@@ -142,12 +147,13 @@ class TestAuthenticationFlows:
                 "refresh_token": "valid-refresh-token"
             }
 
-            response = await client.post("/api/v1/auth/refresh", json=refresh_payload)
+            response = await self.client.post("/api/v1/auth/refresh", json=refresh_payload)
 
             # Refresh token exchange should execute
             assert response.status_code in [200, 400, 401, 422]
 
-    def test_password_reset_flow(self):
+    @pytest.mark.asyncio
+    async def test_password_reset_flow(self):
         """Test complete password reset process."""
         # This covers password reset logic and email verification
 
@@ -159,7 +165,7 @@ class TestAuthenticationFlows:
 
             # Initiate password reset
             reset_request = {"email": "test@example.com"}
-            response = await client.post("/api/v1/auth/forgot-password", json=reset_request)
+            response = await self.client.post("/api/v1/auth/forgot-password", json=reset_request)
 
             assert response.status_code in [200, 400, 404, 422]
 
@@ -168,11 +174,12 @@ class TestAuthenticationFlows:
                 "token": "reset-token-123",
                 "new_password": "NewPassword123!"
             }
-            response = await client.post("/api/v1/auth/reset-password", json=reset_complete)
+            response = await self.client.post("/api/v1/auth/reset-password", json=reset_complete)
 
             assert response.status_code in [200, 400, 401, 422]
 
-    def test_email_verification_flow(self):
+    @pytest.mark.asyncio
+    async def test_email_verification_flow(self):
         """Test email verification process."""
         # This covers email verification logic
 
@@ -184,12 +191,13 @@ class TestAuthenticationFlows:
                 "token": "email-verification-token"
             }
 
-            response = await client.post("/api/v1/auth/verify-email", json=verification_payload)
+            response = await self.client.post("/api/v1/auth/verify-email", json=verification_payload)
 
             # Email verification should execute
             assert response.status_code in [200, 400, 401, 422]
 
-    def test_oauth_flow_initiation(self):
+    @pytest.mark.asyncio
+    async def test_oauth_flow_initiation(self):
         """Test OAuth flow initiation and callback handling."""
         # This covers app/routers/v1/oauth.py OAuth logic
 
@@ -206,7 +214,7 @@ class TestAuthenticationFlows:
             }
 
             # Test OAuth initiation
-            response = await client.get("/api/v1/oauth/google/authorize")
+            response = await self.client.get("/api/v1/oauth/google/authorize")
             assert response.status_code in [200, 302, 400, 404]
 
             # Test OAuth callback
@@ -214,10 +222,11 @@ class TestAuthenticationFlows:
                 "code": "oauth-code-123",
                 "state": "state-token"
             }
-            response = await client.post("/api/v1/oauth/google/callback", json=callback_data)
+            response = await self.client.post("/api/v1/oauth/google/callback", json=callback_data)
             assert response.status_code in [200, 400, 401, 422]
 
-    def test_session_management_flow(self):
+    @pytest.mark.asyncio
+    async def test_session_management_flow(self):
         """Test session creation, validation, and cleanup."""
         # This covers app/routers/v1/sessions.py session logic
 
@@ -238,18 +247,19 @@ class TestAuthenticationFlows:
                 "user_id": "test-user-id",
                 "device_info": "test-device"
             }
-            response = await client.post("/api/v1/sessions", json=session_data)
+            response = await self.client.post("/api/v1/sessions", json=session_data)
             assert response.status_code in [200, 201, 400, 401, 422]
 
             # Test session validation
-            response = await client.get("/api/v1/sessions/session-123")
+            response = await self.client.get("/api/v1/sessions/session-123")
             assert response.status_code in [200, 401, 404]
 
             # Test session termination
-            response = await client.delete("/api/v1/sessions/session-123")
+            response = await self.client.delete("/api/v1/sessions/session-123")
             assert response.status_code in [200, 204, 401, 404]
 
-    def test_mfa_authentication_flow(self):
+    @pytest.mark.asyncio
+    async def test_mfa_authentication_flow(self):
         """Test multi-factor authentication setup and verification."""
         # This covers app/routers/v1/mfa.py MFA logic
 
@@ -263,18 +273,19 @@ class TestAuthenticationFlows:
             mock_verify.return_value = {"valid": True}
 
             # Test MFA setup
-            response = await client.post("/api/v1/mfa/setup",
+            response = await self.client.post("/api/v1/mfa/setup",
                                       headers={"Authorization": "Bearer fake-token"})
             assert response.status_code in [200, 401, 403, 422]
 
             # Test MFA verification
             verify_data = {"code": "123456"}
-            response = await client.post("/api/v1/mfa/verify",
+            response = await self.client.post("/api/v1/mfa/verify",
                                       json=verify_data,
                                       headers={"Authorization": "Bearer fake-token"})
             assert response.status_code in [200, 400, 401, 403, 422]
 
-    def test_passkey_authentication_flow(self):
+    @pytest.mark.asyncio
+    async def test_passkey_authentication_flow(self):
         """Test WebAuthn passkey registration and authentication."""
         # This covers app/routers/v1/passkeys.py passkey logic
 
@@ -288,7 +299,7 @@ class TestAuthenticationFlows:
             mock_verify.return_value = {"credential_id": "credential-123"}
 
             # Test passkey registration initiation
-            response = await client.post("/api/v1/passkeys/register/begin",
+            response = await self.client.post("/api/v1/passkeys/register/begin",
                                       headers={"Authorization": "Bearer fake-token"})
             assert response.status_code in [200, 401, 403, 422]
 
@@ -297,7 +308,7 @@ class TestAuthenticationFlows:
                 "credential": {"id": "cred-123", "response": {}},
                 "challenge": "passkey-challenge-123"
             }
-            response = await client.post("/api/v1/passkeys/register/complete",
+            response = await self.client.post("/api/v1/passkeys/register/complete",
                                       json=reg_data,
                                       headers={"Authorization": "Bearer fake-token"})
             assert response.status_code in [200, 400, 401, 422]
@@ -318,7 +329,8 @@ class TestAuthenticationFlows:
                 # Async auth operations should execute
                 assert response.status_code in [200, 400, 401, 404, 422]
 
-    def test_auth_middleware_integration(self):
+    @pytest.mark.asyncio
+    async def test_auth_middleware_integration(self):
         """Test authentication middleware processing."""
         # This covers auth middleware and dependency injection
 
@@ -344,7 +356,7 @@ class TestAuthenticationFlows:
 
             for endpoint, method in protected_endpoints:
                 if method == "GET":
-                    response = await client.get(endpoint,
+                    response = await self.client.get(endpoint,
                                              headers={"Authorization": "Bearer fake-token"})
                 else:
                     response = self.client.request(method, endpoint,
@@ -354,7 +366,8 @@ class TestAuthenticationFlows:
                 # Auth middleware should execute
                 assert response.status_code in [200, 400, 401, 403, 404, 422]
 
-    def test_rate_limiting_on_auth_endpoints(self):
+    @pytest.mark.asyncio
+    async def test_rate_limiting_on_auth_endpoints(self):
         """Test rate limiting specifically on authentication endpoints."""
         # This covers rate limiting middleware for auth endpoints
 
@@ -369,11 +382,12 @@ class TestAuthenticationFlows:
             }
 
             for _ in range(6):  # Exceed typical rate limit
-                response = await client.post("/api/v1/auth/login", json=login_payload)
+                response = await self.client.post("/api/v1/auth/login", json=login_payload)
                 # Rate limiting should be applied
                 assert response.status_code in [200, 400, 401, 422, 429]
 
-    def test_auth_error_handling_scenarios(self):
+    @pytest.mark.asyncio
+    async def test_auth_error_handling_scenarios(self):
         """Test error handling in authentication flows."""
         # This covers error handling in auth services
 
@@ -401,11 +415,12 @@ class TestAuthenticationFlows:
         ]
 
         for scenario in error_scenarios:
-            response = await client.post(scenario["endpoint"], json=scenario["payload"])
+            response = await self.client.post(scenario["endpoint"], json=scenario["payload"])
             # Error handling should execute
             assert response.status_code in [400, 401, 422]
 
-    def test_concurrent_auth_operations(self):
+    @pytest.mark.asyncio
+    async def test_concurrent_auth_operations(self):
         """Test handling of concurrent authentication operations."""
         # This covers concurrency in auth processing
 
@@ -416,7 +431,7 @@ class TestAuthenticationFlows:
                 mock_auth.return_value = {"id": "user-123"}
 
                 login_payload = {"email": "test@example.com", "password": "Test123!"}
-                return await client.post("/api/v1/auth/login", json=login_payload)
+                return await self.client.post("/api/v1/auth/login", json=login_payload)
 
         # Create multiple threads
         threads = []
@@ -443,18 +458,20 @@ class TestAuthenticationErrorScenarios:
         """Setup before each test."""
         self.client = AsyncClient(app=app, base_url="http://test")
 
-    def test_database_failure_in_auth(self):
+    @pytest.mark.asyncio
+    async def test_database_failure_in_auth(self):
         """Test auth behavior when database is unavailable."""
         # This covers database error handling in auth flows
 
         with patch('app.database.get_db', side_effect=Exception("Database connection failed")):
             login_payload = {"email": "test@example.com", "password": "Test123!"}
-            response = await client.post("/api/v1/auth/login", json=login_payload)
+            response = await self.client.post("/api/v1/auth/login", json=login_payload)
 
             # Should handle database failures gracefully
             assert response.status_code in [500, 502, 503]
 
-    def test_jwt_service_failure(self):
+    @pytest.mark.asyncio
+    async def test_jwt_service_failure(self):
         """Test auth behavior when JWT service fails."""
         # This covers JWT service error handling
 
@@ -465,22 +482,24 @@ class TestAuthenticationErrorScenarios:
                 mock_auth.return_value = {"id": "user-123"}
 
                 login_payload = {"email": "test@example.com", "password": "Test123!"}
-                response = await client.post("/api/v1/auth/login", json=login_payload)
+                response = await self.client.post("/api/v1/auth/login", json=login_payload)
 
                 # Should handle JWT service failures
                 assert response.status_code in [500, 502, 503]
 
-    def test_external_oauth_service_failure(self):
+    @pytest.mark.asyncio
+    async def test_external_oauth_service_failure(self):
         """Test OAuth behavior when external service is unavailable."""
         # This covers external service timeout handling
 
         with patch('httpx.AsyncClient.get', side_effect=asyncio.TimeoutError("OAuth service timeout")):
-            response = await client.get("/api/v1/oauth/google/authorize")
+            response = await self.client.get("/api/v1/oauth/google/authorize")
 
             # Should handle external service failures
             assert response.status_code in [500, 502, 503, 504]
 
-    def test_email_service_failure_in_registration(self):
+    @pytest.mark.asyncio
+    async def test_email_service_failure_in_registration(self):
         """Test registration when email service fails."""
         # This covers email service error handling
 
@@ -496,7 +515,7 @@ class TestAuthenticationErrorScenarios:
                 "name": "Test User"
             }
 
-            response = await client.post("/api/v1/auth/register", json=registration_payload)
+            response = await self.client.post("/api/v1/auth/register", json=registration_payload)
 
             # Should handle email service failures gracefully
             assert response.status_code in [200, 201, 500, 502, 503]

@@ -1,4 +1,3 @@
-
 import pytest
 
 pytestmark = pytest.mark.asyncio
@@ -42,12 +41,13 @@ class TestAppLifecycle:
             mock_redis.return_value = AsyncMock()
 
             # Test startup by making a request (triggers startup events)
-            response = await client.get("/api/v1/health")
+            response = await self.client.get("/api/v1/health")
 
             # App should start successfully
             assert response.status_code in [200, 400, 503]  # 503 if health checker not initialized
 
-    def test_middleware_chain_execution(self):
+    @pytest.mark.asyncio
+    async def test_middleware_chain_execution(self):
         """Test that all middleware is properly loaded and executed."""
         # This covers app/middleware/* files by testing the full chain
 
@@ -55,17 +55,18 @@ class TestAppLifecycle:
             mock_logger.return_value.info = lambda *args, **kwargs: None
 
             # Make a request that goes through all middleware
-            response = await client.get("/api/v1/health")
+            response = await self.client.get("/api/v1/health")
 
             # Should process through middleware stack
             # Even if endpoint doesn't exist, middleware should execute
             assert response.status_code in [200, 400, 503, 404, 405]
 
-    def test_cors_middleware_configuration(self):
+    @pytest.mark.asyncio
+    async def test_cors_middleware_configuration(self):
         """Test CORS middleware configuration and execution."""
         # This covers CORS setup in app/main.py
 
-        response = self.client.options(
+        response = await self.client.options(
             "/api/v1/health",
             headers={
                 "Origin": "http://localhost:3000",
@@ -76,7 +77,8 @@ class TestAppLifecycle:
         # CORS should be configured
         assert response.status_code in [200, 400, 503, 404, 405]
 
-    def test_rate_limiting_middleware(self):
+    @pytest.mark.asyncio
+    async def test_rate_limiting_middleware(self):
         """Test rate limiting middleware functionality."""
         # This covers app/middleware/rate_limit.py
 
@@ -85,21 +87,23 @@ class TestAppLifecycle:
 
             # Make multiple rapid requests
             for _ in range(5):
-                response = await client.get("/api/v1/health")
+                response = await self.client.get("/api/v1/health")
                 # Should handle rate limiting logic even if not enforced
                 assert response.status_code in [200, 503, 404, 405, 429]
 
-    def test_security_headers_middleware(self):
+    @pytest.mark.asyncio
+    async def test_security_headers_middleware(self):
         """Test security headers middleware."""
         # This covers app/middleware/security_headers.py
 
-        response = await client.get("/api/status")
+        response = await self.client.get("/api/status")
 
         # Check for security headers (if implemented)
         # Even if headers aren't set, code should execute
         assert response.status_code in [200, 400, 404, 405]
 
-    def test_logging_middleware_execution(self):
+    @pytest.mark.asyncio
+    async def test_logging_middleware_execution(self):
         """Test logging middleware execution."""
         # This covers app/middleware/logging_middleware.py
 
@@ -107,7 +111,7 @@ class TestAppLifecycle:
             mock_logger.return_value.info = lambda *args, **kwargs: None
             mock_logger.return_value.error = lambda *args, **kwargs: None
 
-            response = await client.get("/api/v1/health")
+            response = await self.client.get("/api/v1/health")
 
             # Logging middleware should execute
             assert response.status_code in [200, 400, 503, 404, 405]
@@ -122,7 +126,7 @@ class TestAppLifecycle:
             mock_engine.dispose = AsyncMock()
 
             # Test database health
-            response = await client.get("/api/v1/health")
+            response = await self.client.get("/api/v1/health")
 
             # Health check should execute
             assert response.status_code in [200, 400, 503, 404, 500]
@@ -138,12 +142,13 @@ class TestAppLifecycle:
             mock_redis.return_value = mock_redis_client
 
             # Test Redis health
-            response = await client.get("/api/v1/health")
+            response = await self.client.get("/api/v1/health")
 
             # Should execute Redis health check code
             assert response.status_code in [200, 400, 503, 404, 500]
 
-    def test_error_handling_middleware(self):
+    @pytest.mark.asyncio
+    async def test_error_handling_middleware(self):
         """Test global error handling."""
         # This covers app/core/error_handling.py
 
@@ -155,21 +160,23 @@ class TestAppLifecycle:
         ]
 
         for endpoint in test_endpoints:
-            response = await client.get(endpoint)
+            response = await self.client.get(endpoint)
             # Should handle errors gracefully
             assert response.status_code in [200, 400, 401, 403, 404, 405, 422, 429, 500]
 
-    def test_exception_handling_and_responses(self):
+    @pytest.mark.asyncio
+    async def test_exception_handling_and_responses(self):
         """Test exception handling throughout the app."""
         # This covers app/exceptions.py
 
         with patch('app.database.get_db', side_effect=Exception("Database error")):
-            response = await client.get("/api/v1/health")
+            response = await self.client.get("/api/v1/health")
 
             # Should handle database exceptions
             assert response.status_code in [200, 400, 503, 404, 500]
 
-    def test_dependencies_injection(self):
+    @pytest.mark.asyncio
+    async def test_dependencies_injection(self):
         """Test FastAPI dependencies injection."""
         # This covers app/dependencies.py
 
@@ -180,7 +187,7 @@ class TestAppLifecycle:
             mock_get_tenant.return_value = {"id": "test-tenant"}
 
             # Test protected endpoints that use dependencies
-            response = await client.get(
+            response = await self.client.get(
                 "/api/v1/users/me",
                 headers={"Authorization": "Bearer fake-token"}
             )
@@ -188,7 +195,8 @@ class TestAppLifecycle:
             # Dependencies should execute
             assert response.status_code in [200, 401, 403, 404, 422]
 
-    def test_router_mounting_and_configuration(self):
+    @pytest.mark.asyncio
+    async def test_router_mounting_and_configuration(self):
         """Test that all routers are properly mounted."""
         # This covers router mounting in app/main.py
 
@@ -203,7 +211,7 @@ class TestAppLifecycle:
         ]
 
         for prefix in router_prefixes:
-            response = await client.get(prefix)
+            response = await self.client.get(prefix)
             # Router should be mounted (even if returns 404/405)
             assert response.status_code in [200, 401, 404, 405, 422]
 
@@ -216,12 +224,13 @@ class TestAppLifecycle:
             mock_monitoring.initialize = AsyncMock()
             mock_monitoring.track_request = AsyncMock()
 
-            response = await client.get("/api/v1/health/detailed")
+            response = await self.client.get("/api/v1/health/detailed")
 
             # Monitoring should be integrated
             assert response.status_code in [200, 400, 503, 404, 405]
 
-    def test_configuration_loading(self):
+    @pytest.mark.asyncio
+    async def test_configuration_loading(self):
         """Test configuration loading and validation."""
         # This covers app/config.py
 
