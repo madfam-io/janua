@@ -53,6 +53,11 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      - name: Install system dependencies for xmlsec
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxmlsec1-dev pkg-config
+
       - name: Install Python dependencies
         run: |
           cd apps/api
