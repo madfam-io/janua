@@ -17,7 +17,7 @@ from app.models.invitation import (
     InvitationCreate, InvitationResponse
 )
 from app.models.user import User
-from app.models.organization import Organization, OrganizationMember
+from app.models import Organization, OrganizationMember
 from app.models.policy import Role, UserRole
 from app.services.email_service import EmailService
 from app.services.audit_logger import AuditLogger, AuditAction

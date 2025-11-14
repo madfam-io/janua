@@ -12,7 +12,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 import json
 import statistics
-import aioredis
+import redis.asyncio as aioredis
 import psutil
 from sqlalchemy import select, and_, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession

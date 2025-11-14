@@ -49,7 +49,38 @@ from app.routers.v1 import (
     webhooks as webhooks_v1,
     organization_members as organization_members_v1,
     rbac as rbac_v1,
+    policies as policies_v1,
+    invitations as invitations_v1,
+    audit_logs as audit_logs_v1,
+    # alerts as alerts_v1,  # Temporarily disabled due to aioredis Python 3.11 incompatibility
+    # localization as localization_v1,  # Temporarily disabled - needs localization model
 )
+
+# Additional feature routers with optional loading
+additional_routers = {}
+try:
+    from app.routers.v1 import graphql as graphql_v1
+    additional_routers['graphql'] = graphql_v1
+except Exception as e:
+    logger.warning(f"GraphQL router not available: {e}")
+
+try:
+    from app.routers.v1 import websocket as websocket_v1
+    additional_routers['websocket'] = websocket_v1
+except Exception as e:
+    logger.warning(f"WebSocket router not available: {e}")
+
+try:
+    from app.routers.v1 import apm as apm_v1
+    additional_routers['apm'] = apm_v1
+except Exception as e:
+    logger.warning(f"APM router not available: {e}")
+
+try:
+    from app.routers.v1 import iot as iot_v1
+    additional_routers['iot'] = iot_v1
+except Exception as e:
+    logger.warning(f"IoT router not available: {e}")
 
 # Enterprise routers with optional loading for production stability
 enterprise_routers = {}
@@ -598,6 +629,22 @@ app.include_router(mfa_v1.router, prefix="/api/v1")
 app.include_router(passkeys_v1.router, prefix="/api/v1")
 app.include_router(admin_v1.router, prefix="/api/v1")
 app.include_router(webhooks_v1.router, prefix="/api/v1")
+
+# Register newly added core routers
+app.include_router(policies_v1.router, prefix="/api")
+app.include_router(invitations_v1.router, prefix="/api")
+app.include_router(audit_logs_v1.router, prefix="/api")
+# app.include_router(alerts_v1.router, prefix="/api/v1")  # Temporarily disabled due to aioredis Python 3.11 incompatibility
+# app.include_router(localization_v1.router, prefix="/api/v1")  # Temporarily disabled - needs localization model
+
+# Register additional feature routers if available
+for router_name, router_module in additional_routers.items():
+    try:
+        app.include_router(router_module.router, prefix="/api/v1")
+        logger.info(f"Registered {router_name} router successfully")
+    except Exception as e:
+        logger.error(f"Failed to register {router_name} router: {e}")
+
 # Register enterprise routers if available
 for router_name, router_module in enterprise_routers.items():
     try:

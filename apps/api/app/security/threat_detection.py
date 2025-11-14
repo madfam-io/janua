@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from sklearn.ensemble import IsolationForest
 import joblib
-import aioredis
+import redis.asyncio as aioredis
 import httpx
 
 logger = logging.getLogger(__name__)

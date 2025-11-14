@@ -12,7 +12,7 @@ from enum import Enum
 from dataclasses import dataclass, asdict
 import uuid
 import aiofiles
-import aioredis
+import redis.asyncio as aioredis
 from sqlalchemy import select, and_, func, desc, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from functools import wraps
 from contextlib import asynccontextmanager
-import aioredis
+import redis.asyncio as aioredis
 from prometheus_client import Counter, Histogram, Gauge, Summary, CollectorRegistry, generate_latest
 from opentelemetry import trace, metrics
 from opentelemetry.sdk.trace import TracerProvider

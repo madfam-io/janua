@@ -9,7 +9,7 @@ import uuid
 import json
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
-import aioredis
+import redis.asyncio as aioredis
 import structlog
 
 from .models import AlertRule, Alert, NotificationChannel, AlertSeverity, AlertStatus, AlertChannel

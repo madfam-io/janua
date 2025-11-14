@@ -13,7 +13,7 @@ import uuid
 import json
 import hashlib
 import aiofiles
-import aioredis
+import redis.asyncio as aioredis
 from sqlalchemy import select, and_, func, desc, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert

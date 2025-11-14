@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
-import aioredis
+import redis.asyncio as aioredis
 import structlog
 
 from app.config import settings

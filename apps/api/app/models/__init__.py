@@ -496,6 +496,44 @@ class Plan(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+# Localization models
+class Locale(Base):
+    __tablename__ = "locales"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    code = Column(String(10), unique=True, nullable=False, index=True)  # e.g., "en-US", "es-ES"
+    name = Column(String(100), nullable=False)  # e.g., "English (US)"
+    native_name = Column(String(100), nullable=False)  # e.g., "English (United States)"
+    is_active = Column(Boolean, default=True)
+    is_rtl = Column(Boolean, default=False)  # Right-to-left language
+    translation_progress = Column(Integer, default=0)  # Percentage of translated keys
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class TranslationKey(Base):
+    __tablename__ = "translation_keys"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key = Column(String(255), unique=True, nullable=False, index=True)  # e.g., "auth.login.submit"
+    default_value = Column(Text, nullable=False)  # Fallback English text
+    description = Column(Text)  # Context for translators
+    category = Column(String(100))  # e.g., "auth", "dashboard", "settings"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Translation(Base):
+    __tablename__ = "translations"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    translation_key_id = Column(UUID(as_uuid=True), ForeignKey("translation_keys.id"), nullable=False)
+    locale_id = Column(UUID(as_uuid=True), ForeignKey("locales.id"), nullable=False)
+    value = Column(Text, nullable=False)  # Translated text
+    is_approved = Column(Boolean, default=False)  # For translation workflow
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    approved_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # Import enterprise models
 from .enterprise import (
     SSOConfiguration, SSOProvider, SSOStatus, Subscription, 

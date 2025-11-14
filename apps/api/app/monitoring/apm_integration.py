@@ -17,7 +17,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import Counter, Histogram, Gauge, generate_latest
 import psutil
-import aioredis
+import redis.asyncio as aioredis
 
 # Try importing APM agents (optional dependencies)
 try:

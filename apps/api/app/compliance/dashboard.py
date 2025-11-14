@@ -11,7 +11,7 @@ from enum import Enum
 from dataclasses import dataclass, asdict
 import json
 import uuid
-import aioredis
+import redis.asyncio as aioredis
 from sqlalchemy import select, and_, func, desc, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
 

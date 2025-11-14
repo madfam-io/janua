@@ -14,7 +14,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 import uuid
 import aiofiles
-import aioredis
+import redis.asyncio as aioredis
 from sqlalchemy import select, and_, func, desc, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert

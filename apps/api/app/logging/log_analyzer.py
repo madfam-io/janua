@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from collections import defaultdict, Counter
 import statistics
 from enum import Enum
-import aioredis
+import redis.asyncio as aioredis
 import structlog
 
 from app.config import settings

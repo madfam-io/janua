@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any, Callable, Union
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from enum import Enum
-import aioredis
+import redis.asyncio as aioredis
 import httpx
 import structlog
 from jinja2 import Template

@@ -4,7 +4,7 @@ Audit logs API endpoints for compliance and security monitoring.
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, select, func, delete
 from pydantic import BaseModel, Field
