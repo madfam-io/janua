@@ -147,10 +147,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
-
-[tool.hatch.build.targets.wheel.sources]
-"app" = "plinto"
+packages = ["app", "plinto"]
 
 # Development Tools Configuration
 [tool.black]
