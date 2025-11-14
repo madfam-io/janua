@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar" data-testid="navbar">
+    <div class="container">
+      <a href="/" class="brand" data-testid="brand-link">Plinto Test App</a>
+      <div class="nav-links">
+        <a href="/dashboard" data-testid="dashboard-link">Dashboard</a>
+        <a href="/profile" data-testid="profile-link">Profile</a>
+        <a href="/security" data-testid="security-link">Security</a>
+        <form action="/logout" method="POST" style="display: inline;">
+          <button type="submit" class="btn-link" data-testid="logout-button">Logout</button>
+        </form>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container" data-testid="main-content">
+    <div class="security-container">
+      <h1 data-testid="security-title">Security Settings</h1>
+
+      <% if (success) { %>
+        <div class="alert alert-success" data-testid="success-message"><%= success %></div>
+      <% } %>
+
+      <% if (error) { %>
+        <div class="alert alert-error" data-testid="error-message"><%= error %></div>
+      <% } %>
+
+      <!-- Multi-Factor Authentication -->
+      <section class="security-section" data-testid="mfa-section">
+        <h2>Two-Factor Authentication</h2>
+        <p>Add an extra layer of security to your account.</p>
+
+        <% if (!mfaQrCode) { %>
+          <form action="/security/mfa/enable" method="POST">
+            <button type="submit" class="btn btn-primary" data-testid="enable-mfa-button">
+              Enable MFA
+            </button>
+          </form>
+        <% } else { %>
+          <div class="mfa-setup" data-testid="mfa-setup">
+            <h3>Scan QR Code</h3>
+            <div class="qr-code" data-testid="mfa-qr-code">
+              <img src="<%= mfaQrCode %>" alt="MFA QR Code">
+            </div>
+
+            <% if (backupCodes && backupCodes.length > 0) { %>
+              <div class="backup-codes" data-testid="backup-codes">
+                <h3>Backup Codes</h3>
+                <p>Save these codes in a safe place. Each can be used once.</p>
+                <ul>
+                  <% backupCodes.forEach(code => { %>
+                    <li><code><%= code %></code></li>
+                  <% }); %>
+                </ul>
+              </div>
+            <% } %>
+
+            <form action="/security/mfa/verify" method="POST">
+              <div class="form-group">
+                <label for="code">Enter Verification Code</label>
+                <input
+                  type="text"
+                  id="code"
+                  name="code"
+                  required
+                  data-testid="mfa-code-input"
+                  placeholder="6-digit code"
+                  pattern="[0-9]{6}"
+                  maxlength="6"
+                >
+              </div>
+              <button type="submit" class="btn btn-primary" data-testid="verify-mfa-button">
+                Verify MFA
+              </button>
+            </form>
+          </div>
+        <% } %>
+      </section>
+
+      <!-- Password Change -->
+      <section class="security-section" data-testid="password-section">
+        <h2>Change Password</h2>
+        <form action="/security/password/change" method="POST" data-testid="password-form">
+          <div class="form-group">
+            <label for="currentPassword">Current Password</label>
+            <input
+              type="password"
+              id="currentPassword"
+              name="currentPassword"
+              required
+              data-testid="current-password-input"
+              placeholder="Your current password"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="newPassword">New Password</label>
+            <input
+              type="password"
+              id="newPassword"
+              name="newPassword"
+              required
+              data-testid="new-password-input"
+              placeholder="Min 8 characters"
+              minlength="8"
+            >
+          </div>
+
+          <button type="submit" class="btn btn-primary" data-testid="change-password-button">
+            Change Password
+          </button>
+        </form>
+      </section>
+
+      <!-- Passkey Registration -->
+      <section class="security-section" data-testid="passkey-section">
+        <h2>Passkey (WebAuthn)</h2>
+        <p>Use your device's biometrics or security key to sign in.</p>
+        <a href="/passkey/register" class="btn btn-secondary" data-testid="register-passkey-button">
+          Register Passkey
+        </a>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2025 Plinto Test Application - For Journey Validation Only</p>
+    </div>
+  </footer>
+</body>
+</html>

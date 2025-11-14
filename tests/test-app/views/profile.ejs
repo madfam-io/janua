@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar" data-testid="navbar">
+    <div class="container">
+      <a href="/" class="brand" data-testid="brand-link">Plinto Test App</a>
+      <div class="nav-links">
+        <a href="/dashboard" data-testid="dashboard-link">Dashboard</a>
+        <a href="/profile" data-testid="profile-link">Profile</a>
+        <a href="/security" data-testid="security-link">Security</a>
+        <form action="/logout" method="POST" style="display: inline;">
+          <button type="submit" class="btn-link" data-testid="logout-button">Logout</button>
+        </form>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container" data-testid="main-content">
+    <div class="profile-container">
+      <h1 data-testid="profile-title">Profile Settings</h1>
+
+      <% if (success) { %>
+        <div class="alert alert-success" data-testid="success-message"><%= success %></div>
+      <% } %>
+
+      <% if (error) { %>
+        <div class="alert alert-error" data-testid="error-message"><%= error %></div>
+      <% } %>
+
+      <form action="/profile" method="POST" class="profile-form" data-testid="profile-form">
+        <div class="form-group">
+          <label for="name">Name</label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            value="<%= user.name || '' %>"
+            required
+            data-testid="name-input"
+            placeholder="Your name"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            value="<%= user.email %>"
+            required
+            data-testid="email-input"
+            placeholder="you@example.com"
+          >
+        </div>
+
+        <button type="submit" class="btn btn-primary" data-testid="update-profile-button">
+          Update Profile
+        </button>
+      </form>
+
+      <div class="danger-zone" data-testid="danger-zone">
+        <h2>Danger Zone</h2>
+        <p>Actions here cannot be undone.</p>
+        <button class="btn btn-danger" data-testid="delete-account-button" disabled>
+          Delete Account
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2025 Plinto Test Application - For Journey Validation Only</p>
+    </div>
+  </footer>
+</body>
+</html>

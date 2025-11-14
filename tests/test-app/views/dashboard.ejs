@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar" data-testid="navbar">
+    <div class="container">
+      <a href="/" class="brand" data-testid="brand-link">Plinto Test App</a>
+      <div class="nav-links">
+        <a href="/dashboard" data-testid="dashboard-link">Dashboard</a>
+        <a href="/profile" data-testid="profile-link">Profile</a>
+        <a href="/security" data-testid="security-link">Security</a>
+        <form action="/logout" method="POST" style="display: inline;">
+          <button type="submit" class="btn-link" data-testid="logout-button">Logout</button>
+        </form>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container" data-testid="main-content">
+    <div class="dashboard" data-testid="dashboard">
+      <h1>Welcome, <%= user.name || user.email %>!</h1>
+      <p class="subtitle">Your account is active and ready to use.</p>
+
+      <div class="dashboard-grid">
+        <div class="dashboard-card" data-testid="user-info-card">
+          <h2>Account Information</h2>
+          <dl>
+            <dt>Name:</dt>
+            <dd data-testid="user-name"><%= user.name || 'Not set' %></dd>
+
+            <dt>Email:</dt>
+            <dd data-testid="user-email"><%= user.email %></dd>
+
+            <dt>User ID:</dt>
+            <dd data-testid="user-id"><%= user.id %></dd>
+
+            <dt>Email Verified:</dt>
+            <dd data-testid="email-verified">
+              <%= user.email_verified ? 'Yes' : 'No' %>
+            </dd>
+          </dl>
+        </div>
+
+        <div class="dashboard-card" data-testid="quick-actions-card">
+          <h2>Quick Actions</h2>
+          <div class="action-buttons">
+            <a href="/profile" class="btn btn-secondary" data-testid="edit-profile-button">
+              Edit Profile
+            </a>
+            <a href="/security" class="btn btn-secondary" data-testid="security-settings-button">
+              Security Settings
+            </a>
+            <a href="/passkey/register" class="btn btn-secondary" data-testid="setup-passkey-button">
+              Setup Passkey
+            </a>
+          </div>
+        </div>
+
+        <div class="dashboard-card" data-testid="security-status-card">
+          <h2>Security Status</h2>
+          <ul class="security-checklist">
+            <li data-testid="security-email-verified">
+              <span class="status-icon <%= user.email_verified ? 'success' : 'warning' %>">
+                <%= user.email_verified ? '✓' : '!' %>
+              </span>
+              Email Verified
+            </li>
+            <li data-testid="security-mfa-status">
+              <span class="status-icon <%= user.mfa_enabled ? 'success' : 'warning' %>">
+                <%= user.mfa_enabled ? '✓' : '!' %>
+              </span>
+              Two-Factor Authentication
+            </li>
+            <li data-testid="security-passkey-status">
+              <span class="status-icon <%= user.passkey_enabled ? 'success' : 'warning' %>">
+                <%= user.passkey_enabled ? '✓' : '!' %>
+              </span>
+              Passkey Registered
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2025 Plinto Test Application - For Journey Validation Only</p>
+    </div>
+  </footer>
+</body>
+</html>

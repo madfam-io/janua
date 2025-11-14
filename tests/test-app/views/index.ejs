@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar" data-testid="navbar">
+    <div class="container">
+      <a href="/" class="brand" data-testid="brand-link">Plinto Test App</a>
+      <div class="nav-links">
+        <% if (user) { %>
+          <a href="/dashboard" data-testid="dashboard-link">Dashboard</a>
+          <a href="/profile" data-testid="profile-link">Profile</a>
+          <a href="/security" data-testid="security-link">Security</a>
+          <form action="/logout" method="POST" style="display: inline;">
+            <button type="submit" class="btn-link" data-testid="logout-button">Logout</button>
+          </form>
+        <% } else { %>
+          <a href="/login" data-testid="login-link">Login</a>
+          <a href="/signup" data-testid="signup-link">Sign Up</a>
+        <% } %>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container" data-testid="main-content">
+    <div class="hero" data-testid="hero-section">
+      <h1>Welcome to Plinto Test App</h1>
+      <p>Testing authentication flows with Plinto SDK</p>
+
+      <% if (user) { %>
+        <p class="user-welcome" data-testid="user-welcome">
+          Hello, <%= user.name || user.email %>!
+        </p>
+        <a href="/dashboard" class="btn btn-primary" data-testid="goto-dashboard">Go to Dashboard</a>
+      <% } else { %>
+        <div class="cta-buttons">
+          <a href="/signup" class="btn btn-primary" data-testid="signup-button">Get Started</a>
+          <a href="/login" class="btn btn-secondary" data-testid="login-button">Login</a>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="features" data-testid="features-section">
+      <h2>Test Features</h2>
+      <div class="feature-grid">
+        <div class="feature-card" data-testid="feature-signup">
+          <h3>Sign Up</h3>
+          <p>Test user registration with email and password</p>
+        </div>
+        <div class="feature-card" data-testid="feature-login">
+          <h3>Login</h3>
+          <p>Test authentication with credentials</p>
+        </div>
+        <div class="feature-card" data-testid="feature-mfa">
+          <h3>MFA</h3>
+          <p>Test multi-factor authentication setup</p>
+        </div>
+        <div class="feature-card" data-testid="feature-passkey">
+          <h3>Passkeys</h3>
+          <p>Test WebAuthn passkey registration</p>
+        </div>
+        <div class="feature-card" data-testid="feature-profile">
+          <h3>Profile</h3>
+          <p>Test user profile management</p>
+        </div>
+        <div class="feature-card" data-testid="feature-security">
+          <h3>Security</h3>
+          <p>Test security settings and password change</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2025 Plinto Test Application - For Journey Validation Only</p>
+    </div>
+  </footer>
+</body>
+</html>

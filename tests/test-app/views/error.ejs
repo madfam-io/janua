@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar" data-testid="navbar">
+    <div class="container">
+      <a href="/" class="brand" data-testid="brand-link">Plinto Test App</a>
+    </div>
+  </nav>
+
+  <main class="container" data-testid="main-content">
+    <div class="error-container" data-testid="error-container">
+      <h1>Error</h1>
+      <p class="error-message" data-testid="error-message"><%= error %></p>
+      <a href="/" class="btn btn-primary" data-testid="back-home-button">Back to Home</a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2025 Plinto Test Application - For Journey Validation Only</p>
+    </div>
+  </footer>
+</body>
+</html>

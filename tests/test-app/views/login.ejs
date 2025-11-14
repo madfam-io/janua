@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar" data-testid="navbar">
+    <div class="container">
+      <a href="/" class="brand" data-testid="brand-link">Plinto Test App</a>
+      <div class="nav-links">
+        <a href="/signup" data-testid="signup-link">Sign Up</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container" data-testid="main-content">
+    <div class="auth-form-container">
+      <h1 data-testid="login-title">Login</h1>
+
+      <% if (error) { %>
+        <div class="alert alert-error" data-testid="error-message"><%= error %></div>
+      <% } %>
+
+      <form action="/login" method="POST" class="auth-form" data-testid="login-form">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            data-testid="email-input"
+            placeholder="you@example.com"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            required
+            data-testid="password-input"
+            placeholder="Your password"
+          >
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" data-testid="login-submit">
+          Login
+        </button>
+      </form>
+
+      <p class="auth-footer" data-testid="auth-footer">
+        Don't have an account? <a href="/signup" data-testid="signup-link-footer">Sign Up</a>
+      </p>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2025 Plinto Test Application - For Journey Validation Only</p>
+    </div>
+  </footer>
+</body>
+</html>

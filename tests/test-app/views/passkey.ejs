@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/passkey.js" defer></script>
+</head>
+<body>
+  <nav class="navbar" data-testid="navbar">
+    <div class="container">
+      <a href="/" class="brand" data-testid="brand-link">Plinto Test App</a>
+      <div class="nav-links">
+        <a href="/dashboard" data-testid="dashboard-link">Dashboard</a>
+        <a href="/profile" data-testid="profile-link">Profile</a>
+        <a href="/security" data-testid="security-link">Security</a>
+        <form action="/logout" method="POST" style="display: inline;">
+          <button type="submit" class="btn-link" data-testid="logout-button">Logout</button>
+        </form>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container" data-testid="main-content">
+    <div class="passkey-container">
+      <h1 data-testid="passkey-title">Passkey Registration</h1>
+
+      <% if (success) { %>
+        <div class="alert alert-success" data-testid="success-message"><%= success %></div>
+      <% } %>
+
+      <% if (error) { %>
+        <div class="alert alert-error" data-testid="error-message"><%= error %></div>
+      <% } %>
+
+      <div class="passkey-info">
+        <h2>What is a Passkey?</h2>
+        <p>
+          Passkeys let you sign in using your device's biometrics (fingerprint, face recognition)
+          or security keys. They're more secure than passwords and easier to use.
+        </p>
+      </div>
+
+      <button
+        id="registerPasskeyButton"
+        class="btn btn-primary"
+        data-testid="register-passkey-button"
+      >
+        Register Passkey
+      </button>
+
+      <div id="passkeyStatus" class="passkey-status" data-testid="passkey-status"></div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2025 Plinto Test Application - For Journey Validation Only</p>
+    </div>
+  </footer>
+</body>
+</html>
