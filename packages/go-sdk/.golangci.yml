@@ -1,0 +1,73 @@
+# golangci-lint configuration for Plinto Go SDK
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Advanced Go linter
+    - unused        # Check for unused code
+    - gofmt         # Check code formatting
+    - goimports     # Check import formatting
+    - misspell      # Find misspelled words
+    - revive        # Fast, configurable linter
+    - gosec         # Security issues
+    - gocritic      # Opinionated Go source code linter
+    - nolintlint    # Validate //nolint directives
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable:
+      - shadow      # Report shadowed variables
+      - fieldalignment
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+      - name: package-comments
+        severity: warning
+      - name: var-naming
+        severity: warning
+
+  gosec:
+    excludes:
+      - G104  # Allow unhandled errors in tests
+
+  gocritic:
+    enabled-checks:
+      - nestingReduce
+      - unnamedResult
+      - ruleguard
+
+issues:
+  exclude-rules:
+    # Exclude some linters for test files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - revive
+
+    # Exclude specific issues
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

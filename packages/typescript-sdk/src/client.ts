@@ -12,7 +12,7 @@ import type {
   Environment
 } from './types';
 import { HttpClient, createHttpClient } from './http-client';
-import { TokenManager, EnvUtils, EventEmitter } from './utils';
+import { TokenManager, EnvUtils, EventEmitter, type TokenStorage } from './utils';
 import { ConfigurationError } from './errors';
 import { Auth } from './auth';
 import { Users } from './users';
@@ -141,10 +141,25 @@ export class PlintoClient extends EventEmitter<SdkEventMap> {
    * Create token manager instance
    */
   private createTokenManager(): TokenManager {
-    let storage;
+    let storage: TokenStorage;
 
     if (this.config.customStorage) {
-      storage = this.config.customStorage;
+      // Wrap custom storage to ensure it conforms to TokenStorage interface
+      const custom = this.config.customStorage;
+      storage = {
+        async getItem(key: string): Promise<string | null> {
+          const result = custom.getItem(key);
+          return result instanceof Promise ? result : Promise.resolve(result);
+        },
+        async setItem(key: string, value: string): Promise<void> {
+          const result = custom.setItem(key, value);
+          return result instanceof Promise ? result : Promise.resolve(result);
+        },
+        async removeItem(key: string): Promise<void> {
+          const result = custom.removeItem(key);
+          return result instanceof Promise ? result : Promise.resolve(result);
+        }
+      };
     } else {
       storage = EnvUtils.getDefaultStorage();
     }
@@ -156,7 +171,9 @@ export class PlintoClient extends EventEmitter<SdkEventMap> {
    * Create HTTP client instance
    */
   private createHttpClient(): HttpClient {
-    return createHttpClient(this.config, this.tokenManager);
+    const client = createHttpClient(this.config, this.tokenManager);
+    // Ensure we return HttpClient type (both HttpClient and AxiosHttpClient are compatible)
+    return client as HttpClient;
   }
 
   /**
@@ -319,7 +336,8 @@ export class PlintoClient extends EventEmitter<SdkEventMap> {
    */
   setLicenseKey(key: string): void {
     this.enterprise.setLicenseKey(key);
-    this.licenseInfo = undefined;
+    // Use null instead of undefined for exactOptionalPropertyTypes
+    this.licenseInfo = null as any;
   }
 
   /**
@@ -403,21 +421,21 @@ export class PlintoClient extends EventEmitter<SdkEventMap> {
   /**
    * Add event listener
    */
-  on<T extends SdkEventType>(event: T, handler: SdkEventHandler<T>): () => void {
+  override on<T extends SdkEventType>(event: T, handler: SdkEventHandler<T>): () => void {
     return super.on(event, handler);
   }
 
   /**
    * Add one-time event listener
    */
-  once<T extends SdkEventType>(event: T, handler: SdkEventHandler<T>): () => void {
+  override once<T extends SdkEventType>(event: T, handler: SdkEventHandler<T>): () => void {
     return super.once(event, handler);
   }
 
   /**
    * Remove all listeners for an event
    */
-  off<T extends SdkEventType>(event?: T): void {
+  override off<T extends SdkEventType>(event?: T): void {
     super.removeAllListeners(event);
   }
 

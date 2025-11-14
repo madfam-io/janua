@@ -40,7 +40,14 @@
     "clean:packages": "cd packages/core && npm run clean",
     "clean:build": "rm -rf dist build .next out",
     "install:all": "npm install && npm run install:packages",
-    "install:packages": "cd packages/core && npm install"
+    "install:packages": "cd packages/core && npm install",
+    "test:journeys:setup": "docker-compose -f docker-compose.test.yml up -d && npm run test:journeys:wait",
+    "test:journeys:wait": "bash scripts/wait-for-services.sh",
+    "test:journeys:teardown": "docker-compose -f docker-compose.test.yml down -v",
+    "test:journeys": "npm run test:journeys:setup && npx playwright test tests/e2e/journeys && npm run test:journeys:teardown",
+    "test:journeys:local": "npx playwright test tests/e2e/journeys --headed --debug",
+    "test:journeys:ci": "npx playwright test tests/e2e/journeys --reporter=github",
+    "test:journeys:report": "npx playwright show-report"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.28.3",

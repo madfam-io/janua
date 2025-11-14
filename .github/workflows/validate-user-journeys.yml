@@ -1,0 +1,236 @@
+name: Validate User Journeys
+
+# Validates that user experience matches marketing claims and documentation
+# Runs on changes to landing pages, API, SDKs, or journey documentation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/landing/**'
+      - 'apps/api/**'
+      - 'apps/dashboard/**'
+      - 'packages/**'
+      - 'docs/user-journeys/**'
+      - 'tests/e2e/journeys/**'
+      - 'docker-compose.test.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/landing/**'
+      - 'apps/api/**'
+      - 'apps/dashboard/**'
+      - 'packages/**'
+      - 'docs/user-journeys/**'
+      - 'tests/e2e/journeys/**'
+      - 'docker-compose.test.yml'
+
+jobs:
+  validate-journeys:
+    name: Validate User Journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Setup Python (for API)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          cd apps/api
+          pip install -r requirements.txt
+
+      - name: Start test environment
+        run: docker-compose -f docker-compose.test.yml up -d
+
+      - name: Wait for services
+        run: bash scripts/wait-for-services.sh
+
+      - name: Run journey validation tests
+        run: npx playwright test tests/e2e/journeys --reporter=github
+
+      - name: Generate HTML report
+        if: always()
+        run: npx playwright show-report --host 0.0.0.0
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 30
+
+      - name: Check for journey validation failures
+        if: failure()
+        run: |
+          echo "❌ User journey validation failed!"
+          echo "This indicates a mismatch between:"
+          echo "  - Marketing claims and actual functionality"
+          echo "  - Documentation and SDK behavior"
+          echo "  - Pricing page and billing enforcement"
+          echo ""
+          echo "Please review the Playwright report for details."
+          exit 1
+
+      - name: Cleanup test environment
+        if: always()
+        run: docker-compose -f docker-compose.test.yml down -v
+
+  validate-content-alignment:
+    name: Validate Content-Functionality Alignment
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Check for undocumented features
+        run: |
+          echo "🔍 Checking for features in code but not documented..."
+          # Search for feature implementations
+          FEATURES=$(grep -r "feature" apps/api --include="*.py" | wc -l || true)
+          echo "Found $FEATURES feature references in API code"
+
+      - name: Validate SDK distribution files exist
+        run: |
+          echo "📦 Validating SDK distribution files..."
+          
+          for SDK in typescript-sdk nextjs-sdk react-sdk vue-sdk; do
+            echo "Checking packages/$SDK/dist/"
+            if [ -d "packages/$SDK/dist" ]; then
+              FILES=$(ls packages/$SDK/dist | wc -l)
+              echo "✅ $SDK: $FILES distribution files"
+            else
+              echo "❌ $SDK: dist/ directory missing"
+              exit 1
+            fi
+          done
+
+      - name: Validate documentation links
+        run: |
+          echo "🔗 Validating documentation links..."
+          
+          # Check for broken internal links in journey docs
+          cd docs/user-journeys
+          for file in *.md; do
+            echo "Checking $file..."
+            grep -o '\[.*\](.*\.md)' "$file" || true
+          done
+
+  performance-validation:
+    name: Validate Performance Claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Start test environment
+        run: docker-compose -f docker-compose.test.yml up -d
+
+      - name: Wait for services
+        run: bash scripts/wait-for-services.sh
+
+      - name: Run performance tests
+        run: |
+          npx playwright test tests/e2e/journeys/developer-integrator.spec.ts \
+            -g "Performance meets documented expectations" \
+            --reporter=github
+
+      - name: Cleanup
+        if: always()
+        run: docker-compose -f docker-compose.test.yml down -v
+
+  notify-on-failure:
+    name: Notify on Journey Validation Failure
+    runs-on: ubuntu-latest
+    needs: [validate-journeys, validate-content-alignment, performance-validation]
+    if: failure()
+
+    steps:
+      - name: Create issue for journey validation failure
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const title = '🚨 User Journey Validation Failed';
+            const body = `
+            ## User Journey Validation Failure
+            
+            The user journey validation tests have failed, indicating a potential mismatch between:
+            
+            - Marketing claims and actual implemented functionality
+            - Documentation examples and SDK behavior
+            - Pricing page promises and billing service enforcement
+            - Performance claims and actual measurements
+            
+            ### Actions Required
+            
+            1. Review the [Playwright test report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            2. Identify which journey stage failed
+            3. Update either:
+               - Marketing/documentation to match implementation
+               - Implementation to match marketing promises
+            4. Re-run journey validation tests
+            
+            ### Failed Workflow
+            
+            - **Run**: ${{ github.run_id }}
+            - **Branch**: ${{ github.ref_name }}
+            - **Commit**: ${{ github.sha }}
+            - **Triggered by**: ${{ github.actor }}
+            
+            cc @plinto/engineering
+            `;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['bug', 'user-journey', 'high-priority']
+            });

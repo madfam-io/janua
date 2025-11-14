@@ -1,0 +1,175 @@
+# Docker Compose for User Journey Testing
+# Provides complete local testing environment for validating user journeys
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Core Services
+  # ==========================================================================
+  
+  # API Backend
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    container_name: plinto-api-test
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=test
+      - DATABASE_URL=postgresql://test_user:test_pass@postgres:5432/plinto_test
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=test_jwt_secret_key_for_journey_tests_only
+      - API_KEY=test-api-key-journey-validation
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - plinto-test-network
+
+  # Marketing/Landing Page
+  landing:
+    build:
+      context: ./apps/landing
+      dockerfile: Dockerfile.dev
+    container_name: plinto-landing-test
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:8000
+      - NEXT_PUBLIC_PLINTO_API_KEY=test-api-key-journey-validation
+      - NODE_ENV=development
+    depends_on:
+      - api
+    networks:
+      - plinto-test-network
+
+  # Test Application (using SDK)
+  test-app:
+    build:
+      context: ./tests/test-app
+      dockerfile: Dockerfile
+    container_name: plinto-test-app
+    ports:
+      - "3001:3001"
+    environment:
+      - PLINTO_API_URL=http://api:8000
+      - PLINTO_API_KEY=test-api-key-journey-validation
+      - NODE_ENV=development
+    depends_on:
+      - api
+    networks:
+      - plinto-test-network
+
+  # Admin Dashboard
+  dashboard:
+    build:
+      context: ./apps/dashboard
+      dockerfile: Dockerfile.dev
+    container_name: plinto-dashboard-test
+    ports:
+      - "3002:3002"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:8000
+      - NEXT_PUBLIC_PLINTO_API_KEY=test-api-key-journey-validation
+      - NODE_ENV=development
+    depends_on:
+      - api
+    networks:
+      - plinto-test-network
+
+  # ==========================================================================
+  # Data Services
+  # ==========================================================================
+  
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: plinto-postgres-test
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_pass
+      - POSTGRES_DB=plinto_test
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+      - ./tests/fixtures/db-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d plinto_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - plinto-test-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: plinto-redis-test
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - plinto-test-network
+
+  # ==========================================================================
+  # Testing Infrastructure
+  # ==========================================================================
+  
+  # Playwright Test Runner
+  playwright:
+    build:
+      context: .
+      dockerfile: tests/e2e/Dockerfile.playwright
+    container_name: plinto-playwright-test
+    environment:
+      - PLAYWRIGHT_BASE_URL=http://landing:3000
+      - TEST_APP_URL=http://test-app:3001
+      - ADMIN_URL=http://dashboard:3002
+      - API_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+      landing:
+        condition: service_started
+      test-app:
+        condition: service_started
+      dashboard:
+        condition: service_started
+    volumes:
+      - ./tests/e2e:/tests/e2e
+      - ./playwright-report:/playwright-report
+      - ./test-results:/test-results
+    command: npx playwright test
+    networks:
+      - plinto-test-network
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+volumes:
+  postgres-test-data:
+    driver: local
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+networks:
+  plinto-test-network:
+    driver: bridge

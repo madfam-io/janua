@@ -98,6 +98,11 @@ class PermissionError(PlintoError):
         super().__init__(message, code, 403, details)
 
 
+class AuthorizationError(PermissionError):
+    """Raised when authorization fails (alias for PermissionError)."""
+    pass
+
+
 class RateLimitError(PlintoError):
     """Raised when rate limit is exceeded."""
 
@@ -127,6 +132,11 @@ class NetworkError(PlintoError):
     ):
         super().__init__(message, code, None, details)
         self.original_error = original_error
+
+
+class NetworkConnectionError(NetworkError):
+    """Raised when a network connection error occurs (alias for NetworkError)."""
+    pass
 
 
 class ServerError(PlintoError):
