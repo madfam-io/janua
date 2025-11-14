@@ -187,10 +187,18 @@ class AuthService:
         if organization_id:
             payload["org"] = organization_id
         
+        # Use HS256 for test environment or when JWT_SECRET_KEY is a simple string
+        # RS256 requires PEM-formatted keys which are not suitable for simple string secrets
+        algorithm = settings.JWT_ALGORITHM
+        if settings.ENVIRONMENT == "test" or (
+            settings.JWT_SECRET_KEY and not settings.JWT_SECRET_KEY.startswith("-----BEGIN")
+        ):
+            algorithm = "HS256"
+        
         token = jwt.encode(
             payload,
             settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM
+            algorithm=algorithm
         )
         
         return token, jti, expires_at
@@ -218,10 +226,18 @@ class AuthService:
             "aud": settings.JWT_AUDIENCE
         }
         
+        # Use HS256 for test environment or when JWT_SECRET_KEY is a simple string
+        # RS256 requires PEM-formatted keys which are not suitable for simple string secrets
+        algorithm = settings.JWT_ALGORITHM
+        if settings.ENVIRONMENT == "test" or (
+            settings.JWT_SECRET_KEY and not settings.JWT_SECRET_KEY.startswith("-----BEGIN")
+        ):
+            algorithm = "HS256"
+        
         token = jwt.encode(
             payload,
             settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM
+            algorithm=algorithm
         )
         
         return token, jti, family, expires_at

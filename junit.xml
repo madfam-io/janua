@@ -1,0 +1,10 @@
+<testsuites id="" name="" tests="3" failures="0" skipped="0" errors="0" time="13.574809000000002">
+<testsuite name="simple-functionality-test.spec.ts" timestamp="2025-11-13T22:05:25.651Z" hostname="chromium" tests="3" failures="0" skipped="0" time="33.372" errors="0">
+<testcase name="Marketing Site Functionality › Core functionality works" classname="simple-functionality-test.spec.ts" time="11.221">
+</testcase>
+<testcase name="Marketing Site Functionality › Interactive components work" classname="simple-functionality-test.spec.ts" time="11.467">
+</testcase>
+<testcase name="Marketing Site Functionality › Navigation structure exists" classname="simple-functionality-test.spec.ts" time="10.684">
+</testcase>
+</testsuite>
+</testsuites>

@@ -23,7 +23,16 @@ class JWTManager:
     """Centralized JWT token management with refresh token rotation"""
 
     def __init__(self):
+        # Get algorithm from settings, fallback to HS256 for test environment
         self.algorithm = settings.JWT_ALGORITHM
+        
+        # For test environment or when JWT_SECRET_KEY is a simple string, use HS256
+        # RS256 requires PEM-formatted keys which are not suitable for simple string secrets
+        if settings.ENVIRONMENT == "test" or (
+            settings.JWT_SECRET_KEY and not settings.JWT_SECRET_KEY.startswith("-----BEGIN")
+        ):
+            self.algorithm = "HS256"
+        
         self.secret_key = settings.JWT_SECRET_KEY or settings.SECRET_KEY
         self.issuer = settings.JWT_ISSUER
         self.audience = settings.JWT_AUDIENCE

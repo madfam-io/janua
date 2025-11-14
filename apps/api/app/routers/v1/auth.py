@@ -244,24 +244,24 @@ async def sign_in(
             User.username == request.username,
             User.status == UserStatus.ACTIVE
         ).first()
-    
+
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     # Verify password
     if not user.password_hash or not AuthService.verify_password(request.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     # Create session
     access_token, refresh_token, session = await AuthService.create_session(
         db, user,
         ip_address=req.client.host,
         user_agent=req.headers.get('user-agent')
     )
-    
+
     # Log activity
     log_activity(db, str(user.id), "signin", {"method": "password"}, req)
-    
+
     return SignInResponse(
         user=UserResponse(
             id=str(user.id),
@@ -281,6 +281,29 @@ async def sign_in(
             expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
         )
     )
+
+
+# Alias for /signin (tests expect /login)
+@router.post("/login", response_model=SignInResponse)
+@limiter.limit("5/minute")
+async def login(
+    request: SignInRequest,
+    req: Request,
+    db: Session = Depends(get_db)
+):
+    """Authenticate user and get tokens (alias for /signin)"""
+    return await sign_in(request, req, db)
+
+
+# Alias for /signout (tests expect /logout)
+@router.post("/logout")
+async def logout(
+    current_user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Sign out current session (alias for /signout)"""
+    return await sign_out(current_user, credentials, db)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -442,6 +465,16 @@ async def change_password(
     log_activity(db, str(current_user.id), "password_change", {})
     
     return {"message": "Password successfully changed"}
+
+
+# Alias for /email/verify (tests expect /verify-email)
+@router.post("/verify-email")
+async def verify_email_alias(
+    request: VerifyEmailRequest,
+    db: Session = Depends(get_db)
+):
+    """Verify email with token (alias for /email/verify)"""
+    return await verify_email(request, db)
 
 
 @router.post("/email/verify")
