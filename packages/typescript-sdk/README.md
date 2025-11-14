@@ -15,10 +15,11 @@ Official TypeScript/JavaScript SDK for the Plinto authentication API. This SDK p
 - 🔗 **OAuth Integration** - Google, GitHub, Microsoft, Discord, Twitter
 - 🛡️ **Passkey Support** - WebAuthn/FIDO2 passwordless authentication
 - 🪝 **Webhook Management** - Configure and manage webhook endpoints
-- ⚡ **TypeScript First** - Full type safety and IntelliSense support
+- 🌐 **Internationalization** - Full i18n/l10n support with translation APIs
+- ⚡ **TypeScript First** - Full type safety and IntelliSense support (5,744 lines)
 - 🌐 **Cross-Platform** - Works in browser and Node.js environments
 - 🔄 **Automatic Token Refresh** - Seamless token management
-- 📱 **Tree Shakeable** - Import only what you need
+- 📱 **Tree Shakeable** - Import only what you need (ESM & CJS)
 - 🛠️ **Error Handling** - Comprehensive error types and handling
 
 ## Installation
