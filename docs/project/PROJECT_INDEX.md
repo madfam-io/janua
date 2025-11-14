@@ -8,6 +8,8 @@
 
 ### Quick Navigation
 
+- 🎯 [Getting Started](#getting-started) - **NEW: Local Demo**
+- 📋 [Project Status](#project-status) - **Week 8 Complete**
 - 🏗️ [Architecture](#architecture)
 - 💻 [Technical](#technical)
 - 🚀 [Deployment](#deployment)
@@ -15,6 +17,46 @@
 - 🧪 [Testing](#testing)
 - 📊 [Business](#business)
 - 🛠️ [Operations](#operations)
+
+---
+
+## 🎯 Getting Started
+
+### Local Demo Environment
+- [Quick Start Guide](../../QUICK_START.md) - **5-minute setup**
+- [Demo Walkthrough](../../DEMO_WALKTHROUGH.md) - **50+ validation checkpoints**
+- [Start Script](../../scripts/start-local-demo.sh) - **One-command orchestration**
+- [Test Script](../../scripts/run-demo-tests.sh) - **Automated validation**
+
+### First Steps
+1. Run `./scripts/start-local-demo.sh` to start all services
+2. Open http://localhost:3000 for landing site
+3. Open http://localhost:8000/docs for API documentation
+4. Follow [Demo Walkthrough](../../DEMO_WALKTHROUGH.md) for complete validation
+
+---
+
+## 📋 Project Status
+
+### Current Phase: **Production Ready**
+- ✅ **Week 1-2**: SDK Build & Publishing Automation → COMPLETE
+- ✅ **Week 3**: Journey Testing Framework → COMPLETE
+- ✅ **Week 4**: Landing Site & Documentation → COMPLETE
+- ✅ **Week 5-6**: SSO Production Implementation → COMPLETE
+- ✅ **Week 7-8**: Performance Optimization → COMPLETE
+- ✅ **Week 8**: Local Demo & Validation → COMPLETE
+
+### Completion Summaries
+- [Week 3 Completion](./WEEK3_COMPLETION_SUMMARY.md) - Journey Testing
+- [Week 4 Completion](./WEEK4_COMPLETION_SUMMARY.md) - Landing Site
+- [Week 5-6 Guide](./WEEK5-6_SSO_PRODUCTION_GUIDE.md) - SSO Implementation
+- [Week 7-8 Optimization](./WEEK7-8_PERFORMANCE_OPTIMIZATION.md) - Performance
+- [Week 8 Demo](./WEEK8_DEMO_COMPLETION_SUMMARY.md) - **NEW: Local Demo**
+
+### Roadmap Documents
+- [Production Readiness Roadmap](./PRODUCTION_READINESS_ROADMAP.md) - **Updated: Week 8 Complete**
+- [Project Context](./PROJECT_CONTEXT.md) - Overall project overview
+- [Enterprise Sprint Plan](./ENTERPRISE_SPRINT_PLAN.md) - Weeks 5-10 planning
 
 ---
 

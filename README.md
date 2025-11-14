@@ -9,7 +9,38 @@
 
 *Enterprise-grade authentication and user management platform for modern applications*
 
-[🚀 **Get Started**](https://docs.plinto.dev) • [📖 **Documentation**](https://docs.plinto.dev) • [🎮 **Try Demo**](https://demo.plinto.dev) • [💬 **Discord**](https://discord.gg/plinto)
+[🚀 **Get Started**](QUICK_START.md) • [📖 **Documentation**](https://docs.plinto.dev) • [🎮 **Try Demo**](#-local-demo) • [💬 **Discord**](https://discord.gg/plinto)
+
+---
+
+## 🎯 **NEW: Local Demo Available**
+
+Experience the complete Plinto platform locally before publishing:
+
+```bash
+# Start all services (API + Landing Site + Redis)
+./scripts/start-local-demo.sh
+
+# Open in browser
+# → Landing Site: http://localhost:3000
+# → API Docs: http://localhost:8000/docs
+# → Health Check: http://localhost:8000/health
+
+# Run automated validation tests
+./scripts/run-demo-tests.sh
+```
+
+**What's Included:**
+- ✅ Complete authentication API (signup, login, MFA, passkeys)
+- ✅ Professional landing site with documentation
+- ✅ SSO integration (OIDC Discovery, SAML)
+- ✅ Performance optimization (<100ms response times)
+- ✅ Comprehensive test validation (all features)
+
+**Quick Links:**
+- 📖 **[Quick Start Guide](QUICK_START.md)** - 5-minute setup instructions
+- 📋 **[Demo Walkthrough](DEMO_WALKTHROUGH.md)** - Complete 50+ checkpoint validation
+- 🏗️ **[Performance Guide](docs/project/WEEK7-8_PERFORMANCE_OPTIMIZATION.md)** - Optimization details
 
 ---
 
