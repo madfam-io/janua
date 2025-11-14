@@ -12,7 +12,7 @@ export default defineConfig({
     ['junit', { outputFile: 'junit.xml' }],
   ],
   use: {
-    baseURL: 'http://localhost:3003',
+    baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -27,10 +27,7 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: 'cd apps/marketing && npm run dev',
-    port: 3003,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  // Note: Test environment services are managed by docker-compose.test.yml
+  // Use npm run test:journeys:setup to start services before running tests
+  // Use npm run test:journeys:teardown to stop services after tests
 });
