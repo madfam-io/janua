@@ -22,12 +22,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
       
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
       
       - name: Run unit tests
-        run: yarn test:unit || true
+        run: npm run test:unit || true
         continue-on-error: true
       
       - name: Upload coverage
@@ -119,12 +120,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
       
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
       
       - name: Run integration tests
-        run: yarn test:integration || true
+        run: npm run test:integration || true
         continue-on-error: true
         env:
           PLINTO_ISSUER: http://localhost:8000
@@ -145,15 +147,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
       
       - name: Install dependencies
         run: |
-          yarn install --frozen-lockfile
+          npm ci
           npx playwright install --with-deps ${{ matrix.browser }}
       
       - name: Run E2E tests - ${{ matrix.browser }}
         run: |
-          yarn test:e2e --project=${{ matrix.browser }} || true
+          npm run test:e2e --project=${{ matrix.browser }} || true
         continue-on-error: true
       
       - name: Upload test results
@@ -176,16 +179,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
       
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
       
       - name: Run linting
-        run: yarn lint || true
+        run: npm run lint || true
         continue-on-error: true
       
       - name: Run TypeScript type check
-        run: yarn typecheck || true
+        run: npm run typecheck || true
         continue-on-error: true
       
       - name: Setup Python
@@ -213,9 +217,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
       
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
       
       - name: Run npm audit
         run: npm audit --audit-level=high || true
@@ -232,12 +237,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
       
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
       
       - name: Build all packages
-        run: yarn build || true
+        run: npm run build || true
         continue-on-error: true
       
       - name: Check build outputs

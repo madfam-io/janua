@@ -16,16 +16,17 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
+          cache: 'npm'
         
     - name: Install dependencies
-      run: yarn install --frozen-lockfile
+      run: npm ci
       
     - name: Build marketing dependencies
       run: |
         echo "🔧 Building only marketing app dependencies..."
-        yarn workspace @plinto/ui build || echo "UI build failed, continuing..."
-        yarn workspace @plinto/react build || echo "React build failed, continuing..."
-        yarn workspace @plinto/marketing build || echo "Marketing build failed, continuing..."
+        npm run workspace @plinto/ui build || echo "UI build failed, continuing..."
+        npm run workspace @plinto/react build || echo "React build failed, continuing..."
+        npm run workspace @plinto/marketing build || echo "Marketing build failed, continuing..."
       continue-on-error: true
       
     - name: Trigger Vercel Deployment

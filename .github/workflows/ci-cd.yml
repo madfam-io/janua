@@ -22,16 +22,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      
+          cache: 'npm'
+
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
-      
+        run: npm ci
+
       - name: Run ESLint
-        run: yarn lint || true
+        run: npm run lint || true
         continue-on-error: true
-      
+
       - name: Run TypeScript check
-        run: yarn typecheck || true
+        run: npm run typecheck || true
         continue-on-error: true
 
   frontend-tests-build:
@@ -45,16 +46,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      
+          cache: 'npm'
+
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
-      
+        run: npm ci
+
       - name: Run frontend tests
-        run: yarn test:unit || true
+        run: npm run test:unit || true
         continue-on-error: true
-      
+
       - name: Build frontend packages
-        run: yarn build:frontend || true
+        run: npm run build:frontend || true
         continue-on-error: true
       
       - name: Upload build artifacts
@@ -137,10 +139,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      
+          cache: 'npm'
+
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
-      
+        run: npm ci
+
       - name: Run npm audit
         run: npm audit --audit-level=critical || true
         continue-on-error: true
@@ -179,9 +182,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      
+          cache: 'npm'
+
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
       
       - name: Run smoke tests
         run: |
