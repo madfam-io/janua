@@ -3,7 +3,7 @@ Enterprise models for advanced features
 """
 
 from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text, Integer, Enum as SQLEnum, JSON
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.models.types import GUID as UUID, JSON as JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid

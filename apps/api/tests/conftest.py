@@ -612,6 +612,36 @@ async def async_db_session():
     
     return mock_session
 
+
+@pytest_asyncio.fixture
+async def integration_db_session(setup_test_db) -> AsyncGenerator[AsyncSession, None]:
+    """Real database session for integration tests with actual database"""
+    session = await test_config.get_test_session()
+    try:
+        yield session
+    finally:
+        await session.rollback()
+        await session.close()
+
+
+@pytest_asyncio.fixture
+async def integration_client(integration_db_session):
+    """HTTP client with real database for integration tests"""
+    from app.main import app
+    from app.database import get_db
+    
+    # Override get_db to use real database
+    async def override_get_db():
+        yield integration_db_session
+    
+    app.dependency_overrides[get_db] = override_get_db
+    
+    async with AsyncClient(app=app, base_url="http://testserver") as ac:
+        yield ac
+    
+    # Clean up override
+    app.dependency_overrides.pop(get_db, None)
+
 @pytest.fixture
 def async_mock_factory():
     """Factory for creating properly configured async mocks"""
@@ -691,10 +721,11 @@ except ImportError:
 
 
 # Import all fixtures from fixtures package (Week 1 Foundation Sprint)
-# NOTE: Disabled database-dependent fixtures - using simple mock fixtures instead
-# from tests.fixtures.users import *  # noqa: F401, F403
-# from tests.fixtures.organizations import *  # noqa: F401, F403
-# from tests.fixtures.sessions import *  # noqa: F401, F403
+# Enable database-dependent fixtures for integration tests
+from tests.fixtures.users import *  # noqa: F401, F403
+from tests.fixtures.organizations import *  # noqa: F401, F403
+from tests.fixtures.sessions import *  # noqa: F401, F403
+
 
 # Export all utilities
 __all__ = [

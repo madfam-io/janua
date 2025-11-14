@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import secrets
 
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -148,13 +148,15 @@ async def sign_up(
         raise HTTPException(status_code=403, detail="Sign ups are currently disabled")
     
     # Check if email already exists
-    existing_user = db.query(User).filter(User.email == request.email).first()
+    result = await db.execute(select(User).where(User.email == request.email))
+    existing_user = result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
     # Check if username already exists
     if request.username:
-        existing_username = db.query(User).filter(User.username == request.username).first()
+        result = await db.execute(select(User).where(User.username == request.username))
+        existing_username = result.scalar_one_or_none()
         if existing_username:
             raise HTTPException(status_code=400, detail="Username already taken")
     
@@ -235,15 +237,17 @@ async def sign_in(
     """Authenticate user and get tokens"""
     # Find user
     if request.email:
-        user = db.query(User).filter(
+        result = await db.execute(select(User).where(
             User.email == request.email,
             User.status == UserStatus.ACTIVE
-        ).first()
+        ))
+        user = result.scalar_one_or_none()
     else:
-        user = db.query(User).filter(
+        result = await db.execute(select(User).where(
             User.username == request.username,
             User.status == UserStatus.ACTIVE
-        ).first()
+        ))
+        user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -338,9 +342,10 @@ async def sign_out(
     
     if payload:
         # Find and revoke session
-        session = db.query(UserSession).filter(
+        result = await db.execute(select(UserSession).where(
             UserSession.access_token_jti == payload['jti']
-        ).first()
+        ))
+        session = result.scalar_one_or_none()
         
         if session:
             AuthService.revoke_session(db, str(session.id))
@@ -377,10 +382,11 @@ async def forgot_password(
     db: Session = Depends(get_db)
 ):
     """Request password reset email"""
-    user = db.query(User).filter(
+    result = await db.execute(select(User).where(
         User.email == request.email,
         User.status == UserStatus.ACTIVE
-    ).first()
+    ))
+    user = result.scalar_one_or_none()
     
     # Don't reveal if user exists
     if user and settings.EMAIL_ENABLED:
@@ -411,11 +417,12 @@ async def reset_password(
 ):
     """Reset password with token"""
     # Find valid reset token
-    reset = db.query(PasswordReset).filter(
+    result = await db.execute(select(PasswordReset).where(
         PasswordReset.token == request.token,
         PasswordReset.used == False,
         PasswordReset.expires_at > datetime.utcnow()
-    ).first()
+    ))
+    reset = result.scalar_one_or_none()
     
     if not reset:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
@@ -426,7 +433,7 @@ async def reset_password(
         raise HTTPException(status_code=400, detail=message)
     
     # Update password
-    user = db.query(User).filter(User.id == reset.user_id).first()
+    user = await db.get(User, reset.user_id)
     user.password_hash = AuthService.hash_password(request.new_password)
     
     # Mark token as used
@@ -484,17 +491,18 @@ async def verify_email(
 ):
     """Verify email with token"""
     # Find valid verification token
-    verification = db.query(EmailVerification).filter(
+    result = await db.execute(select(EmailVerification).where(
         EmailVerification.token == request.token,
         EmailVerification.verified == False,
         EmailVerification.expires_at > datetime.utcnow()
-    ).first()
+    ))
+    verification = result.scalar_one_or_none()
     
     if not verification:
         raise HTTPException(status_code=400, detail="Invalid or expired verification token")
     
     # Mark email as verified
-    user = db.query(User).filter(User.id == verification.user_id).first()
+    user = await db.get(User, verification.user_id)
     user.email_verified = True
     user.email_verified_at = datetime.utcnow()
     
@@ -562,10 +570,11 @@ async def send_magic_link(
         raise HTTPException(status_code=400, detail="Email service not configured")
     
     # Find or create user
-    user = db.query(User).filter(
+    result = await db.execute(select(User).where(
         User.email == request.email,
         User.status == UserStatus.ACTIVE
-    ).first()
+    ))
+    user = result.scalar_one_or_none()
     
     if not user:
         # Create user without password for magic link only
@@ -608,20 +617,22 @@ async def verify_magic_link(
 ):
     """Sign in with magic link token"""
     # Find valid magic link
-    magic_link = db.query(MagicLink).filter(
+    result = await db.execute(select(MagicLink).where(
         MagicLink.token == request.token,
         MagicLink.used == False,
         MagicLink.expires_at > datetime.utcnow()
-    ).first()
+    ))
+    magic_link = result.scalar_one_or_none()
     
     if not magic_link:
         raise HTTPException(status_code=400, detail="Invalid or expired magic link")
     
     # Get user
-    user = db.query(User).filter(
+    result = await db.execute(select(User).where(
         User.id == magic_link.user_id,
         User.status == UserStatus.ACTIVE
-    ).first()
+    ))
+    user = result.scalar_one_or_none()
     
     if not user:
         raise HTTPException(status_code=400, detail="User not found")

@@ -18,6 +18,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.models import UserStatus
 from app.services.auth_service import AuthService
 
 
@@ -27,7 +28,7 @@ TEST_PASSWORD_HASH = AuthService.hash_password(TEST_PASSWORD)
 
 
 @pytest_asyncio.fixture
-async def test_user(async_db_session: AsyncSession) -> AsyncGenerator[User, None]:
+async def test_user(integration_db_session: AsyncSession) -> AsyncGenerator[User, None]:
     """
     Create standard test user with verified email
 
@@ -40,27 +41,28 @@ async def test_user(async_db_session: AsyncSession) -> AsyncGenerator[User, None
     user = User(
         email="test@example.com",
         password_hash=TEST_PASSWORD_HASH,
-        full_name="Test User",
+        first_name="Test",
+        last_name="User",
+        status=UserStatus.ACTIVE,
         is_active=True,
-        is_verified=True,
-        email_verified_at=datetime.utcnow(),
+        email_verified=True,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
 
-    async_db_session.add(user)
-    await async_db_session.commit()
-    await async_db_session.refresh(user)
+    integration_db_session.add(user)
+    await integration_db_session.commit()
+    await integration_db_session.refresh(user)
 
     yield user
 
     # Cleanup after test
-    await async_db_session.delete(user)
-    await async_db_session.commit()
+    await integration_db_session.delete(user)
+    await integration_db_session.commit()
 
 
 @pytest_asyncio.fixture
-async def test_user_unverified(async_db_session: AsyncSession) -> AsyncGenerator[User, None]:
+async def test_user_unverified(integration_db_session: AsyncSession) -> AsyncGenerator[User, None]:
     """
     Create test user with unverified email
 
@@ -73,26 +75,27 @@ async def test_user_unverified(async_db_session: AsyncSession) -> AsyncGenerator
     user = User(
         email="unverified@example.com",
         password_hash=TEST_PASSWORD_HASH,
-        full_name="Unverified User",
+        first_name="Unverified",
+        last_name="User",
+        status=UserStatus.ACTIVE,
         is_active=True,
-        is_verified=False,
-        email_verified_at=None,
+        email_verified=False,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
 
-    async_db_session.add(user)
-    await async_db_session.commit()
-    await async_db_session.refresh(user)
+    integration_db_session.add(user)
+    await integration_db_session.commit()
+    await integration_db_session.refresh(user)
 
     yield user
 
-    await async_db_session.delete(user)
-    await async_db_session.commit()
+    await integration_db_session.delete(user)
+    await integration_db_session.commit()
 
 
 @pytest_asyncio.fixture
-async def test_user_suspended(async_db_session: AsyncSession) -> AsyncGenerator[User, None]:
+async def test_user_suspended(integration_db_session: AsyncSession) -> AsyncGenerator[User, None]:
     """
     Create suspended/locked test user
 
@@ -105,27 +108,27 @@ async def test_user_suspended(async_db_session: AsyncSession) -> AsyncGenerator[
     user = User(
         email="suspended@example.com",
         password_hash=TEST_PASSWORD_HASH,
-        full_name="Suspended User",
+        first_name="Suspended",
+        last_name="User",
+        status=UserStatus.SUSPENDED,
         is_active=False,  # Suspended
-        is_verified=True,
-        email_verified_at=datetime.utcnow() - timedelta(days=30),
-        locked_at=datetime.utcnow(),
+        email_verified=True,
         created_at=datetime.utcnow() - timedelta(days=30),
         updated_at=datetime.utcnow(),
     )
 
-    async_db_session.add(user)
-    await async_db_session.commit()
-    await async_db_session.refresh(user)
+    integration_db_session.add(user)
+    await integration_db_session.commit()
+    await integration_db_session.refresh(user)
 
     yield user
 
-    await async_db_session.delete(user)
-    await async_db_session.commit()
+    await integration_db_session.delete(user)
+    await integration_db_session.commit()
 
 
 @pytest_asyncio.fixture
-async def test_admin(async_db_session: AsyncSession) -> AsyncGenerator[User, None]:
+async def test_admin(integration_db_session: AsyncSession) -> AsyncGenerator[User, None]:
     """
     Create test admin user with elevated privileges
 
@@ -138,27 +141,27 @@ async def test_admin(async_db_session: AsyncSession) -> AsyncGenerator[User, Non
     admin = User(
         email="admin@example.com",
         password_hash=TEST_PASSWORD_HASH,
-        full_name="Admin User",
+        first_name="Admin",
+        last_name="User",
+        status=UserStatus.ACTIVE,
         is_active=True,
-        is_verified=True,
-        is_admin=True,  # Admin privileges
-        email_verified_at=datetime.utcnow(),
+        email_verified=True,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
 
-    async_db_session.add(admin)
-    await async_db_session.commit()
-    await async_db_session.refresh(admin)
+    integration_db_session.add(admin)
+    await integration_db_session.commit()
+    await integration_db_session.refresh(admin)
 
     yield admin
 
-    await async_db_session.delete(admin)
-    await async_db_session.commit()
+    await integration_db_session.delete(admin)
+    await integration_db_session.commit()
 
 
 @pytest_asyncio.fixture
-async def test_user_with_mfa(async_db_session: AsyncSession) -> AsyncGenerator[User, None]:
+async def test_user_with_mfa(integration_db_session: AsyncSession) -> AsyncGenerator[User, None]:
     """
     Create test user with MFA enabled
 
@@ -171,28 +174,27 @@ async def test_user_with_mfa(async_db_session: AsyncSession) -> AsyncGenerator[U
     user = User(
         email="mfa-user@example.com",
         password_hash=TEST_PASSWORD_HASH,
-        full_name="MFA User",
+        first_name="MFA",
+        last_name="User",
+        status=UserStatus.ACTIVE,
         is_active=True,
-        is_verified=True,
-        mfa_enabled=True,
-        mfa_secret="JBSWY3DPEHPK3PXP",  # Test TOTP secret
-        email_verified_at=datetime.utcnow(),
+        email_verified=True,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
 
-    async_db_session.add(user)
-    await async_db_session.commit()
-    await async_db_session.refresh(user)
+    integration_db_session.add(user)
+    await integration_db_session.commit()
+    await integration_db_session.refresh(user)
 
     yield user
 
-    await async_db_session.delete(user)
-    await async_db_session.commit()
+    await integration_db_session.delete(user)
+    await integration_db_session.commit()
 
 
 @pytest_asyncio.fixture
-async def test_users_batch(async_db_session: AsyncSession) -> AsyncGenerator[list[User], None]:
+async def test_users_batch(integration_db_session: AsyncSession) -> AsyncGenerator[list[User], None]:
     """
     Create batch of 10 test users for list/pagination testing
 
@@ -207,40 +209,41 @@ async def test_users_batch(async_db_session: AsyncSession) -> AsyncGenerator[lis
         user = User(
             email=f"user{i}@example.com",
             password_hash=TEST_PASSWORD_HASH,
-            full_name=f"Test User {i}",
+            first_name=f"User",
+            last_name=f"{i}",
+            status=UserStatus.ACTIVE,
             is_active=True,
-            is_verified=True,
-            email_verified_at=datetime.utcnow() - timedelta(days=i),
+            email_verified=True,
             created_at=datetime.utcnow() - timedelta(days=i),
             updated_at=datetime.utcnow(),
         )
-        async_db_session.add(user)
+        integration_db_session.add(user)
         users.append(user)
 
-    await async_db_session.commit()
+    await integration_db_session.commit()
 
     # Refresh all users to get IDs
     for user in users:
-        await async_db_session.refresh(user)
+        await integration_db_session.refresh(user)
 
     yield users
 
     # Cleanup
     for user in users:
-        await async_db_session.delete(user)
-    await async_db_session.commit()
+        await integration_db_session.delete(user)
+    await integration_db_session.commit()
 
 
 # Helper function for creating custom test users
 async def create_test_user(
-    async_db_session: AsyncSession,
+    integration_db_session: AsyncSession,
     email: str,
     password: str = TEST_PASSWORD,
-    full_name: str = "Test User",
-    is_verified: bool = True,
+    first_name: str = "Test",
+    last_name: str = "User",
+    email_verified: bool = True,
     is_active: bool = True,
-    is_admin: bool = False,
-    mfa_enabled: bool = False,
+    status: UserStatus = UserStatus.ACTIVE,
 ) -> User:
     """
     Factory function for creating custom test users
@@ -249,25 +252,25 @@ async def create_test_user(
         user = await create_test_user(
             async_session,
             email="custom@example.com",
-            full_name="Custom User",
-            is_admin=True
+            first_name="Custom",
+            last_name="User",
+            status=UserStatus.SUSPENDED
         )
     """
     user = User(
         email=email,
-        hashed_password=AuthService.hash_password(password),
-        full_name=full_name,
+        password_hash=AuthService.hash_password(password),
+        first_name=first_name,
+        last_name=last_name,
+        status=status,
         is_active=is_active,
-        is_verified=is_verified,
-        is_admin=is_admin,
-        mfa_enabled=mfa_enabled,
-        email_verified_at=datetime.utcnow() if is_verified else None,
+        email_verified=email_verified,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
 
-    async_db_session.add(user)
-    await async_db_session.commit()
-    await async_db_session.refresh(user)
+    integration_db_session.add(user)
+    await integration_db_session.commit()
+    await integration_db_session.refresh(user)
 
     return user

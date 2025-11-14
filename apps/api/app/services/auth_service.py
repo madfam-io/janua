@@ -265,6 +265,8 @@ class AuthService:
         # Create session in database
         session = Session(
             user_id=user.id,
+            token=access_token,
+            refresh_token=refresh_token,
             access_token_jti=access_jti,
             refresh_token_jti=refresh_jti,
             refresh_token_family=family,

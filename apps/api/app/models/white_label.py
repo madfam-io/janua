@@ -4,7 +4,7 @@ Supports multi-tenant customization and branding
 """
 
 from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.models.types import GUID as UUID, JSON as JSONB
 from datetime import datetime
 import uuid
 
