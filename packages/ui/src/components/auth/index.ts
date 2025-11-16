@@ -17,7 +17,9 @@ export * from './audit-log'
 
 // Enterprise Components
 export * from '../enterprise/invitation-list'
-export * from '../enterprise/invite-user-form'
+// Note: invite-user-form exports conflicting 'Invitation' interface
+// Export everything from invite-user-form except 'Invitation' to avoid naming collision
+export { InviteUserForm, InvitationCreate, type InviteUserFormProps } from '../enterprise/invite-user-form'
 export * from '../enterprise/invitation-accept'
 export * from '../enterprise/sso-provider-list'
 export * from '../enterprise/sso-provider-form'

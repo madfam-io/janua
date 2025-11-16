@@ -15,7 +15,72 @@ export * from './components/avatar'
 export * from './components/separator'
 
 // Authentication Components
-export * from './components/auth'
+// Note: Selective export to avoid 'Invitation' type naming collision
+// from invitation-list.tsx and invite-user-form.tsx
+export {
+  // Core Auth Components
+  SignIn,
+  SignUp,
+  UserButton,
+  MFASetup,
+  MFAChallenge,
+  BackupCodes,
+  OrganizationSwitcher,
+  OrganizationProfile,
+  UserProfile,
+  PasswordReset,
+  EmailVerification,
+  PhoneVerification,
+  SessionManagement,
+  DeviceManagement,
+  AuditLog,
+  // Enterprise Components
+  InvitationList,
+  InviteUserForm,
+  InvitationAccept,
+  BulkInviteUpload,
+  SSOProviderList,
+  SSOProviderForm,
+  SAMLConfigForm,
+  SSOTestConnection,
+  // Types - with Invitation from invitation-list only
+  Invitation,
+  InvitationCreate,
+  InvitationResponse,
+  InvitationListParams,
+  InvitationListResponse,
+  InvitationListProps,
+  InviteUserFormProps,
+  BulkInvitationResponse,
+  InvitationValidateResponse,
+  InvitationAcceptRequest,
+  InvitationAcceptResponse,
+  InvitationAcceptProps,
+  BulkInviteUploadProps,
+  SSOProviderCreate,
+  SSOProviderResponse,
+  SSOProviderListProps,
+  SSOProviderFormProps,
+  SAMLConfigUpdate,
+  SAMLConfigFormProps,
+  SSOTestResponse,
+  SSOTestConnectionProps,
+  type SignInProps,
+  type SignUpProps,
+  type UserButtonProps,
+  type MFASetupProps,
+  type MFAChallengeProps,
+  type BackupCodesProps,
+  type OrganizationSwitcherProps,
+  type OrganizationProfileProps,
+  type UserProfileProps,
+  type PasswordResetProps,
+  type EmailVerificationProps,
+  type PhoneVerificationProps,
+  type SessionManagementProps,
+  type DeviceManagementProps,
+  type AuditLogProps,
+} from './components/auth'
 
 // State Management
 export * from './stores'

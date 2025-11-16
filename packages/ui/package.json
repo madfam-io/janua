@@ -8,6 +8,18 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./components/tabs": {
+      "types": "./src/components/tabs.tsx",
+      "default": "./src/components/tabs.tsx"
+    },
+    "./components/card": {
+      "types": "./src/components/card.tsx",
+      "default": "./src/components/card.tsx"
+    },
+    "./components/auth": {
+      "types": "./src/components/auth/index.ts",
+      "default": "./src/components/auth/index.ts"
+    },
     "./globals.css": "./src/globals.css"
   },
   "scripts": {
