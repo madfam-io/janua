@@ -37,6 +37,8 @@ export const auth = plintoClient.auth
 export const users = plintoClient.users
 export const sessions = plintoClient.sessions
 export const organizations = plintoClient.organizations
+export const sso = plintoClient.sso
+export const invitations = plintoClient.invitations
 
 // Export default client
 export default plintoClient

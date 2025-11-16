@@ -10,6 +10,10 @@ import { KeyManagementService } from './kms.service';
 import { AuditService } from './audit.service';
 import { ConfigService } from './config.service';
 
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('SecretsRotation');
+
 export interface RotationConfig {
   rotationInterval: string; // Cron expression
   keyType: 'jwt' | 'api' | 'encryption' | 'signing';
@@ -51,13 +55,13 @@ export class SecretsRotationService extends EventEmitter {
     try {
       const rotationConfig = this.config.get('secrets');
       if (!rotationConfig || typeof rotationConfig !== 'object') {
-        console.log('No secrets rotation configuration found, skipping initialization');
+        logger.info('No secrets rotation configuration found, skipping initialization');
         return;
       }
 
       const rotation = (rotationConfig as any).rotation;
       if (!rotation || !Array.isArray(rotation)) {
-        console.log('No rotation schedules configured');
+        logger.info('No rotation schedules configured');
         return;
       }
 
@@ -70,7 +74,7 @@ export class SecretsRotationService extends EventEmitter {
       // Set up monitoring
       this.startHealthCheck();
     } catch (error) {
-      console.error('Failed to initialize rotation schedules:', error);
+      logger.error('Failed to initialize rotation schedules', error as Error);
       this.emit('initialization:error', error as Error);
     }
   }
@@ -444,7 +448,7 @@ export class SecretsRotationService extends EventEmitter {
             }
           }
         } catch (error) {
-          console.error(`Failed to auto-rotate expired key ${keyType}:`, error);
+          logger.error(`Failed to auto-rotate expired key ${keyType}`, error as Error);
         }
       }
     }

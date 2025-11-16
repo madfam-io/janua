@@ -1,6 +1,10 @@
 import { EventEmitter } from 'events';
 import { RedisService, getRedis } from './redis.service';
 
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('MultiTenancy');
+
 interface TenantConfig {
   id: string;
   name: string;
@@ -603,22 +607,22 @@ export class MultiTenancyService extends EventEmitter {
   // Database operations (implementations would be database-specific)
   private async createTenantDatabase(tenantId: string): Promise<void> {
     // Implementation depends on database type
-    console.log(`Creating database for tenant ${tenantId}`);
+    logger.info(`Creating database for tenant ${tenantId}`);
   }
   
   private async dropTenantDatabase(tenantId: string): Promise<void> {
     // Implementation depends on database type
-    console.log(`Dropping database for tenant ${tenantId}`);
+    logger.info(`Dropping database for tenant ${tenantId}`);
   }
   
   private async createTenantSchema(tenantId: string): Promise<void> {
     // Implementation depends on database type
-    console.log(`Creating schema for tenant ${tenantId}`);
+    logger.info(`Creating schema for tenant ${tenantId}`);
   }
   
   private async dropTenantSchema(tenantId: string): Promise<void> {
     // Implementation depends on database type
-    console.log(`Dropping schema for tenant ${tenantId}`);
+    logger.info(`Dropping schema for tenant ${tenantId}`);
   }
   
   private async createTenantStorageBucket(tenantId: string): Promise<void> {

@@ -9,6 +9,10 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import * as jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('WebSocket');
+
 export interface WebSocketConfig {
   cors?: {
     origin: string | string[];
@@ -271,7 +275,7 @@ export class WebSocketService extends EventEmitter {
    * Handle errors
    */
   private handleError(socket: Socket, error: Error): void {
-    console.error('WebSocket error:', error);
+    logger.error('WebSocket error', error as Error);
     
     this.metrics.errors_count++;
     

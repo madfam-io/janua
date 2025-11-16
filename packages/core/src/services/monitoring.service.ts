@@ -1,6 +1,9 @@
 import { EventEmitter } from 'events';
 import { Redis } from 'ioredis';
 import { Registry, Counter, Histogram, Gauge, Summary } from 'prom-client';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('Monitoring');
 
 interface MetricPoint {
   timestamp: number;
@@ -853,11 +856,11 @@ export class MonitoringService extends EventEmitter {
     switch (alert.severity) {
       case 'critical':
         // Send to PagerDuty, Slack, Email
-        console.error('CRITICAL ALERT:', alert);
+        logger.error('CRITICAL ALERT', undefined, { alert });
         break;
       case 'warning':
         // Send to Slack, Email
-        console.warn('WARNING ALERT:', alert);
+        logger.warn('WARNING ALERT', { alert });
         break;
       case 'info':
         // Send to monitoring dashboard only

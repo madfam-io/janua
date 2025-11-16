@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('HardwareToken');
 
 // Hardware Token Types
 type TokenType = 'yubikey' | 'fido2' | 'rsa-securid' | 'google-titan' | 'solo-key' | 'mock';
@@ -285,7 +288,7 @@ class MockHardwareTokenProvider implements HardwareTokenProvider {
     const validCode = Math.floor(100000 + Math.random() * 900000).toString();
     this.validCodes.set(token.id, validCode);
     
-    console.log(`[Mock Hardware Token] Registered: ${token.id}, Valid code: ${validCode}`);
+    logger.debug(`Mock Hardware Token Registered: ${token.id}, Valid code: ${validCode}`);
     
     return token;
   }

@@ -17,6 +17,9 @@ import {
   RefundRequest,
   ComplianceCheck
 } from '../../types/payment.types';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('FungiesProvider');
 
 interface FungiesConfig {
   apiKey: string;
@@ -1165,7 +1168,7 @@ export class FungiesProvider extends EventEmitter implements PaymentProviderInte
 
       return crypto.timingSafeEqual(actualSignature, expectedBuffer);
     } catch (error: any) {
-      console.error('Webhook signature validation failed:', error);
+      logger.error('Webhook signature validation failed', error as Error);
       return false;
     }
   }
@@ -1209,13 +1212,13 @@ export class FungiesProvider extends EventEmitter implements PaymentProviderInte
 
         default:
           // Log unhandled events for monitoring
-          console.log(`Unhandled webhook event type: ${eventType}`);
+          logger.debug(`Unhandled webhook event type: ${eventType}`);
       }
 
       // Emit event for audit trail
       this.emit('webhook_processed', { eventType, provider: 'fungies' });
     } catch (error: any) {
-      console.error('Failed to process webhook event:', error);
+      logger.error('Failed to process webhook event', error as Error);
       throw new Error(`Webhook processing failed: ${error.message}`);
     }
   }

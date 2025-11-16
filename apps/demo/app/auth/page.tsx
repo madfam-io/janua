@@ -68,6 +68,20 @@ export default function AuthShowcaseIndex() {
       category: 'Compliance',
       badge: 'Enterprise',
     },
+    {
+      title: 'SSO Configuration',
+      href: '/auth/sso-showcase',
+      description: 'Single Sign-On with SAML 2.0, OIDC support for Google Workspace, Azure AD, and Okta.',
+      category: 'Enterprise Features',
+      badge: 'Enterprise',
+    },
+    {
+      title: 'Organization Invitations',
+      href: '/auth/invitations-showcase',
+      description: 'User invitation management with bulk upload, role assignment, and acceptance tracking.',
+      category: 'Enterprise Features',
+      badge: 'Enterprise',
+    },
   ]
 
   return (
@@ -82,16 +96,16 @@ export default function AuthShowcaseIndex() {
         </p>
         <div className="flex gap-4 text-sm">
           <div className="bg-white/20 rounded-lg px-4 py-2">
-            <span className="font-semibold">15</span> Components
+            <span className="font-semibold">23</span> Components
           </div>
           <div className="bg-white/20 rounded-lg px-4 py-2">
-            <span className="font-semibold">6,348</span> Lines of Code
+            <span className="font-semibold">9,800+</span> Lines of Code
           </div>
           <div className="bg-white/20 rounded-lg px-4 py-2">
-            <span className="font-semibold">85+</span> Storybook Stories
+            <span className="font-semibold">95+</span> Storybook Stories
           </div>
           <div className="bg-white/20 rounded-lg px-4 py-2">
-            <span className="font-semibold">&lt;100KB</span> Bundle (gzipped)
+            <span className="font-semibold">&lt;120KB</span> Bundle (gzipped)
           </div>
         </div>
       </div>

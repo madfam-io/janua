@@ -2,6 +2,10 @@ import { EventEmitter } from 'events';
 import { RedisService, getRedis } from './redis.service';
 
 // Payment Provider Types
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('PaymentGateway');
+
 export type PaymentProvider = 'conekta' | 'fungies' | 'stripe';
 export type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'canceled' | 'refunded';
 export type Currency = 'MXN' | 'USD' | 'EUR' | 'GBP' | 'CAD' | 'AUD' | 'JPY' | 'BRL' | 'ARS' | 'COP' | 'CLP' | 'PEN' | 'CHF' | 'NOK' | 'SEK' | 'DKK' | 'PLN' | 'CZK' | 'HUF' | 'RON' | 'BGN' | 'HRK' | 'SGD' | 'HKD' | 'NZD' | 'UYU' | 'INR' | 'CNY' | 'RUB' | 'TRY' | 'IDR' | 'MYR' | 'PHP' | 'THB' | 'VND' | 'KRW' | 'ILS' | 'TWD' | 'SAR' | 'AED' | 'ZAR' | 'NGN' | 'KES' | 'GHS' | 'EGP' | 'MAD';
@@ -312,7 +316,7 @@ export class PaymentGatewayService extends EventEmitter {
               created_at: new Date()
             };
           } catch (error) {
-            console.error(`Failed to create customer in ${providerName}:`, error);
+            logger.error(`Failed to create customer in ${providerName}`, error as Error);
             // Continue with other providers
           }
         }

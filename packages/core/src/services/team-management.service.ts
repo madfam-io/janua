@@ -2,6 +2,10 @@ import { EventEmitter } from 'events';
 import { RedisService, getRedis } from './redis.service';
 import { getMultiTenancyService, MultiTenancyService } from './multi-tenancy.service';
 
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('TeamManagement');
+
 interface Team {
   id: string;
   organization_id: string;
@@ -1018,7 +1022,7 @@ export class TeamManagementService extends EventEmitter {
     team: Team
   ): Promise<void> {
     // Integration with email service would go here
-    console.log(`Sending invitation email to ${invitation.email} for team ${team.name}`);
+    logger.info(`Sending invitation email to ${invitation.email} for team ${team.name}`);
   }
   
   private generateTeamId(): string {

@@ -48,8 +48,9 @@ class ProductionLogger {
   /**
    * Log error message
    */
-  error(message: string, error?: Error | LogContext): void {
-    console.error(`[${this.context}] ${message}`, error || '')
+  error(message: string, error?: Error, context?: LogContext): void {
+    const errorInfo = error ? { error: error.message, stack: error.stack, ...context } : context
+    console.error(`[${this.context}] ${message}`, errorInfo || '')
   }
 }
 
