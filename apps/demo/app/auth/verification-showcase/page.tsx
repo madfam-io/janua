@@ -3,6 +3,7 @@
 import { EmailVerification, PhoneVerification } from '@plinto/ui'
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@plinto/ui'
+import { plintoClient } from '@/lib/plinto-client'
 
 export default function VerificationShowcase() {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
@@ -117,6 +118,7 @@ export default function VerificationShowcase() {
 
           <TabsContent value="email">
             <EmailVerification
+              plintoClient={plintoClient}
               email="user@example.com"
               onResendEmail={async () => {
                 console.log('Resending verification email')
@@ -143,6 +145,7 @@ export default function VerificationShowcase() {
 
           <TabsContent value="phone">
             <PhoneVerification
+              plintoClient={plintoClient}
               phoneNumber="+1 (555) 123-4567"
               onSendCode={async (phone) => {
                 console.log('Sending verification code to:', phone)

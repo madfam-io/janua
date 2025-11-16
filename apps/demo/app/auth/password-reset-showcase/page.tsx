@@ -2,6 +2,7 @@
 
 import { PasswordReset } from '@plinto/ui'
 import { useState } from 'react'
+import { plintoClient } from '@/lib/plinto-client'
 
 export default function PasswordResetShowcase() {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
@@ -94,6 +95,7 @@ export default function PasswordResetShowcase() {
           </h3>
 
           <PasswordReset
+            plintoClient={plintoClient}
             onRequestReset={handleRequestReset}
             onError={handleError}
           />
@@ -115,6 +117,7 @@ export default function PasswordResetShowcase() {
           </h3>
 
           <PasswordReset
+            plintoClient={plintoClient}
             token="demo-reset-token-123"
             onResetPassword={handleResetPassword}
             onError={handleError}

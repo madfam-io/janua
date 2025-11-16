@@ -29,6 +29,10 @@ export interface MFASetupProps {
   onCancel?: () => void
   /** Show backup codes step */
   showBackupCodes?: boolean
+  /** Plinto client instance for API integration */
+  plintoClient?: any
+  /** API URL for direct fetch calls (fallback if no client provided) */
+  apiUrl?: string
 }
 
 export function MFASetup({
@@ -39,6 +43,8 @@ export function MFASetup({
   onError,
   onCancel,
   showBackupCodes = true,
+  plintoClient,
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
 }: MFASetupProps) {
   const [step, setStep] = React.useState<'scan' | 'verify' | 'backup'>('scan')
   const [mfaData, setMfaData] = React.useState(initialMfaData)
@@ -50,9 +56,36 @@ export function MFASetup({
 
   // Fetch MFA data on mount if not provided
   React.useEffect(() => {
-    if (!mfaData && onFetchSetupData) {
+    if (!mfaData) {
       setIsLoading(true)
-      onFetchSetupData()
+
+      const fetchData = async () => {
+        if (plintoClient) {
+          // Use Plinto SDK for MFA setup
+          const response = await plintoClient.auth.setupMFA('totp')
+          return response
+        } else if (onFetchSetupData) {
+          // Use custom callback if provided
+          return await onFetchSetupData()
+        } else {
+          // Fallback to direct fetch
+          const response = await fetch(`${apiUrl}/api/v1/auth/mfa/setup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ type: 'totp' }),
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.message || 'Failed to fetch MFA setup data')
+          }
+
+          return await response.json()
+        }
+      }
+
+      fetchData()
         .then(setMfaData)
         .catch((err) => {
           const error = err instanceof Error ? err : new Error('Failed to fetch MFA setup data')
@@ -61,7 +94,7 @@ export function MFASetup({
         })
         .finally(() => setIsLoading(false))
     }
-  }, [mfaData, onFetchSetupData, onError])
+  }, [mfaData, plintoClient, onFetchSetupData, onError, apiUrl])
 
   const handleCopySecret = async () => {
     if (!mfaData?.secret) return
@@ -96,7 +129,26 @@ export function MFASetup({
     setIsLoading(true)
 
     try {
-      await onComplete?.(verificationCode)
+      if (plintoClient) {
+        // Use Plinto SDK for MFA verification
+        await plintoClient.auth.verifyMFA(verificationCode)
+      } else if (onComplete) {
+        // Use custom callback if provided
+        await onComplete(verificationCode)
+      } else {
+        // Fallback to direct fetch
+        const response = await fetch(`${apiUrl}/api/v1/auth/mfa/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ code: verificationCode }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Invalid verification code')
+        }
+      }
 
       if (showBackupCodes && mfaData?.backupCodes) {
         setStep('backup')

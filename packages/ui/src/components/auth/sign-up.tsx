@@ -39,6 +39,10 @@ export interface SignUpProps {
   requireEmailVerification?: boolean
   /** Show password strength meter */
   showPasswordStrength?: boolean
+  /** Plinto client instance for API integration */
+  plintoClient?: any
+  /** API URL for direct fetch calls (fallback if no client provided) */
+  apiUrl?: string
 }
 
 export function SignUp({
@@ -57,6 +61,8 @@ export function SignUp({
   logoUrl,
   requireEmailVerification = true,
   showPasswordStrength = true,
+  plintoClient,
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
 }: SignUpProps) {
   const [firstName, setFirstName] = React.useState('')
   const [lastName, setLastName] = React.useState('')
@@ -105,33 +111,56 @@ export function SignUp({
     setIsLoading(true)
 
     try {
-      // TODO: Replace with actual Plinto SDK call
-      const response = await fetch('/api/auth/sign-up', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName,
-          lastName,
+      if (plintoClient) {
+        // Use Plinto SDK client for real API integration
+        const response = await plintoClient.auth.signUp({
           email,
           password,
-        }),
-      })
+          firstName,
+          lastName,
+        })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || 'Sign up failed')
-      }
-
-      const data = await response.json()
-
-      if (requireEmailVerification) {
-        // Show verification message
-        setError(null)
-        alert('Please check your email to verify your account')
+        // SDK automatically handles token storage
+        if (requireEmailVerification) {
+          // Show verification message (user not fully authenticated until verified)
+          setError(null)
+          alert('Please check your email to verify your account')
+        } else {
+          afterSignUp?.(response.user)
+          if (redirectUrl) {
+            window.location.href = redirectUrl
+          }
+        }
       } else {
-        afterSignUp?.(data.user)
-        if (redirectUrl) {
-          window.location.href = redirectUrl
+        // Fallback to direct fetch if SDK client not provided
+        const response = await fetch(`${apiUrl}/api/v1/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            email,
+            password,
+            firstName,
+            lastName,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Sign up failed')
+        }
+
+        const data = await response.json()
+
+        if (requireEmailVerification) {
+          // Show verification message
+          setError(null)
+          alert('Please check your email to verify your account')
+        } else {
+          afterSignUp?.(data.user)
+          if (redirectUrl) {
+            window.location.href = redirectUrl
+          }
         }
       }
     } catch (err) {
@@ -146,8 +175,18 @@ export function SignUp({
   const handleSocialSignUp = async (provider: string) => {
     setIsLoading(true)
     try {
-      // TODO: Replace with actual Plinto SDK call
-      window.location.href = `/api/auth/oauth/${provider}?redirect_url=${redirectUrl || '/'}`
+      if (plintoClient) {
+        // Use Plinto SDK for OAuth flow
+        const response = await plintoClient.auth.initiateOAuth(provider, {
+          redirectUrl: redirectUrl || window.location.origin,
+        })
+        // Redirect to OAuth provider
+        window.location.href = response.url
+      } else {
+        // Fallback to direct URL redirect
+        const oauthUrl = `${apiUrl}/api/v1/auth/oauth/${provider}?redirect_url=${encodeURIComponent(redirectUrl || window.location.origin)}`
+        window.location.href = oauthUrl
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(`${provider} sign up failed`)
       setError(error.message)

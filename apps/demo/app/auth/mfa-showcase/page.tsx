@@ -3,6 +3,7 @@
 import { MFASetup, MFAChallenge, BackupCodes } from '@plinto/ui'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@plinto/ui'
 import { useState } from 'react'
+import { plintoClient } from '@/lib/plinto-client'
 
 export default function MFAShowcase() {
   const [setupComplete, setSetupComplete] = useState(false)
@@ -108,6 +109,7 @@ export default function MFAShowcase() {
           <TabsContent value="setup" className="mt-6">
             <div className="max-w-md mx-auto">
               <MFASetup
+                plintoClient={plintoClient}
                 onComplete={handleSetupComplete}
                 onError={(error) => console.error('MFA Setup Error:', error)}
               />

@@ -24,6 +24,10 @@ export interface EmailVerificationProps {
   showResend?: boolean
   /** Custom logo URL */
   logoUrl?: string
+  /** Plinto client instance for API integration */
+  plintoClient?: any
+  /** API URL for direct fetch calls (fallback if no client provided) */
+  apiUrl?: string
 }
 
 export function EmailVerification({
@@ -37,6 +41,8 @@ export function EmailVerification({
   onComplete,
   showResend = true,
   logoUrl,
+  plintoClient,
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
 }: EmailVerificationProps) {
   const [status, setStatus] = React.useState(initialStatus)
   const [error, setError] = React.useState<string | null>(null)
@@ -44,9 +50,33 @@ export function EmailVerification({
 
   // Auto-verify if token is provided
   React.useEffect(() => {
-    if (initialToken && onVerify && status === 'pending') {
+    if (initialToken && status === 'pending') {
       setStatus('verifying')
-      onVerify(initialToken)
+
+      const verify = async () => {
+        if (plintoClient) {
+          // Use Plinto SDK for email verification
+          await plintoClient.auth.verifyEmail(initialToken)
+        } else if (onVerify) {
+          // Use custom callback if provided
+          await onVerify(initialToken)
+        } else {
+          // Fallback to direct fetch
+          const response = await fetch(`${apiUrl}/api/v1/auth/email/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ token: initialToken }),
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.message || 'Invalid or expired verification link')
+          }
+        }
+      }
+
+      verify()
         .then(() => {
           setStatus('success')
           onComplete?.()
@@ -58,7 +88,7 @@ export function EmailVerification({
           setStatus('error')
         })
     }
-  }, [initialToken, onVerify, onError, onComplete])
+  }, [initialToken, plintoClient, onVerify, onError, onComplete, apiUrl, status])
 
   // Cooldown timer for resend
   React.useEffect(() => {
@@ -69,13 +99,35 @@ export function EmailVerification({
   }, [resendCooldown])
 
   const handleResend = async () => {
-    if (!onResendEmail || resendCooldown > 0) return
+    if (resendCooldown > 0) return
 
     setError(null)
 
     try {
-      await onResendEmail()
-      setResendCooldown(60) // 60 second cooldown
+      if (plintoClient) {
+        // Use Plinto SDK to resend verification email
+        await plintoClient.auth.resendVerificationEmail({ email })
+        setResendCooldown(60) // 60 second cooldown
+      } else if (onResendEmail) {
+        // Use custom callback if provided
+        await onResendEmail()
+        setResendCooldown(60)
+      } else {
+        // Fallback to direct fetch
+        const response = await fetch(`${apiUrl}/api/v1/auth/email/resend`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Failed to resend email')
+        }
+
+        setResendCooldown(60)
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to resend email')
       setError(error.message)

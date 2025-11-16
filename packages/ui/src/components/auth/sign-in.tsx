@@ -37,6 +37,10 @@ export interface SignInProps {
   logoUrl?: string
   /** Show "Remember me" checkbox */
   showRememberMe?: boolean
+  /** Plinto client instance for API integration */
+  plintoClient?: any
+  /** API URL for direct fetch calls (fallback if no client provided) */
+  apiUrl?: string
 }
 
 export function SignIn({
@@ -54,6 +58,8 @@ export function SignIn({
   },
   logoUrl,
   showRememberMe = true,
+  plintoClient,
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
 }: SignInProps) {
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
@@ -68,22 +74,40 @@ export function SignIn({
     setIsLoading(true)
 
     try {
-      // TODO: Replace with actual Plinto SDK call
-      const response = await fetch('/api/auth/sign-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, remember }),
-      })
+      if (plintoClient) {
+        // Use Plinto SDK client for real API integration
+        const response = await plintoClient.auth.signIn({
+          email,
+          password,
+          remember,
+        })
 
-      if (!response.ok) {
-        throw new Error('Invalid email or password')
-      }
+        // SDK automatically handles token storage
+        afterSignIn?.(response.user)
 
-      const data = await response.json()
-      afterSignIn?.(data.user)
+        if (redirectUrl) {
+          window.location.href = redirectUrl
+        }
+      } else {
+        // Fallback to direct fetch if SDK client not provided
+        const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email, password, remember }),
+        })
 
-      if (redirectUrl) {
-        window.location.href = redirectUrl
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Invalid email or password')
+        }
+
+        const data = await response.json()
+        afterSignIn?.(data.user)
+
+        if (redirectUrl) {
+          window.location.href = redirectUrl
+        }
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Sign in failed')
@@ -97,8 +121,18 @@ export function SignIn({
   const handleSocialLogin = async (provider: string) => {
     setIsLoading(true)
     try {
-      // TODO: Replace with actual Plinto SDK call
-      window.location.href = `/api/auth/oauth/${provider}?redirect_url=${redirectUrl || '/'}`
+      if (plintoClient) {
+        // Use Plinto SDK for OAuth flow
+        const response = await plintoClient.auth.initiateOAuth(provider, {
+          redirectUrl: redirectUrl || window.location.origin,
+        })
+        // Redirect to OAuth provider
+        window.location.href = response.url
+      } else {
+        // Fallback to direct URL redirect
+        const oauthUrl = `${apiUrl}/api/v1/auth/oauth/${provider}?redirect_url=${encodeURIComponent(redirectUrl || window.location.origin)}`
+        window.location.href = oauthUrl
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(`${provider} login failed`)
       setError(error.message)

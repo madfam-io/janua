@@ -26,6 +26,10 @@ export interface PasswordResetProps {
   onBackToSignIn?: () => void
   /** Custom logo URL */
   logoUrl?: string
+  /** Plinto client instance for API integration */
+  plintoClient?: any
+  /** API URL for direct fetch calls (fallback if no client provided) */
+  apiUrl?: string
 }
 
 export function PasswordReset({
@@ -39,6 +43,8 @@ export function PasswordReset({
   onError,
   onBackToSignIn,
   logoUrl,
+  plintoClient,
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
 }: PasswordResetProps) {
   const [step, setStep] = React.useState(initialStep)
   const [email, setEmail] = React.useState(initialEmail)
@@ -69,14 +75,35 @@ export function PasswordReset({
 
   const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!onRequestReset) return
 
     setIsLoading(true)
     setError(null)
 
     try {
-      await onRequestReset(email)
-      setStep('verify')
+      if (plintoClient) {
+        // Use Plinto SDK for password reset request
+        await plintoClient.auth.forgotPassword({ email })
+        setStep('verify')
+      } else if (onRequestReset) {
+        // Use custom callback if provided
+        await onRequestReset(email)
+        setStep('verify')
+      } else {
+        // Fallback to direct fetch
+        const response = await fetch(`${apiUrl}/api/v1/auth/password/forgot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Failed to send reset email')
+        }
+
+        setStep('verify')
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to send reset email')
       setError(error.message)
@@ -88,7 +115,6 @@ export function PasswordReset({
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!onResetPassword) return
 
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match')
@@ -104,8 +130,30 @@ export function PasswordReset({
     setError(null)
 
     try {
-      await onResetPassword(token, newPassword)
-      setStep('success')
+      if (plintoClient) {
+        // Use Plinto SDK for password reset
+        await plintoClient.auth.resetPassword(token, newPassword)
+        setStep('success')
+      } else if (onResetPassword) {
+        // Use custom callback if provided
+        await onResetPassword(token, newPassword)
+        setStep('success')
+      } else {
+        // Fallback to direct fetch
+        const response = await fetch(`${apiUrl}/api/v1/auth/password/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ token, newPassword }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Failed to reset password')
+        }
+
+        setStep('success')
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to reset password')
       setError(error.message)

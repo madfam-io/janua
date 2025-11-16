@@ -22,6 +22,10 @@ export interface PhoneVerificationProps {
   onComplete?: () => void
   /** Custom logo URL */
   logoUrl?: string
+  /** Plinto client instance for API integration */
+  plintoClient?: any
+  /** API URL for direct fetch calls (fallback if no client provided) */
+  apiUrl?: string
 }
 
 export function PhoneVerification({
@@ -33,6 +37,8 @@ export function PhoneVerification({
   onError,
   onComplete,
   logoUrl,
+  plintoClient,
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
 }: PhoneVerificationProps) {
   const [step, setStep] = React.useState(initialStep)
   const [phoneNumber, setPhoneNumber] = React.useState(initialPhoneNumber)
@@ -59,13 +65,32 @@ export function PhoneVerification({
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!onSendCode) return
 
     setIsLoading(true)
     setError(null)
 
     try {
-      await onSendCode(phoneNumber)
+      if (plintoClient) {
+        // Use Plinto SDK for phone verification
+        await plintoClient.auth.sendPhoneVerification({ phoneNumber })
+      } else if (onSendCode) {
+        // Use custom callback if provided
+        await onSendCode(phoneNumber)
+      } else {
+        // Fallback to direct fetch
+        const response = await fetch(`${apiUrl}/api/v1/auth/phone/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ phoneNumber }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Failed to send verification code')
+        }
+      }
+
       setStep('verify')
       setResendCooldown(60) // 60 second cooldown
     } catch (err) {
@@ -79,13 +104,32 @@ export function PhoneVerification({
 
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!onVerifyCode) return
 
     setIsLoading(true)
     setError(null)
 
     try {
-      await onVerifyCode(verificationCode)
+      if (plintoClient) {
+        // Use Plinto SDK for phone verification
+        await plintoClient.auth.verifyPhone({ code: verificationCode })
+      } else if (onVerifyCode) {
+        // Use custom callback if provided
+        await onVerifyCode(verificationCode)
+      } else {
+        // Fallback to direct fetch
+        const response = await fetch(`${apiUrl}/api/v1/auth/phone/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ code: verificationCode }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Invalid verification code')
+        }
+      }
+
       setStep('success')
       onComplete?.()
     } catch (err) {
@@ -100,13 +144,33 @@ export function PhoneVerification({
   }
 
   const handleResendCode = async () => {
-    if (!onSendCode || resendCooldown > 0) return
+    if (resendCooldown > 0) return
 
     setIsLoading(true)
     setError(null)
 
     try {
-      await onSendCode(phoneNumber)
+      if (plintoClient) {
+        // Use Plinto SDK for phone verification
+        await plintoClient.auth.sendPhoneVerification({ phoneNumber })
+      } else if (onSendCode) {
+        // Use custom callback if provided
+        await onSendCode(phoneNumber)
+      } else {
+        // Fallback to direct fetch
+        const response = await fetch(`${apiUrl}/api/v1/auth/phone/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ phoneNumber }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Failed to resend code')
+        }
+      }
+
       setResendCooldown(60) // 60 second cooldown
       setVerificationCode('')
       setAttempts(0)

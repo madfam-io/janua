@@ -3,6 +3,7 @@
 import { SignUp } from '@plinto/ui'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { plintoClient } from '@/lib/plinto-client'
 
 export default function SignUpShowcase() {
   const router = useRouter()
@@ -97,8 +98,10 @@ export default function SignUpShowcase() {
           </h3>
 
           <SignUp
+            plintoClient={plintoClient}
             afterSignUp={handleSuccess}
             onError={handleError}
+            redirectUrl="/dashboard"
           />
 
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
