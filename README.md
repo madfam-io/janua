@@ -2,6 +2,8 @@
 
 **Modern, enterprise-grade authentication and user management platform**
 
+**All authentication features free and open source.** Paid tiers provide managed hosting, enterprise support, and compliance. No vendor lock-in.
+
 [![PyPI version](https://img.shields.io/pypi/v/plinto?style=flat-square)](https://pypi.org/project/plinto/)
 [![Python versions](https://img.shields.io/pypi/pyversions/plinto?style=flat-square)](https://pypi.org/project/plinto/)
 [![License](https://img.shields.io/pypi/l/plinto?style=flat-square)](https://github.com/madfam-io/plinto/blob/main/LICENSE)
@@ -49,6 +51,33 @@ cd apps/demo && npm install && npm run dev
 - 📋 **[Demo Walkthrough](DEMO_WALKTHROUGH.md)** - Complete 50+ checkpoint validation
 - 🏗️ **[Week 5 Summary](docs/implementation-reports/week5-final-summary.md)** - Latest progress
 - 🔌 **[API Integration Guide](docs/implementation-reports/week6-day1-api-integration.md)** - Full stack setup
+
+---
+
+## 💡 Why Plinto?
+
+Plinto combines the best of competing authentication solutions without the tradeoffs:
+
+| Feature | Better-Auth | Plinto | Clerk | Auth0 |
+|---------|-------------|--------|-------|-------|
+| **All features free** | ✅ | ✅ | ❌ | ❌ |
+| **Self-hosting** | ✅ | ✅ | ❌ | ❌ ($$$$) |
+| **Clerk-quality UI** | ❌ | ✅ | ✅ | ❌ |
+| **Multi-framework SDKs** | ✅ | ✅ | ❌ (React only) | ✅ |
+| **Direct DB access** | ✅ | ✅ | ❌ (webhooks) | ❌ |
+| **Migration path** | N/A | ✅ | ❌ | ❌ |
+
+**Blue-Ocean Positioning:**
+- **Better-Auth Foundation**: Real-time direct database writes, full control over your data
+- **Clerk Developer Experience**: Production-ready UI components, 10-minute setup
+- **Anti-Trap Business Model**: All authentication features free forever (MFA, passkeys, SSO, organizations)
+- **Anti-Lock-In**: [Documented migration path](docs/migration/cloud-to-self-hosted.md) from managed to self-hosted
+
+**Framework Support:**
+- ✅ **Frontend**: React, Vue 3, Next.js (App Router), React Native
+- ✅ **Mobile**: Flutter, React Native
+- ✅ **Backend**: Python (FastAPI), Go, TypeScript/Node.js
+- 🔜 **Coming Soon**: Svelte, Astro (planned Q1 2026)
 
 ---
 
@@ -114,7 +143,7 @@ npm test -- --coverage
 ### Installation
 
 ```bash
-# Install Plinto
+# Install Plinto (100% free and open source)
 pip install plinto
 
 # Install with all optional dependencies
@@ -123,6 +152,9 @@ pip install "plinto[all]"
 # Install for development
 pip install "plinto[dev]"
 ```
+
+**💰 Pricing**: All authentication features are free forever. See [pricing guide](docs/business/PRICING.md) for managed hosting options.
+**🚪 No Lock-In**: See [migration guide](docs/migration/cloud-to-self-hosted.md) for moving from managed to self-hosted.
 
 ### Basic Usage
 
@@ -190,10 +222,12 @@ Plinto provides a comprehensive full-stack authentication platform:
 ```
 
 **Key Features:**
-- **🔐 Multiple Authentication Methods**: JWT, OAuth, SAML, WebAuthn/Passkeys
-- **🏢 Multi-tenancy**: Organization-based user management
+- **🔐 Multiple Authentication Methods**: JWT, OAuth, SAML, WebAuthn/Passkeys - **ALL FREE**
+- **🏢 Multi-tenancy**: Organization-based user management with unlimited organizations
 - **🛡️ Security First**: Rate limiting, security headers, audit logging
-- **⚡ High Performance**: Async/await with Redis caching (84/100 Lighthouse)
+- **⚡ Real-Time Database Access**: Direct database writes. No webhook delays, no eventual consistency, no data sync failures
+- **🌐 Multi-Framework Support**: React, Vue, Next.js, React Native, Flutter, Python, Go with first-class SDKs
+- **🚪 No Vendor Lock-In**: [Complete migration path](docs/migration/cloud-to-self-hosted.md) from managed to self-hosted
 - **🧩 Modular Design**: Use only what you need
 - **📦 TypeScript SDK**: Type-safe client with React hooks
 - **🧪 Comprehensive Testing**: 538+ tests ensuring reliability

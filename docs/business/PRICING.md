@@ -1,190 +1,212 @@
 # Plinto Pricing & Feature Matrix
 
+**Pricing Philosophy**: All authentication features are free and open source. Paid tiers provide managed hosting, enterprise support, compliance, and scale.
+
 ## Pricing Tiers
 
 ### 🆓 Community Edition (Open Source)
 **Price**: Free forever
-**Target**: Individuals, startups, open source projects
+**Target**: Individuals, startups, open source projects, self-hosters
 
-#### Features Included:
-- ✅ **Core Authentication**
+#### All Authentication Features Included:
+- ✅ **Complete Authentication**
   - Email/password authentication
+  - Social login (Google, GitHub, Microsoft, Apple)
+  - Magic links (passwordless)
   - User registration and management
   - Password reset and email verification
 
-- ✅ **Multi-Factor Authentication (MFA)**
+- ✅ **Multi-Factor Authentication (MFA)** - **ALL TYPES**
   - TOTP (Google Authenticator, Authy)
-  - SMS (basic)
-
-- ✅ **Basic Organizations**
-  - Single organization
-  - Up to 100 users
-
-- ✅ **Basic Webhooks**
-  - Up to 5 webhooks
-  - Standard events
-
-- ✅ **Community Support**
-  - GitHub issues
-  - Community forum
-  - Documentation
-
-#### Limits:
-- 100 users per organization
-- 1 organization
-- 1,000 API requests/hour
-- 5 webhooks
-
----
-
-### 💼 Professional
-**Price**: $99/month or $990/year (2 months free)
-**Target**: Growing businesses, small teams
-
-#### Everything in Community, plus:
-- ✅ **Advanced MFA**
-  - Hardware security keys (WebAuthn)
+  - SMS authentication
+  - **WebAuthn/Passkeys** (hardware security keys, biometric)
   - Backup codes
   - Device trust
 
-- ✅ **Team Management**
-  - Up to 10 organizations
-  - Up to 10,000 users
+- ✅ **Multi-Tenancy & Organizations**
+  - **Unlimited organizations**
+  - Team management
   - Role-based access control (RBAC)
+  - Custom roles and permissions
 
-- ✅ **API Keys & Access Control**
-  - Multiple API keys
-  - Scoped permissions
-  - IP allowlisting
+- ✅ **Enterprise SSO**
+  - **SAML 2.0**
+  - **OpenID Connect (OIDC)**
+  - Custom identity providers
 
-- ✅ **Custom Domains**
-  - White-label authentication pages
-  - Custom email domains
+- ✅ **Developer Tools**
+  - REST API
+  - SDKs (React, Vue, Next.js, Flutter, Python, Go)
+  - Webhooks (unlimited)
+  - API keys (unlimited)
 
-- ✅ **Analytics Dashboard**
-  - User analytics
+- ✅ **Self-Hosting**
+  - Full source code access (MIT license)
+  - Docker & Kubernetes deployment
+  - Complete control over data
+  - No vendor lock-in
+
+#### Community Limits:
+- **Self-hosted only** (you manage infrastructure)
+- Community support (GitHub issues, forum, docs)
+- No SLA guarantees
+- No managed compliance reports
+
+---
+
+### 💼 Professional (Managed Cloud)
+**Price**: $99/month or $990/year (2 months free)
+**Target**: Growing businesses who want managed hosting
+
+#### Everything in Community, plus:
+
+- ✅ **Managed Cloud Hosting**
+  - No infrastructure management required
+  - Automatic updates and patches
+  - Multi-region deployment
+  - 99.9% uptime SLA
+
+- ✅ **Enhanced Infrastructure**
+  - Custom domains with SSL
+  - CDN acceleration
+  - DDoS protection
+  - Automated backups (daily)
+
+- ✅ **Advanced Analytics**
+  - User analytics dashboard
   - Authentication metrics
   - Security insights
+  - Custom reports
 
 - ✅ **Priority Support**
   - Email support (24h response)
   - Priority bug fixes
   - Migration assistance
+  - Slack/Discord support channel
 
-#### Limits:
-- 10,000 users total
+- ✅ **Compliance Assistance**
+  - GDPR compliance tools
+  - Data export automation
+  - 30-day audit log retention
+  - Basic compliance reports
+
+#### Professional Limits:
+- 10,000 monthly active users (MAU)
 - 10 organizations
 - 10,000 API requests/hour
-- 50 webhooks
+- Shared cloud infrastructure
 
 ---
 
 ### 🏢 Enterprise
 **Price**: Custom pricing (contact sales)
-**Target**: Large organizations, enterprises
+**Target**: Large organizations requiring compliance, dedicated infrastructure, SLA
 
 #### Everything in Professional, plus:
-- ✅ **Single Sign-On (SSO)**
-  - SAML 2.0
-  - OpenID Connect (OIDC)
-  - Custom identity providers
 
-- ✅ **Advanced Security**
-  - Audit logs with retention
-  - Security compliance reports
+- ✅ **Dedicated Infrastructure**
+  - **On-premise deployment** (your infrastructure)
+  - **Private cloud deployment** (dedicated VPC)
+  - Multi-region replication
+  - Custom architecture design
+  - Custom SLA (up to 99.99%)
+
+- ✅ **Advanced Security & Compliance**
+  - **Unlimited audit log retention**
+  - SOC 2 Type II reports
+  - HIPAA compliance assistance
+  - Data residency options (EU, US, APAC)
   - Advanced threat detection
-  - Session management
+  - Security compliance reports
 
-- ✅ **Custom Roles & Permissions**
+- ✅ **Advanced Team Management**
   - Unlimited custom roles
   - Fine-grained permissions
   - Attribute-based access control (ABAC)
+  - Advanced RBAC policies
 
 - ✅ **White Labeling**
   - Complete UI customization
   - Custom branding
   - Private labeling options
-
-- ✅ **Compliance & Reporting**
-  - SOC 2 Type II reports
-  - GDPR compliance tools
-  - Custom compliance reports
-  - Data residency options
-
-- ✅ **Infrastructure Options**
-  - On-premise deployment
-  - Private cloud deployment
-  - Multi-region support
-  - Custom SLA
+  - Remove Plinto branding
 
 - ✅ **Premium Support**
   - Dedicated account manager
   - 24/7 phone & email support
   - Custom integration support
   - Professional services
+  - Training and onboarding
 
-#### Limits:
-- Unlimited users
-- Unlimited organizations
-- Unlimited API requests
-- Unlimited webhooks
-- Custom rate limits
+- ✅ **Enterprise Features**
+  - Custom rate limits
+  - Advanced monitoring and alerts
+  - Custom integrations
+  - API priority access
+
+#### Enterprise Limits:
+- **Unlimited** users
+- **Unlimited** organizations
+- **Unlimited** API requests
+- **Custom** infrastructure and rate limits
 
 ---
 
 ## Feature Comparison Matrix
 
-| Feature | Community | Professional | Enterprise |
-|---------|-----------|--------------|------------|
+| Feature | Community (Self-Hosted) | Professional (Managed) | Enterprise |
+|---------|-------------------------|------------------------|------------|
 | **Authentication** |
 | Email/Password | ✅ | ✅ | ✅ |
 | Social Login | ✅ | ✅ | ✅ |
 | Magic Links | ✅ | ✅ | ✅ |
+| **MFA - ALL TYPES** | ✅ | ✅ | ✅ |
 | MFA (TOTP) | ✅ | ✅ | ✅ |
-| MFA (SMS) | Basic | ✅ | ✅ |
-| WebAuthn/Passkeys | ❌ | ✅ | ✅ |
-| SSO (SAML) | ❌ | ❌ | ✅ |
-| SSO (OIDC) | ❌ | ❌ | ✅ |
+| MFA (SMS) | ✅ | ✅ | ✅ |
+| **WebAuthn/Passkeys** | ✅ | ✅ | ✅ |
+| **SSO (SAML)** | ✅ | ✅ | ✅ |
+| **SSO (OIDC)** | ✅ | ✅ | ✅ |
 | **User Management** |
 | User Profiles | ✅ | ✅ | ✅ |
-| User Search | Basic | ✅ | ✅ |
-| Bulk Operations | ❌ | ✅ | ✅ |
-| Custom Attributes | ❌ | Limited | ✅ |
+| User Search | ✅ | ✅ | ✅ |
+| Bulk Operations | ✅ | ✅ | ✅ |
+| Custom Attributes | ✅ | ✅ | ✅ |
 | **Organizations** |
-| Multi-tenancy | Basic | ✅ | ✅ |
-| Team Management | ❌ | ✅ | ✅ |
-| Custom Roles | ❌ | Basic | ✅ |
-| ABAC | ❌ | ❌ | ✅ |
+| Multi-tenancy | ✅ | ✅ | ✅ |
+| Team Management | ✅ | ✅ | ✅ |
+| Custom Roles | ✅ | ✅ | ✅ |
+| ABAC | ✅ | ✅ | ✅ |
 | **Security** |
-| Rate Limiting | Basic | ✅ | Custom |
-| IP Allowlisting | ❌ | ✅ | ✅ |
-| Audit Logs | ❌ | 30 days | Unlimited |
-| Session Management | Basic | ✅ | ✅ |
-| Device Trust | ❌ | ✅ | ✅ |
+| Rate Limiting | ✅ (self-config) | ✅ | Custom |
+| IP Allowlisting | ✅ | ✅ | ✅ |
+| Audit Logs | ✅ (self-managed) | 30 days | Unlimited |
+| Session Management | ✅ | ✅ | ✅ |
+| Device Trust | ✅ | ✅ | ✅ |
 | **Compliance** |
-| GDPR Tools | Basic | ✅ | ✅ |
+| GDPR Tools | ✅ | ✅ | ✅ |
 | SOC 2 Reports | ❌ | ❌ | ✅ |
-| HIPAA Ready | ❌ | ❌ | ✅ |
-| Data Residency | ❌ | ❌ | ✅ |
+| HIPAA Assistance | ❌ | ❌ | ✅ |
+| Data Residency | Self-managed | ❌ | ✅ |
 | **Developer Tools** |
 | REST API | ✅ | ✅ | ✅ |
 | SDKs | ✅ | ✅ | ✅ |
-| Webhooks | 5 | 50 | Unlimited |
-| API Keys | 1 | Unlimited | Unlimited |
-| Rate Limits | 1K/hour | 10K/hour | Custom |
-| **Support** |
+| Webhooks | ✅ (unlimited) | ✅ (unlimited) | ✅ (unlimited) |
+| API Keys | ✅ (unlimited) | ✅ (unlimited) | ✅ (unlimited) |
+| Rate Limits | Self-managed | 10K/hour | Custom |
+| **Infrastructure** |
+| **Self-Hosting** | ✅ | ✅ (+ managed) | ✅ (+ dedicated) |
+| Cloud Hosting | Self-managed | Shared | Dedicated |
+| On-Premise | ✅ | ❌ | ✅ |
+| Multi-Region | Self-managed | ✅ | ✅ |
+| Custom Domain | Self-config | ✅ | ✅ |
+| White Label | ✅ (OSS) | Partial | ✅ |
+| **Support & SLA** |
 | Documentation | ✅ | ✅ | ✅ |
 | Community Forum | ✅ | ✅ | ✅ |
 | Email Support | ❌ | 24h | Priority |
 | Phone Support | ❌ | ❌ | 24/7 |
 | Dedicated Manager | ❌ | ❌ | ✅ |
-| SLA | ❌ | 99.9% | Custom |
-| **Infrastructure** |
-| Cloud Hosting | Shared | Shared | Dedicated |
-| On-Premise | ❌ | ❌ | ✅ |
-| Multi-Region | ❌ | ❌ | ✅ |
-| Custom Domain | ❌ | ✅ | ✅ |
-| White Label | ❌ | Partial | ✅ |
+| SLA | ❌ | 99.9% | Custom (up to 99.99%) |
 
 ---
 
