@@ -2,6 +2,10 @@
  * Frontend monitoring utilities for admin application
  */
 
+import { createLogger } from '@plinto/core/utils/logger'
+
+const logger = createLogger('AdminMonitoring')
+
 interface MetricData {
   type: 'adminAction' | 'userOperation' | 'configChange' | 'error'
   value?: number
@@ -23,9 +27,7 @@ class AdminMonitoring {
    */
   async track(metric: MetricData): Promise<void> {
     if (!this.isEnabled) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Admin Monitoring]', metric)
-      }
+      logger.debug('Metric tracked (development only)', metric)
       return
     }
 
@@ -38,7 +40,7 @@ class AdminMonitoring {
         body: JSON.stringify(metric)
       })
     } catch (error) {
-      console.warn('[Admin Monitoring] Failed to track metric:', error)
+      logger.warn('Failed to track metric', error)
     }
   }
 
@@ -104,7 +106,7 @@ class AdminMonitoring {
       const response = await fetch(this.baseUrl)
       return await response.text()
     } catch (error) {
-      console.warn('[Admin Monitoring] Failed to get metrics:', error)
+      logger.warn('Failed to get metrics', error)
       return null
     }
   }

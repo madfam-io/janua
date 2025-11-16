@@ -9,7 +9,9 @@ import json
 from app.database import get_db
 from app.services.websocket_manager import manager, EventType
 from app.services.auth_service import AuthService
+from app.utils.logger import create_logger
 
+logger = create_logger(__name__)
 
 router = APIRouter(tags=["websocket"])
 
@@ -83,7 +85,7 @@ async def websocket_endpoint(
     
     except Exception as e:
         # Unexpected error
-        print(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error: {e}", exc_info=True)
         if connection_id:
             await manager.disconnect(connection_id)
 

@@ -1,94 +1,76 @@
 /**
- * Production-ready logger utility
- * Replaces console.log statements with proper logging
+ * Production-safe logging utility
+ * 
+ * Replaces console.* calls with environment-aware logging that can be
+ * controlled and disabled in production builds.
  */
 
-export enum LogLevel {
-  ERROR = 'error',
-  WARN = 'warn',
-  INFO = 'info',
-  DEBUG = 'debug',
+type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+interface LogContext {
+  [key: string]: any
 }
 
-export interface LogContext {
-  userId?: string;
-  organizationId?: string;
-  requestId?: string;
-  [key: string]: any;
-}
-
-class Logger {
-  private isDevelopment = process.env.NODE_ENV !== 'production';
-  private logLevel: LogLevel = (process.env.LOG_LEVEL as LogLevel) || LogLevel.INFO;
-
-  private shouldLog(level: LogLevel): boolean {
-    const levels = [LogLevel.ERROR, LogLevel.WARN, LogLevel.INFO, LogLevel.DEBUG];
-    const currentLevelIndex = levels.indexOf(this.logLevel);
-    const messageLevelIndex = levels.indexOf(level);
-    return messageLevelIndex <= currentLevelIndex;
+class ProductionLogger {
+  private context: string
+  private isDevelopment: boolean
+  
+  constructor(context: string) {
+    this.context = context
+    this.isDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
   }
-
-  private formatMessage(level: LogLevel, message: string, context?: LogContext): string {
-    const timestamp = new Date().toISOString();
-    const contextStr = context ? ` ${JSON.stringify(context)}` : '';
-    return `[${timestamp}] [${level.toUpperCase()}] ${message}${contextStr}`;
-  }
-
-  error(message: string, error?: Error, context?: LogContext): void {
-    if (this.shouldLog(LogLevel.ERROR)) {
-      const formattedMessage = this.formatMessage(LogLevel.ERROR, message, context);
-      console.error(formattedMessage, error?.stack || '');
-      
-      // In production, send to error tracking service
-      if (!this.isDevelopment) {
-        this.sendToErrorTracking(message, error, context);
-      }
+  
+  /**
+   * Log debug message (development only)
+   */
+  debug(message: string, data?: LogContext): void {
+    if (this.isDevelopment) {
+      console.debug(`[${this.context}] ${message}`, data || '')
     }
   }
-
-  warn(message: string, context?: LogContext): void {
-    if (this.shouldLog(LogLevel.WARN)) {
-      const formattedMessage = this.formatMessage(LogLevel.WARN, message, context);
-      console.warn(formattedMessage);
+  
+  /**
+   * Log info message
+   */
+  info(message: string, data?: LogContext): void {
+    if (this.isDevelopment || process.env.NEXT_PUBLIC_ENABLE_LOGGING === 'true') {
+      console.info(`[${this.context}] ${message}`, data || '')
     }
   }
-
-  info(message: string, context?: LogContext): void {
-    if (this.shouldLog(LogLevel.INFO)) {
-      const formattedMessage = this.formatMessage(LogLevel.INFO, message, context);
-      console.info(formattedMessage);
-    }
+  
+  /**
+   * Log warning message
+   */
+  warn(message: string, data?: LogContext): void {
+    console.warn(`[${this.context}] ${message}`, data || '')
   }
-
-  debug(message: string, context?: LogContext): void {
-    if (this.shouldLog(LogLevel.DEBUG)) {
-      const formattedMessage = this.formatMessage(LogLevel.DEBUG, message, context);
-      if (this.isDevelopment) {
-        console.log(formattedMessage);
-      }
-    }
-  }
-
-  private sendToErrorTracking(message: string, error?: Error, context?: LogContext): void {
-    // Integration with error tracking service (e.g., Sentry, Rollbar)
-    // This is a placeholder for actual implementation
-    try {
-      // Send to external service
-    } catch (err) {
-      // Fail silently to not affect main application
-    }
+  
+  /**
+   * Log error message
+   */
+  error(message: string, error?: Error | LogContext): void {
+    console.error(`[${this.context}] ${message}`, error || '')
   }
 }
 
-// Export singleton instance
-export const logger = new Logger();
+/**
+ * Create a production-safe logger instance
+ * 
+ * @example
+ * ```ts
+ * import { createLogger } from '@/utils/logger'
+ * 
+ * const logger = createLogger('MyComponent')
+ * logger.debug('Debug message') // Only in development
+ * logger.info('Info message')   // Development or when enabled
+ * logger.error('Error', err)    // Always logged
+ * ```
+ */
+export function createLogger(context: string): ProductionLogger {
+  return new ProductionLogger(context)
+}
 
-// Export convenience functions
-export const logError = (message: string, error?: Error, context?: LogContext) => 
-  logger.error(message, error, context);
-export const logWarn = (message: string, context?: LogContext) => 
-  logger.warn(message, context);
-export const logInfo = (message: string, context?: LogContext) => 
-  logger.info(message, context);
-export const logDebug = (message: string, context?: LogContext) => 
-  logger.debug(message, context);
+/**
+ * Default logger instance
+ */
+export const logger = new ProductionLogger('app')

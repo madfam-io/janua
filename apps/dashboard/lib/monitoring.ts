@@ -2,6 +2,10 @@
  * Frontend monitoring utilities for dashboard application
  */
 
+import { createLogger } from '@plinto/core/utils/logger'
+
+const logger = createLogger('DashboardMonitoring')
+
 interface MetricData {
   type: 'pageView' | 'apiCall' | 'error' | 'userAction'
   value?: number
@@ -23,9 +27,7 @@ class DashboardMonitoring {
    */
   async track(metric: MetricData): Promise<void> {
     if (!this.isEnabled) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Monitoring]', metric)
-      }
+      logger.debug('Metric tracked (development only)', metric)
       return
     }
 
@@ -38,7 +40,7 @@ class DashboardMonitoring {
         body: JSON.stringify(metric)
       })
     } catch (error) {
-      console.warn('[Monitoring] Failed to track metric:', error)
+      logger.warn('Failed to track metric', error)
     }
   }
 
@@ -97,7 +99,7 @@ class DashboardMonitoring {
       const response = await fetch(this.baseUrl)
       return await response.text()
     } catch (error) {
-      console.warn('[Monitoring] Failed to get metrics:', error)
+      logger.warn('Failed to get metrics', error)
       return null
     }
   }
