@@ -3,6 +3,7 @@ import { Redis } from 'ioredis';
 import { Registry, Counter, Histogram, Gauge, Summary } from 'prom-client';
 import { createLogger } from '../utils/logger';
 import { AlertingService, Alert } from './alerting.service';
+import { HealthCheckService, HealthStatus } from './health-check.service';
 
 const logger = createLogger('Monitoring');
 
@@ -12,27 +13,15 @@ interface MetricPoint {
   labels?: Record<string, string>;
 }
 
-interface HealthStatus {
-  service: string;
-  status: 'healthy' | 'degraded' | 'unhealthy';
-  lastCheck: Date;
-  uptime: number;
-  errorRate: number;
-  latency: {
-    p50: number;
-    p95: number;
-    p99: number;
-  };
-}
-
+// HealthStatus interface moved to health-check.service.ts
 // Alert interface moved to alerting.service.ts
 
 export class MonitoringService extends EventEmitter {
   private redis: Redis;
   private registry: Registry;
   private alertingService: AlertingService;
+  private healthCheckService: HealthCheckService;
   private metrics: Map<string, any>;
-  private healthChecks: Map<string, () => Promise<boolean>>;
 
   // Payment metrics
   private paymentCounter!: Counter;
@@ -68,12 +57,12 @@ export class MonitoringService extends EventEmitter {
     this.redis = redis;
     this.registry = new Registry();
     this.alertingService = new AlertingService(redis);
+    this.healthCheckService = new HealthCheckService(redis);
     this.metrics = new Map();
-    this.healthChecks = new Map();
 
     this.initializeMetrics();
     this.startMetricsCollection();
-    this.startHealthChecks();
+    this.healthCheckService.startHealthChecks();
   }
 
   private initializeMetrics(): void {
@@ -603,48 +592,10 @@ export class MonitoringService extends EventEmitter {
 
   // Health checks
   registerHealthCheck(service: string, check: () => Promise<boolean>): void {
-    this.healthChecks.set(service, check);
+    this.healthCheckService.registerHealthCheck(service, check);
   }
 
-  private async performHealthCheck(service: string): Promise<HealthStatus> {
-    const check = this.healthChecks.get(service);
-    if (!check) {
-      return {
-        service,
-        status: 'unhealthy',
-        lastCheck: new Date(),
-        uptime: 0,
-        errorRate: 100,
-        latency: { p50: 0, p95: 0, p99: 0 }
-      };
-    }
 
-    const startTime = Date.now();
-    let healthy = false;
-
-    try {
-      healthy = await check();
-    } catch (error) {
-      healthy = false;
-    }
-
-    const latency = Date.now() - startTime;
-
-    // Get historical data
-    const history = await this.getServiceHealthHistory(service);
-    const uptime = this.calculateUptime(history);
-    const errorRate = this.calculateErrorRate(history);
-    const latencyStats = this.calculateLatencyPercentiles(history);
-
-    return {
-      service,
-      status: healthy ? 'healthy' : errorRate > 50 ? 'unhealthy' : 'degraded',
-      lastCheck: new Date(),
-      uptime,
-      errorRate,
-      latency: latencyStats
-    };
-  }
 
   // Prometheus metrics export
   async getMetrics(): Promise<string> {
@@ -660,15 +611,7 @@ export class MonitoringService extends EventEmitter {
     }, 10000);
   }
 
-  private startHealthChecks(): void {
-    // Perform health checks every 30 seconds
-    setInterval(async () => {
-      for (const [service] of this.healthChecks) {
-        const health = await this.performHealthCheck(service);
-        await this.storeHealthStatus(service, health);
-      }
-    }, 30000);
-  }
+
 
   private async collectSystemMetrics(): Promise<void> {
     // Collect queue sizes
@@ -802,28 +745,7 @@ export class MonitoringService extends EventEmitter {
   }
 
   private async getProviderHealth(provider: string): Promise<HealthStatus> {
-    const key = `provider:${provider}:health`;
-    const latencies = await this.redis.lrange(`${key}:latency`, 0, -1);
-    const success = parseInt(await this.redis.hget(key, 'success') || '0');
-    const failure = parseInt(await this.redis.hget(key, 'failure') || '0');
-
-    const latencyValues = latencies.map(l => parseFloat(l)).sort((a, b) => a - b);
-    const p50 = latencyValues[Math.floor(latencyValues.length * 0.5)] || 0;
-    const p95 = latencyValues[Math.floor(latencyValues.length * 0.95)] || 0;
-    const p99 = latencyValues[Math.floor(latencyValues.length * 0.99)] || 0;
-
-    const total = success + failure;
-    const errorRate = total > 0 ? (failure / total) * 100 : 0;
-    const uptime = total > 0 ? (success / total) * 100 : 100;
-
-    return {
-      service: provider,
-      status: errorRate > 10 ? 'unhealthy' : errorRate > 5 ? 'degraded' : 'healthy',
-      lastCheck: new Date(),
-      uptime,
-      errorRate,
-      latency: { p50, p95, p99 }
-    };
+    return await this.healthCheckService.getProviderHealth(provider);
   }
 
   private async getTrendData(timeRange: any): Promise<any> {
@@ -880,7 +802,7 @@ export class MonitoringService extends EventEmitter {
   }
 
   private async getServiceHealth(service: string): Promise<HealthStatus> {
-    return this.performHealthCheck(service);
+    return await this.healthCheckService.getServiceHealth(service);
   }
 
   private async getFilteredTransactions(filters: any): Promise<any[]> {
@@ -960,52 +882,7 @@ export class MonitoringService extends EventEmitter {
     return payments.map(p => JSON.parse(p));
   }
 
-  private async storeHealthStatus(service: string, health: HealthStatus): Promise<void> {
-    await this.redis.hset(
-      `service:${service}:health`,
-      'status',
-      health.status
-    );
-    await this.redis.hset(
-      `service:${service}:health`,
-      'lastCheck',
-      health.lastCheck.toISOString()
-    );
-  }
 
-  private async getServiceHealthHistory(service: string): Promise<any[]> {
-    const history = await this.redis.zrange(
-      `service:${service}:health:history`,
-      Date.now() - 86400000,
-      Date.now(),
-      'BYSCORE'
-    );
-    return history.map(h => JSON.parse(h));
-  }
-
-  private calculateUptime(history: any[]): number {
-    if (history.length === 0) return 100;
-
-    const successful = history.filter(h => h.healthy).length;
-    return (successful / history.length) * 100;
-  }
-
-  private calculateErrorRate(history: any[]): number {
-    if (history.length === 0) return 0;
-
-    const errors = history.filter(h => !h.healthy).length;
-    return (errors / history.length) * 100;
-  }
-
-  private calculateLatencyPercentiles(history: any[]): { p50: number; p95: number; p99: number } {
-    const latencies = history.map(h => h.latency).sort((a, b) => a - b);
-
-    return {
-      p50: latencies[Math.floor(latencies.length * 0.5)] || 0,
-      p95: latencies[Math.floor(latencies.length * 0.95)] || 0,
-      p99: latencies[Math.floor(latencies.length * 0.99)] || 0
-    };
-  }
 
   private async updateChurnRate(): Promise<void> {
     const activeCustomers = await this.getActiveCustomerCount();
