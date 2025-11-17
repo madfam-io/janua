@@ -3,27 +3,31 @@ Application configuration
 """
 
 from typing import List, Optional, Union
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """
     Application settings with environment variable support
     """
+
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False
     )
 
     # Application
     VERSION: str = "0.1.0"
     APP_NAME: str = Field(default="Plinto")
     DEBUG: bool = Field(default=False)
-    ENVIRONMENT: str = Field(default="development", pattern="^(development|staging|production|test)$")
+    ENVIRONMENT: str = Field(
+        default="development", pattern="^(development|staging|production|test)$"
+    )
     BASE_URL: str = Field(default="https://plinto.dev")
-    INTERNAL_BASE_URL: Optional[str] = Field(default=None, description="Internal service URL for Railway private networking")
+    INTERNAL_BASE_URL: Optional[str] = Field(
+        default=None, description="Internal service URL for Railway private networking"
+    )
     DOMAIN: str = Field(default="localhost")
     UPLOAD_DIR: str = Field(default="/tmp/uploads")
     FRONTEND_URL: Optional[str] = Field(default="http://localhost:3000")
@@ -31,7 +35,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = Field(
         default="postgresql://postgres:postgres@localhost:5432/plinto",
-        description="PostgreSQL connection URL"
+        description="PostgreSQL connection URL",
     )
     DATABASE_POOL_SIZE: int = Field(default=20)
     DATABASE_MAX_OVERFLOW: int = Field(default=10)
@@ -39,10 +43,7 @@ class Settings(BaseSettings):
     AUTO_MIGRATE: bool = Field(default=False)
 
     # Redis
-    REDIS_URL: str = Field(
-        default="redis://localhost:6379/0",
-        description="Redis connection URL"
-    )
+    REDIS_URL: str = Field(default="redis://localhost:6379/0", description="Redis connection URL")
     REDIS_POOL_SIZE: int = Field(default=10)
     REDIS_DECODE_RESPONSES: bool = Field(default=True)
 
@@ -70,18 +71,20 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = Field(
         default="http://localhost:3000,https://plinto.dev",
-        description="Comma-separated string or JSON array of allowed CORS origins"
+        description="Comma-separated string or JSON array of allowed CORS origins",
     )
 
     # Rate limiting
     RATE_LIMIT_ENABLED: bool = Field(default=True)
     RATE_LIMIT_PER_MINUTE: int = Field(default=60)
     RATE_LIMIT_PER_HOUR: int = Field(default=1000)
-    RATE_LIMIT_WHITELIST: str = Field(default="127.0.0.1,::1", description="Comma-separated list of IPs exempt from rate limiting")
+    RATE_LIMIT_WHITELIST: str = Field(
+        default="127.0.0.1,::1", description="Comma-separated list of IPs exempt from rate limiting"
+    )
 
     # Email
     EMAIL_ENABLED: bool = Field(default=False)
-    EMAIL_PROVIDER: str = Field(default="resend", pattern="^(resend|ses|smtp)$")
+    EMAIL_PROVIDER: str = Field(default="resend", pattern="^(resend|ses|smtp|sendgrid)$")
     EMAIL_FROM_ADDRESS: str = Field(default="noreply@plinto.dev")
     EMAIL_FROM_NAME: str = Field(default="Plinto")
     RESEND_API_KEY: Optional[str] = Field(default=None)
@@ -122,15 +125,23 @@ class Settings(BaseSettings):
     CLOUDFLARE_R2_BUCKET: str = Field(default="plinto-audit")
     R2_ENDPOINT: Optional[str] = Field(default=None, description="Cloudflare R2 endpoint URL")
     R2_ACCESS_KEY_ID: Optional[str] = Field(default=None, description="Cloudflare R2 access key ID")
-    R2_SECRET_ACCESS_KEY: Optional[str] = Field(default=None, description="Cloudflare R2 secret access key")
+    R2_SECRET_ACCESS_KEY: Optional[str] = Field(
+        default=None, description="Cloudflare R2 secret access key"
+    )
 
     # Monitoring
     SENTRY_DSN: Optional[str] = Field(default=None)
     OPENTELEMETRY_ENABLED: bool = Field(default=False)
     OPENTELEMETRY_ENDPOINT: Optional[str] = Field(default=None)
-    MONITORING_ENDPOINT: Optional[str] = Field(default=None, description="External monitoring service endpoint")
-    MONITORING_API_KEY: Optional[str] = Field(default=None, description="API key for monitoring service")
-    ALERT_WEBHOOK_URL: Optional[str] = Field(default=None, description="Webhook URL for sending alerts")
+    MONITORING_ENDPOINT: Optional[str] = Field(
+        default=None, description="External monitoring service endpoint"
+    )
+    MONITORING_API_KEY: Optional[str] = Field(
+        default=None, description="API key for monitoring service"
+    )
+    ALERT_WEBHOOK_URL: Optional[str] = Field(
+        default=None, description="Webhook URL for sending alerts"
+    )
 
     # Features
     ENABLE_DOCS: bool = Field(default=True)
@@ -152,64 +163,124 @@ class Settings(BaseSettings):
     MAX_WEBHOOKS_PER_TENANT: int = Field(default=10)
 
     # Compliance framework settings
-    COMPLIANCE_GDPR_ENABLED: bool = Field(default=True, description="Enable GDPR compliance features")
-    COMPLIANCE_SOC2_ENABLED: bool = Field(default=False, description="Enable SOC 2 compliance features")
-    COMPLIANCE_HIPAA_ENABLED: bool = Field(default=False, description="Enable HIPAA compliance features")
-    COMPLIANCE_CCPA_ENABLED: bool = Field(default=True, description="Enable CCPA compliance features")
-    COMPLIANCE_PCI_DSS_ENABLED: bool = Field(default=False, description="Enable PCI DSS compliance features")
+    COMPLIANCE_GDPR_ENABLED: bool = Field(
+        default=True, description="Enable GDPR compliance features"
+    )
+    COMPLIANCE_SOC2_ENABLED: bool = Field(
+        default=False, description="Enable SOC 2 compliance features"
+    )
+    COMPLIANCE_HIPAA_ENABLED: bool = Field(
+        default=False, description="Enable HIPAA compliance features"
+    )
+    COMPLIANCE_CCPA_ENABLED: bool = Field(
+        default=True, description="Enable CCPA compliance features"
+    )
+    COMPLIANCE_PCI_DSS_ENABLED: bool = Field(
+        default=False, description="Enable PCI DSS compliance features"
+    )
 
     # Data retention defaults
-    DEFAULT_RETENTION_PERIOD_DAYS: int = Field(default=2555, description="Default retention period (7 years)")
-    GDPR_DSR_RESPONSE_DAYS: int = Field(default=30, description="GDPR data subject request response period")
-    GDPR_BREACH_NOTIFICATION_HOURS: int = Field(default=72, description="GDPR breach notification period")
+    DEFAULT_RETENTION_PERIOD_DAYS: int = Field(
+        default=2555, description="Default retention period (7 years)"
+    )
+    GDPR_DSR_RESPONSE_DAYS: int = Field(
+        default=30, description="GDPR data subject request response period"
+    )
+    GDPR_BREACH_NOTIFICATION_HOURS: int = Field(
+        default=72, description="GDPR breach notification period"
+    )
 
     # Consent management
     CONSENT_COOKIE_LIFETIME_DAYS: int = Field(default=365, description="Consent cookie lifetime")
-    CONSENT_RENEWAL_PERIOD_DAYS: int = Field(default=365, description="Period for consent renewal reminders")
+    CONSENT_RENEWAL_PERIOD_DAYS: int = Field(
+        default=365, description="Period for consent renewal reminders"
+    )
 
     # Privacy settings
     PRIVACY_BY_DEFAULT: bool = Field(default=True, description="Privacy by default for new users")
-    AUTOMATIC_DATA_ANONYMIZATION: bool = Field(default=True, description="Enable automatic data anonymization")
+    AUTOMATIC_DATA_ANONYMIZATION: bool = Field(
+        default=True, description="Enable automatic data anonymization"
+    )
 
     # Audit and logging
-    COMPLIANCE_AUDIT_RETENTION_YEARS: int = Field(default=7, description="Compliance audit log retention period")
+    COMPLIANCE_AUDIT_RETENTION_YEARS: int = Field(
+        default=7, description="Compliance audit log retention period"
+    )
     AUDIT_LOG_ENCRYPTION: bool = Field(default=True, description="Enable audit log encryption")
 
     # Data export settings
-    DATA_EXPORT_MAX_RECORDS: int = Field(default=10000, description="Maximum records per data export")
-    DATA_EXPORT_FORMAT_DEFAULT: str = Field(default="json", description="Default data export format")
+    DATA_EXPORT_MAX_RECORDS: int = Field(
+        default=10000, description="Maximum records per data export"
+    )
+    DATA_EXPORT_FORMAT_DEFAULT: str = Field(
+        default="json", description="Default data export format"
+    )
 
     # Breach detection
-    BREACH_DETECTION_ENABLED: bool = Field(default=True, description="Enable automated breach detection")
-    BREACH_NOTIFICATION_EMAIL: Optional[str] = Field(default=None, description="Email for breach notifications")
+    BREACH_DETECTION_ENABLED: bool = Field(
+        default=True, description="Enable automated breach detection"
+    )
+    BREACH_NOTIFICATION_EMAIL: Optional[str] = Field(
+        default=None, description="Email for breach notifications"
+    )
 
     # Compliance reporting
-    COMPLIANCE_REPORTS_ENABLED: bool = Field(default=True, description="Enable compliance reporting")
-    COMPLIANCE_DASHBOARD_ENABLED: bool = Field(default=True, description="Enable compliance dashboard")
+    COMPLIANCE_REPORTS_ENABLED: bool = Field(
+        default=True, description="Enable compliance reporting"
+    )
+    COMPLIANCE_DASHBOARD_ENABLED: bool = Field(
+        default=True, description="Enable compliance dashboard"
+    )
 
     # Enterprise compliance infrastructure
-    EVIDENCE_STORAGE_PATH: str = Field(default="/var/compliance/evidence", description="Path for compliance evidence storage")
-    DATA_EXPORT_PATH: str = Field(default="/var/compliance/exports", description="Path for GDPR data exports")
+    EVIDENCE_STORAGE_PATH: str = Field(
+        default="/var/compliance/evidence", description="Path for compliance evidence storage"
+    )
+    DATA_EXPORT_PATH: str = Field(
+        default="/var/compliance/exports", description="Path for GDPR data exports"
+    )
 
     # Policy management
-    POLICY_ACKNOWLEDGMENT_REQUIRED: bool = Field(default=True, description="Require policy acknowledgments")
-    POLICY_TRAINING_ENABLED: bool = Field(default=True, description="Enable policy training tracking")
-    POLICY_VIOLATION_DETECTION: bool = Field(default=True, description="Enable automated policy violation detection")
+    POLICY_ACKNOWLEDGMENT_REQUIRED: bool = Field(
+        default=True, description="Require policy acknowledgments"
+    )
+    POLICY_TRAINING_ENABLED: bool = Field(
+        default=True, description="Enable policy training tracking"
+    )
+    POLICY_VIOLATION_DETECTION: bool = Field(
+        default=True, description="Enable automated policy violation detection"
+    )
 
     # Support system
-    SUPPORT_SLA_MONITORING: bool = Field(default=True, description="Enable SLA monitoring for support")
-    SUPPORT_ESCALATION_ENABLED: bool = Field(default=True, description="Enable automatic support escalation")
-    SUPPORT_METRICS_COLLECTION: bool = Field(default=True, description="Enable support metrics collection")
+    SUPPORT_SLA_MONITORING: bool = Field(
+        default=True, description="Enable SLA monitoring for support"
+    )
+    SUPPORT_ESCALATION_ENABLED: bool = Field(
+        default=True, description="Enable automatic support escalation"
+    )
+    SUPPORT_METRICS_COLLECTION: bool = Field(
+        default=True, description="Enable support metrics collection"
+    )
 
     # Enterprise features
     ENTERPRISE_AUDIT_TRAIL: bool = Field(default=True, description="Enable enterprise audit trail")
-    ENTERPRISE_POLICY_MANAGEMENT: bool = Field(default=True, description="Enable enterprise policy management")
-    ENTERPRISE_PRIVACY_AUTOMATION: bool = Field(default=True, description="Enable privacy automation features")
+    ENTERPRISE_POLICY_MANAGEMENT: bool = Field(
+        default=True, description="Enable enterprise policy management"
+    )
+    ENTERPRISE_PRIVACY_AUTOMATION: bool = Field(
+        default=True, description="Enable privacy automation features"
+    )
 
     # Compliance monitoring
-    COMPLIANCE_REAL_TIME_MONITORING: bool = Field(default=True, description="Enable real-time compliance monitoring")
-    COMPLIANCE_ALERT_THRESHOLD_MINUTES: int = Field(default=15, description="Minutes before SLA breach alert")
-    COMPLIANCE_DASHBOARD_CACHE_MINUTES: int = Field(default=5, description="Dashboard data cache duration")
+    COMPLIANCE_REAL_TIME_MONITORING: bool = Field(
+        default=True, description="Enable real-time compliance monitoring"
+    )
+    COMPLIANCE_ALERT_THRESHOLD_MINUTES: int = Field(
+        default=15, description="Minutes before SLA breach alert"
+    )
+    COMPLIANCE_DASHBOARD_CACHE_MINUTES: int = Field(
+        default=5, description="Dashboard data cache duration"
+    )
 
     @field_validator("JWT_SECRET_KEY", mode="before")
     @classmethod
@@ -224,6 +295,7 @@ class Settings(BaseSettings):
     def validate_secret_key(cls, v):
         # Only validate in production environment
         import os
+
         environment = os.getenv("ENVIRONMENT", "development")
         if environment == "production" and v == "change-this-in-production":
             raise ValueError("SECRET_KEY must be changed in production")
@@ -238,7 +310,7 @@ class Settings(BaseSettings):
             return ["http://localhost:3000", "https://plinto.dev"]
 
         # Try to parse as JSON first (for backwards compatibility)
-        if self.CORS_ORIGINS.strip().startswith('['):
+        if self.CORS_ORIGINS.strip().startswith("["):
             try:
                 return json.loads(self.CORS_ORIGINS)
             except json.JSONDecodeError:
