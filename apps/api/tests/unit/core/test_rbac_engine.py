@@ -386,13 +386,15 @@ class TestRBACEngine:
 
     def test_permission_string_building(self, rbac_engine):
         """Test permission string building logic"""
-        # This tests the _build_permission_string method indirectly
-        # We can't test it directly without exposing it, but we can verify
-        # the logic through the public interface behavior
+        # Test the _build_permission_string method directly
+        result = rbac_engine._build_permission_string(ResourceType.USER, Action.READ)
+        assert result == "user:read"
 
-        # The actual method would create strings like "read:user", "admin:billing"
-        # We'll test this through the integration tests
-        assert True  # Placeholder for permission string logic verification
+        result = rbac_engine._build_permission_string(ResourceType.PROJECT, Action.UPDATE)
+        assert result == "project:update"
+
+        result = rbac_engine._build_permission_string(ResourceType.ORGANIZATION, Action.DELETE)
+        assert result == "organization:delete"
 
     def test_wildcard_permission_checking(self, rbac_engine):
         """Test wildcard permission checking logic"""
@@ -593,6 +595,40 @@ class TestResourceOwnership:
         )
 
         assert result is False
+
+
+class TestExceptionHandling:
+    """Test exception handling in permission checks"""
+
+    @pytest.fixture
+    def rbac_engine(self):
+        """Create RBACEngine instance for testing"""
+        return RBACEngine()
+
+    @pytest.fixture
+    def mock_session(self):
+        """Mock database session"""
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_check_permission_exception_returns_false(self, rbac_engine, mock_session):
+        """Test that exceptions during permission check return False (deny by default)"""
+        user_id = str(uuid4())
+        org_id = str(uuid4())
+
+        # Mock _get_user_membership to raise an exception
+        with patch.object(
+            rbac_engine, "_get_user_membership", side_effect=Exception("Database error")
+        ):
+            with patch("app.core.rbac_engine.TenantContext") as mock_tenant:
+                mock_tenant.get_organization_id.return_value = org_id
+
+                result = await rbac_engine.check_permission(
+                    mock_session, user_id, ResourceType.USER, Action.READ, organization_id=org_id
+                )
+
+                # Should return False on exception (fail-safe)
+                assert result is False
 
 
 class TestUserPermissions:
