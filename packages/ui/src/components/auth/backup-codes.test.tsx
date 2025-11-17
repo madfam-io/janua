@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@/test/test-utils'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, fireEvent, cleanup } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { BackupCodes } from './backup-codes'
 
@@ -22,6 +22,12 @@ describe('BackupCodes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.clearAllTimers()
+
+    // Reset mock functions with proper implementations
+    mockOnFetchCodes.mockResolvedValue(mockBackupCodes)
+    mockOnRegenerateCodes.mockResolvedValue(mockBackupCodes)
+    mockOnError.mockImplementation(() => {})
 
     // Mock URL.createObjectURL
     global.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
@@ -43,6 +49,8 @@ describe('BackupCodes', () => {
   })
 
   afterEach(() => {
+    cleanup()
+    vi.clearAllTimers()
     vi.restoreAllMocks()
   })
 
@@ -163,8 +171,6 @@ describe('BackupCodes', () => {
     })
 
     it('should show copied state temporarily', async () => {
-      // FIX: Setup fake timers BEFORE userEvent.setup()
-      vi.useFakeTimers()
       const user = userEvent.setup()
 
       render(<BackupCodes backupCodes={mockBackupCodes} />)
@@ -172,30 +178,45 @@ describe('BackupCodes', () => {
       const firstCopyButton = screen.getAllByRole('button', { name: /copy/i })[0]
       await user.click(firstCopyButton)
 
-      expect(screen.getByText(/copied/i)).toBeInTheDocument()
+      // Verify "Copied" text appears
+      expect(await screen.findByText(/copied/i)).toBeInTheDocument()
 
-      // FIX: Use runAllTimers() to execute all pending timers including React state updates
-      act(() => {
-        vi.runAllTimers()
-      })
-
-      expect(screen.queryByText(/copied/i)).not.toBeInTheDocument()
-
-      vi.useRealTimers()
+      // Wait for "Copied" text to disappear after 2 seconds (real timer in component)
+      await waitFor(
+        () => {
+          expect(screen.queryByText(/copied/i)).not.toBeInTheDocument()
+        },
+        { timeout: 3000 }
+      )
     })
 
     it('should handle clipboard errors gracefully', async () => {
       const user = userEvent.setup()
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-      // FIX: Use stored mock reference instead of vi.mocked
-      mockClipboardWriteText.mockRejectedValueOnce(new Error('Clipboard error'))
+
+      // Mock clipboard to reject - need to redefine the entire clipboard object
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {
+          writeText: vi.fn().mockRejectedValueOnce(new Error('Clipboard error')),
+          readText: mockClipboardReadText,
+        },
+        configurable: true,
+        writable: true,
+      })
 
       render(<BackupCodes backupCodes={mockBackupCodes} />)
 
       const firstCopyButton = screen.getAllByRole('button', { name: /copy/i })[0]
       await user.click(firstCopyButton)
 
-      expect(consoleError).toHaveBeenCalled()
+      // Wait for error handling to complete
+      await waitFor(() => {
+        expect(consoleError).toHaveBeenCalled()
+      })
+
+      // Should NOT show "Copied" state on error
+      expect(screen.queryByText(/copied/i)).not.toBeInTheDocument()
+
       consoleError.mockRestore()
     })
   })
@@ -203,16 +224,25 @@ describe('BackupCodes', () => {
   describe('Download Functionality', () => {
     it('should download codes when button is clicked', async () => {
       const user = userEvent.setup()
+
+      // Render first, then set up download-specific mocks
+      render(<BackupCodes backupCodes={mockBackupCodes} showDownload={true} />)
+
       const mockClick = vi.fn()
+      const originalCreateElement = document.createElement.bind(document)
+      const mockCreateElement = vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+        if (tagName === 'a') {
+          return {
+            click: mockClick,
+            href: '',
+            download: '',
+            style: {},
+          } as any
+        }
+        return originalCreateElement(tagName)
+      })
       const mockAppendChild = vi.spyOn(document.body, 'appendChild').mockImplementation(() => null as any)
       const mockRemoveChild = vi.spyOn(document.body, 'removeChild').mockImplementation(() => null as any)
-      const mockCreateElement = vi.spyOn(document, 'createElement').mockReturnValue({
-        click: mockClick,
-        href: '',
-        download: '',
-      } as any)
-
-      render(<BackupCodes backupCodes={mockBackupCodes} showDownload={true} />)
 
       const downloadButton = screen.getByRole('button', { name: /download codes/i })
       await user.click(downloadButton)
@@ -234,10 +264,15 @@ describe('BackupCodes', () => {
     it('should include both used and unused codes in download', async () => {
       const user = userEvent.setup()
       let blobContent = ''
-      const mockBlob = vi.spyOn(global, 'Blob').mockImplementation((content: any) => {
-        blobContent = content[0]
-        return new Blob(content)
-      })
+
+      // Mock Blob constructor without causing infinite recursion
+      const OriginalBlob = global.Blob
+      global.Blob = class MockBlob extends OriginalBlob {
+        constructor(content: any, options?: any) {
+          blobContent = content[0]
+          super(content, options)
+        }
+      } as any
 
       render(<BackupCodes backupCodes={mockBackupCodes} showDownload={true} />)
 
@@ -249,7 +284,44 @@ describe('BackupCodes', () => {
       expect(blobContent).toContain('UNUSED CODES (3)')
       expect(blobContent).toContain('USED CODES (2)')
 
-      mockBlob.mockRestore()
+      global.Blob = OriginalBlob
+    })
+
+    it('should handle download with only unused codes', async () => {
+      const user = userEvent.setup()
+      const allUnusedCodes = [
+        { code: 'CODE1', used: false },
+        { code: 'CODE2', used: false },
+        { code: 'CODE3', used: false },
+      ]
+
+      render(<BackupCodes backupCodes={allUnusedCodes} showDownload={true} />)
+
+      const mockClick = vi.fn()
+      const originalCreateElement = document.createElement.bind(document)
+      const mockCreateElement = vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+        if (tagName === 'a') {
+          return {
+            click: mockClick,
+            href: '',
+            download: '',
+            style: {},
+          } as any
+        }
+        return originalCreateElement(tagName)
+      })
+      const mockAppendChild = vi.spyOn(document.body, 'appendChild').mockImplementation(() => null as any)
+      const mockRemoveChild = vi.spyOn(document.body, 'removeChild').mockImplementation(() => null as any)
+
+      const downloadButton = screen.getByRole('button', { name: /download codes/i })
+      await user.click(downloadButton)
+
+      // Verify download was triggered (tests the branch where usedCodes.length === 0)
+      expect(mockClick).toHaveBeenCalled()
+
+      mockCreateElement.mockRestore()
+      mockAppendChild.mockRestore()
+      mockRemoveChild.mockRestore()
     })
   })
 
@@ -380,6 +452,47 @@ describe('BackupCodes', () => {
       await waitFor(() => {
         expect(mockOnError).toHaveBeenCalled()
       })
+    })
+
+    it('should handle non-Error error object during regeneration', async () => {
+      mockOnRegenerateCodes.mockRejectedValue('String error message')
+
+      render(
+        <BackupCodes
+          backupCodes={mockBackupCodes}
+          allowRegeneration={true}
+          onRegenerateCodes={mockOnRegenerateCodes}
+          onError={mockOnError}
+        />
+      )
+
+      const regenerateButton = screen.getByRole('button', { name: /regenerate codes/i })
+      fireEvent.click(regenerateButton)
+
+      const confirmButton = await screen.findByRole('button', { name: /confirm regenerate/i })
+      fireEvent.click(confirmButton)
+
+      // Wait for generic error message
+      expect(await screen.findByText(/failed to regenerate backup codes/i)).toBeInTheDocument()
+      await waitFor(() => {
+        expect(mockOnError).toHaveBeenCalled()
+      })
+    })
+
+    it('should not render regenerate button without onRegenerateCodes callback', () => {
+      render(
+        <BackupCodes
+          backupCodes={mockBackupCodes}
+          allowRegeneration={true}
+          // No onRegenerateCodes provided
+        />
+      )
+
+      // Regenerate button should not be rendered when callback is missing
+      expect(screen.queryByRole('button', { name: /regenerate codes/i })).not.toBeInTheDocument()
+
+      // Other elements should still be present
+      expect(screen.getByText('CODE1234')).toBeInTheDocument()
     })
   })
 
@@ -530,12 +643,19 @@ describe('BackupCodes', () => {
       // Wait for error message
       expect(await screen.findByText(/first error/i)).toBeInTheDocument()
 
-      // Close confirmation dialog
-      const cancelButton = await screen.findByRole('button', { name: /cancel/i })
-      fireEvent.click(cancelButton)
+      // Wait for confirmation dialog to close after error
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: /confirm regenerate/i })).not.toBeInTheDocument()
+      })
 
-      // Second attempt - success
-      fireEvent.click(regenerateButton)
+      // Wait for "Regenerate codes" button to be visible again
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /regenerate codes/i })).toBeInTheDocument()
+      })
+
+      // Second attempt - success (click regenerate again to show confirmation)
+      const regenerateButton2 = screen.getByRole('button', { name: /regenerate codes/i })
+      fireEvent.click(regenerateButton2)
 
       const confirmButton2 = await screen.findByRole('button', { name: /confirm regenerate/i })
       fireEvent.click(confirmButton2)

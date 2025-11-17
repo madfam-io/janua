@@ -2,25 +2,20 @@
 
 **Purpose**: Internal documentation for Claude Code sessions, implementation progress, and technical analysis.  
 **Audience**: Development team, future Claude sessions  
-**Last Updated**: November 15, 2025
+**Last Updated**: November 17, 2025
 
 ## Directory Structure
 
 ```
 claudedocs/
-├── audits/                    # Comprehensive codebase audits
 ├── session-notes/             # Session summaries and breakthroughs
-├── implementation-reports/     # Feature implementation and fix reports
 ├── guides/                    # Implementation guides and foundations
-└── archive/                   # Superseded or historical documents
+└── INDEX.md                   # This file
 ```
 
+**Note**: Implementation reports have been consolidated in `docs/implementation-reports/` for better organization and discoverability.
+
 ## Navigation
-
-### 📊 Audits
-
-**Current**:
-- [2025-11-15 Codebase Audit](audits/2025-11-15-codebase-audit.md) - Comprehensive codebase analysis (pre-Phase 1-2 cleanup)
 
 ### 📝 Session Notes
 
@@ -28,32 +23,20 @@ claudedocs/
 - [2025-11-13 Breakthrough Final](session-notes/2025-11-13-breakthrough-final.md) - Major testing breakthrough session
 - [2025-11-13 Auth Endpoints](session-notes/2025-11-13-auth-endpoints.md) - Auth endpoint implementation session
 
-### 🔧 Implementation Reports
-
-**Infrastructure Fixes**:
-- [JWT Fix Summary](implementation-reports/jwt-fix-summary.md) - JWT service implementation fixes
-- [Redis Fix Summary](implementation-reports/redis-fix-summary.md) - Redis integration fixes
-- [Fixture Injection Breakthrough](implementation-reports/fixture-injection-breakthrough.md) - Test fixture improvements
-
-**Test Coverage**:
-- [50% Coverage Achievement](implementation-reports/50pct-coverage-final.md) - Path to 50% test coverage
-- [Auth Tests Final Report](implementation-reports/auth-tests-final-report.md) - Authentication testing completion
-- [Auth Tests Final Status](implementation-reports/auth-tests-final-status.md) - Current auth test status
-
-**Strategy**:
-- [Critical Success Factors](implementation-reports/critical-success-factors.md) - Key implementation priorities
-
 ### 📖 Guides
 
 **Foundation**:
 - [Week 1 Foundation Complete](guides/week1-foundation-complete.md) - Week 1 milestone completion
 - [Week 1 Implementation Guide](guides/week1-implementation-guide.md) - Week 1 implementation details
 
-### 🗄️ Archive
+## Related Documentation
 
-**Superseded Documentation**:
-- [Auth Tests Status](archive/auth-tests-status.md) - Superseded by final reports
-- [Auth Tests Implementation Summary](archive/auth-tests-implementation-summary.md) - Earlier implementation notes
+**For comprehensive implementation reports, see**: [`docs/implementation-reports/`](../docs/implementation-reports/)
+
+Key recent reports:
+- [Backup Codes Test Suite Completion](../docs/implementation-reports/backup-codes-test-suite-completion.md) - Complete test suite with 100% passing
+- [Week 6 Documentation](../docs/implementation-reports/) - All Week 6 implementation reports
+- [Week 5 Final Summary](../docs/implementation-reports/week5-final-summary.md) - Week 5 completion
 
 ## Document Lifecycle
 
@@ -103,5 +86,15 @@ Documents should be moved to `archive/` when:
 - Monthly: Review and archive superseded content
 - Quarterly: Comprehensive audit and cleanup
 
-**Last Review**: November 15, 2025  
-**Next Review**: December 15, 2025
+**Last Review**: November 17, 2025  
+**Next Review**: December 17, 2025
+
+## Recent Cleanup (November 17, 2025)
+
+**Removed obsolete files**:
+- Superseded Week 5 loose files (consolidated into structured reports)
+- Obsolete implementation reports (superseded by newer comprehensive docs)
+- Temporary debug logs and backup files
+- Empty directories
+
+**Result**: Cleaner structure with all implementation reports now in `docs/implementation-reports/` for better discoverability.
