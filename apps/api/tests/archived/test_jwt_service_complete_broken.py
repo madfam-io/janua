@@ -68,8 +68,8 @@ class TestJWTServiceInitialization:
         db.fetchrow = AsyncMock(return_value=mock_key_data)
 
         with patch('app.services.jwt_service.serialization') as mock_serialization:
-            mock_private_key = AsyncMock()
-            mock_public_key = AsyncMock()
+            mock_private_key = MagicMock()
+            mock_public_key = MagicMock()
 
             mock_serialization.load_pem_private_key.return_value = mock_private_key
             mock_serialization.load_pem_public_key.return_value = mock_public_key
@@ -94,8 +94,8 @@ class TestJWTServiceInitialization:
              patch('app.services.jwt_service.uuid4') as mock_uuid:
 
             mock_uuid.return_value.hex = 'new-kid-123'
-            mock_private_key = AsyncMock()
-            mock_public_key = AsyncMock()
+            mock_private_key = MagicMock()
+            mock_public_key = MagicMock()
 
             mock_private_key.public_key.return_value = mock_public_key
             mock_private_key.private_bytes.return_value = b'private-key-pem'
@@ -437,7 +437,7 @@ class TestJWKS:
         self.service._kid = 'test-kid'
         self.service._public_key = Mock()
 
-    def test_get_jwks_with_keys(self):
+    def test_get_public_jwks_with_keys(self):
         """Test getting JWKS when keys exist."""
         mock_public_numbers = AsyncMock()
         mock_public_numbers.n = 12345
@@ -455,17 +455,17 @@ class TestJWKS:
             }
             mock_rsa_key.return_value.to_dict.return_value = mock_key_dict
 
-            jwks = self.service.get_jwks()
+            jwks = self.service.get_public_jwks()
 
             assert 'keys' in jwks
             assert len(jwks['keys']) == 1
             assert jwks['keys'][0] == mock_key_dict
 
-    def test_get_jwks_no_keys(self):
+    def test_get_public_jwks_no_keys(self):
         """Test getting JWKS when no keys exist."""
         self.service._public_key = None
 
-        jwks = self.service.get_jwks()
+        jwks = self.service.get_public_jwks()
 
         assert jwks == {'keys': []}
 
