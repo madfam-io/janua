@@ -11,7 +11,7 @@ from typing import AsyncGenerator, Optional
 import structlog
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool, StaticPool
 
 from app.config import settings
@@ -44,10 +44,12 @@ class DatabaseManager:
         if settings.ENVIRONMENT == "test":
             # In-memory SQLite for tests
             database_url = "sqlite+aiosqlite:///:memory:"
-            engine_kwargs.update({
-                "poolclass": StaticPool,
-                "connect_args": {"check_same_thread": False},
-            })
+            engine_kwargs.update(
+                {
+                    "poolclass": StaticPool,
+                    "connect_args": {"check_same_thread": False},
+                }
+            )
         else:
             # PostgreSQL for development/production
             # Convert DATABASE_URL to use asyncpg driver for async operations
@@ -59,16 +61,20 @@ class DatabaseManager:
                 # Handle legacy postgres:// URLs
                 database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
-            engine_kwargs.update({
-                "pool_size": settings.DATABASE_POOL_SIZE,
-                "max_overflow": settings.DATABASE_MAX_OVERFLOW,
-                "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
-            })
+            # Only add pool settings for PostgreSQL (not SQLite)
+            if not database_url.startswith("sqlite"):
+                engine_kwargs.update(
+                    {
+                        "pool_size": settings.DATABASE_POOL_SIZE,
+                        "max_overflow": settings.DATABASE_MAX_OVERFLOW,
+                        "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
+                    }
+                )
 
-            # Production-specific optimizations
-            if settings.ENVIRONMENT == "production":
-                engine_kwargs["pool_reset_on_return"] = "rollback"
-                engine_kwargs["isolation_level"] = "READ_COMMITTED"
+                # Production-specific optimizations
+                if settings.ENVIRONMENT == "production":
+                    engine_kwargs["pool_reset_on_return"] = "rollback"
+                    engine_kwargs["isolation_level"] = "READ_COMMITTED"
 
         try:
             self._engine = create_async_engine(database_url, **engine_kwargs)
@@ -90,10 +96,19 @@ class DatabaseManager:
             raise
 
     async def _verify_connection(self) -> None:
-        """Verify database connection is working"""
+        """Verify database connection is working and create tables if needed"""
         try:
             async with self._engine.begin() as conn:
                 await conn.execute(text("SELECT 1"))
+
+                # Create tables if AUTO_MIGRATE is enabled
+                if settings.AUTO_MIGRATE:
+                    # Import models and use their Base (which has User and other models registered)
+                    from app.models import Base
+
+                    await conn.run_sync(Base.metadata.create_all)
+                    logger.info("Database tables created")
+
             logger.info("Database connection verified")
         except Exception as e:
             logger.error("Database connection verification failed", error=str(e))
@@ -139,11 +154,13 @@ class DatabaseManager:
                 await session.execute(text("SELECT 1"))
 
             response_time = (time.time() - start_time) * 1000
-            health_info.update({
-                "healthy": True,
-                "response_time_ms": round(response_time, 2),
-                "pool_status": self._get_pool_status(),
-            })
+            health_info.update(
+                {
+                    "healthy": True,
+                    "response_time_ms": round(response_time, 2),
+                    "pool_status": self._get_pool_status(),
+                }
+            )
 
             # Cache health status
             self._health_status = {
@@ -172,10 +189,7 @@ class DatabaseManager:
 
         # StaticPool (used in tests) doesn't have pool metrics
         if isinstance(pool, StaticPool):
-            return {
-                "pool_type": "StaticPool",
-                "info": "In-memory test database"
-            }
+            return {"pool_type": "StaticPool", "info": "In-memory test database"}
 
         # For async pools with metrics
         try:
@@ -188,7 +202,7 @@ class DatabaseManager:
 
             # The 'invalid' method doesn't exist on async pools
             # Use 'total' instead which gives total connections
-            if hasattr(pool, 'invalid'):
+            if hasattr(pool, "invalid"):
                 stats["invalid"] = pool.invalid()
             else:
                 stats["total"] = pool.size() + pool.overflow()
@@ -196,10 +210,7 @@ class DatabaseManager:
             return stats
         except AttributeError as e:
             # Fallback for pools without these metrics
-            return {
-                "pool_type": type(pool).__name__,
-                "metrics_unavailable": str(e)
-            }
+            return {"pool_type": type(pool).__name__, "metrics_unavailable": str(e)}
 
     async def close(self) -> None:
         """Clean shutdown of database connections"""

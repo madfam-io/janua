@@ -7,23 +7,25 @@ import { motion } from 'framer-motion'
 import { Button, Input, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@plinto/ui'
 import { Mail, Lock, ArrowRight, Loader2, AlertCircle, Info } from 'lucide-react'
 import { useEnvironment, useDemoFeatures } from '@/hooks/useEnvironment'
+import { usePlinto } from '@/components/providers/plinto-provider'
 
 export default function SignInPage() {
   const router = useRouter()
+  const { client } = usePlinto()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  
-  const { 
-    isDemo, 
-    shouldAutoSignIn, 
-    hasDemoCredentials, 
+
+  const {
+    isDemo,
+    shouldAutoSignIn,
+    hasDemoCredentials,
     demoCredentials,
     showDemoNotice,
-    mounted 
+    mounted
   } = useEnvironment()
-  
+
   const { simulatePerformance } = useDemoFeatures()
 
   // Auto-fill demo credentials in demo mode
@@ -45,17 +47,12 @@ export default function SignInPage() {
         await simulatePerformance('auth')
       }
 
-      const plinto = (window as any).plinto
-      if (!plinto) {
-        throw new Error('Plinto SDK not initialized')
-      }
-
-      const result = await plinto.signIn({
+      const result = await client.auth.signIn({
         email,
         password,
       })
 
-      if (result.accessToken) {
+      if (result.tokens?.access_token) {
         // Redirect to dashboard
         router.push('/dashboard')
       }
@@ -69,10 +66,10 @@ export default function SignInPage() {
 
   const handleDemoLogin = async () => {
     if (!isDemo || !hasDemoCredentials?.()) return
-    
+
     setEmail(demoCredentials.email)
     setPassword(demoCredentials.password)
-    
+
     // Auto-submit after a short delay
     setTimeout(() => {
       const form = document.querySelector('form')
@@ -114,7 +111,7 @@ export default function SignInPage() {
                       Demo Environment
                     </h4>
                     <p className="text-sm text-blue-700 dark:text-blue-200 mb-3">
-                      This is a demonstration environment with simulated performance and sample data. 
+                      This is a demonstration environment with simulated performance and sample data.
                       No real user accounts are created or stored.
                     </p>
                     <Button
@@ -164,8 +161,8 @@ export default function SignInPage() {
                   <label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     Password
                   </label>
-                  <Link 
-                    href="/forgot-password" 
+                  <Link
+                    href="/forgot-password"
                     className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
                   >
                     Forgot password?

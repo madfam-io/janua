@@ -2,25 +2,26 @@
 Authentication router for v1 API
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
 import secrets
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, select
-
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
-from ...models import User, UserStatus, EmailVerification, PasswordReset, MagicLink, ActivityLog, Session as UserSession
+from app.dependencies import get_current_user
 from app.services.auth_service import AuthService
 from app.services.email import EmailService
-from app.config import settings
-from app.dependencies import get_current_user
+
+from ...models import ActivityLog, EmailVerification, MagicLink, PasswordReset, User, UserStatus
+from ...models import Session as UserSession
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -31,6 +32,7 @@ security = HTTPBearer()
 
 # Include OAuth sub-router
 from app.routers.v1 import oauth
+
 router.include_router(oauth.router)
 
 
@@ -41,12 +43,12 @@ class SignUpRequest(BaseModel):
     first_name: Optional[str] = Field(None, max_length=100)
     last_name: Optional[str] = Field(None, max_length=100)
     username: Optional[str] = Field(None, min_length=3, max_length=50)
-    
-    @field_validator('username')
+
+    @field_validator("username")
     @classmethod
     def validate_username(cls, v):
-        if v and not v.replace('_', '').replace('-', '').isalnum():
-            raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
+        if v and not v.replace("_", "").replace("-", "").isalnum():
+            raise ValueError("Username can only contain letters, numbers, underscores, and hyphens")
         return v
 
 
@@ -54,11 +56,11 @@ class SignInRequest(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = None
     password: str
-    
-    @model_validator(mode='after')
+
+    @model_validator(mode="after")
     def validate_credentials(self):
         if not self.username and not self.email:
-            raise ValueError('Either email or username must be provided')
+            raise ValueError("Either email or username must be provided")
         return self
 
 
@@ -121,14 +123,16 @@ class SignInResponse(BaseModel):
 # Helper functions (get_current_user moved to app.dependencies)
 
 
-async def log_activity(db: Session, user_id: str, action: str, details: Dict = None, request: Request = None):
+async def log_activity(
+    db: Session, user_id: str, action: str, details: Dict = None, request: Request = None
+):
     """Log user activity"""
     activity = ActivityLog(
         user_id=user_id,
         action=action,
         details=details or {},
         ip_address=request.client.host if request else None,
-        user_agent=request.headers.get('user-agent') if request else None
+        user_agent=request.headers.get("user-agent") if request else None,
     )
     db.add(activity)
     await db.commit()
@@ -141,12 +145,12 @@ async def sign_up(
     request: SignUpRequest,
     req: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Create a new user account"""
     if not settings.ENABLE_SIGNUPS:
         raise HTTPException(status_code=403, detail="Sign ups are currently disabled")
-    
+
     # Check if email already exists
     result = await db.execute(select(User).where(User.email == request.email))
     existing_user = result.scalar_one_or_none()
@@ -159,12 +163,12 @@ async def sign_up(
         existing_username = result.scalar_one_or_none()
         if existing_username:
             raise HTTPException(status_code=400, detail="Username already taken")
-    
+
     # Validate password
     valid, message = AuthService.validate_password_strength(request.password)
     if not valid:
         raise HTTPException(status_code=400, detail=message)
-    
+
     # Create user
     user = User(
         email=request.email,
@@ -172,22 +176,20 @@ async def sign_up(
         first_name=request.first_name,
         last_name=request.last_name,
         username=request.username,
-        status=UserStatus.ACTIVE
+        status=UserStatus.ACTIVE,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    
+
     # Create session
     access_token, refresh_token, session = await AuthService.create_session(
-        db, user,
-        ip_address=req.client.host,
-        user_agent=req.headers.get('user-agent')
+        db, user, ip_address=req.client.host, user_agent=req.headers.get("user-agent")
     )
-    
+
     # Log activity
     await log_activity(db, str(user.id), "signup", {"method": "email"}, req)
-    
+
     # Send verification email in background
     if settings.EMAIL_ENABLED:
         verification_token = secrets.token_urlsafe(32)
@@ -195,17 +197,15 @@ async def sign_up(
             user_id=user.id,
             token=verification_token,
             email=user.email,
-            expires_at=datetime.utcnow() + timedelta(hours=48)
+            expires_at=datetime.utcnow() + timedelta(hours=48),
         )
         db.add(verification)
         await db.commit()
-        
+
         background_tasks.add_task(
-            EmailService.send_verification_email,
-            user.email,
-            verification_token
+            EmailService.send_verification_email, user.email, verification_token
         )
-    
+
     return SignInResponse(
         user=UserResponse(
             id=str(user.id),
@@ -217,54 +217,50 @@ async def sign_up(
             profile_image_url=user.profile_image_url,
             created_at=user.created_at,
             updated_at=user.updated_at,
-            last_sign_in_at=user.last_sign_in_at
+            last_sign_in_at=user.last_sign_in_at,
         ),
         tokens=TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        )
+            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        ),
     )
 
 
 @router.post("/signin", response_model=SignInResponse)
 @limiter.limit("5/minute")  # Rate limiting for signin attempts
-async def sign_in(
-    request: SignInRequest,
-    req: Request,
-    db: Session = Depends(get_db)
-):
+async def sign_in(credentials: SignInRequest, request: Request, db: Session = Depends(get_db)):
     """Authenticate user and get tokens"""
     # Find user
-    if request.email:
-        result = await db.execute(select(User).where(
-            User.email == request.email,
-            User.status == UserStatus.ACTIVE
-        ))
+    if credentials.email:
+        result = await db.execute(
+            select(User).where(User.email == credentials.email, User.status == UserStatus.ACTIVE)
+        )
         user = result.scalar_one_or_none()
     else:
-        result = await db.execute(select(User).where(
-            User.username == request.username,
-            User.status == UserStatus.ACTIVE
-        ))
+        result = await db.execute(
+            select(User).where(
+                User.username == credentials.username, User.status == UserStatus.ACTIVE
+            )
+        )
         user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Verify password
-    if not user.password_hash or not AuthService.verify_password(request.password, user.password_hash):
+    if not user.password_hash or not AuthService.verify_password(
+        credentials.password, user.password_hash
+    ):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Create session
     access_token, refresh_token, session = await AuthService.create_session(
-        db, user,
-        ip_address=req.client.host,
-        user_agent=req.headers.get('user-agent')
+        db, user, ip_address=request.client.host, user_agent=request.headers.get("user-agent")
     )
 
     # Log activity
-    await log_activity(db, str(user.id), "signin", {"method": "password"}, req)
+    await log_activity(db, str(user.id), "signin", {"method": "password"}, request)
 
     return SignInResponse(
         user=UserResponse(
@@ -277,26 +273,22 @@ async def sign_in(
             profile_image_url=user.profile_image_url,
             created_at=user.created_at,
             updated_at=user.updated_at,
-            last_sign_in_at=user.last_sign_in_at
+            last_sign_in_at=user.last_sign_in_at,
         ),
         tokens=TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        )
+            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        ),
     )
 
 
 # Alias for /signin (tests expect /login)
 @router.post("/login", response_model=SignInResponse)
 @limiter.limit("5/minute")
-async def login(
-    request: SignInRequest,
-    req: Request,
-    db: Session = Depends(get_db)
-):
+async def login(credentials: SignInRequest, request: Request, db: Session = Depends(get_db)):
     """Authenticate user and get tokens (alias for /signin)"""
-    return await sign_in(request, req, db)
+    return await sign_in(credentials, request, db)
 
 
 # Alias for /signout (tests expect /logout)
@@ -304,29 +296,26 @@ async def login(
 async def logout(
     current_user: User = Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Sign out current session (alias for /signout)"""
     return await sign_out(current_user, credentials, db)
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(
-    request: RefreshTokenRequest,
-    db: Session = Depends(get_db)
-):
+async def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
     """Refresh access token using refresh token"""
     result = await AuthService.refresh_tokens(db, request.refresh_token)
-    
+
     if not result:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
-    
+
     access_token, refresh_token = result
-    
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
 
@@ -334,25 +323,25 @@ async def refresh_token(
 async def sign_out(
     current_user: User = Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Sign out current session"""
     token = credentials.credentials
-    payload = AuthService.decode_token(token, token_type='access')
-    
+    payload = AuthService.decode_token(token, token_type="access")
+
     if payload:
         # Find and revoke session
-        result = await db.execute(select(UserSession).where(
-            UserSession.access_token_jti == payload['jti']
-        ))
+        result = await db.execute(
+            select(UserSession).where(UserSession.access_token_jti == payload["jti"])
+        )
         session = result.scalar_one_or_none()
-        
+
         if session:
             AuthService.revoke_session(db, str(session.id))
-    
+
     # Log activity
     await log_activity(db, str(current_user.id), "signout", {})
-    
+
     return {"message": "Successfully signed out"}
 
 
@@ -369,7 +358,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         profile_image_url=current_user.profile_image_url,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
-        last_sign_in_at=current_user.last_sign_in_at
+        last_sign_in_at=current_user.last_sign_in_at,
     )
 
 
@@ -379,72 +368,64 @@ async def forgot_password(
     req: Request,
     request: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Request password reset email"""
-    result = await db.execute(select(User).where(
-        User.email == request.email,
-        User.status == UserStatus.ACTIVE
-    ))
+    result = await db.execute(
+        select(User).where(User.email == request.email, User.status == UserStatus.ACTIVE)
+    )
     user = result.scalar_one_or_none()
-    
+
     # Don't reveal if user exists
     if user and settings.EMAIL_ENABLED:
         # Create reset token
         reset_token = secrets.token_urlsafe(32)
         reset = PasswordReset(
-            user_id=user.id,
-            token=reset_token,
-            expires_at=datetime.utcnow() + timedelta(hours=1)
+            user_id=user.id, token=reset_token, expires_at=datetime.utcnow() + timedelta(hours=1)
         )
         db.add(reset)
         await db.commit()
-        
+
         # Send email in background
-        background_tasks.add_task(
-            EmailService.send_password_reset_email,
-            user.email,
-            reset_token
-        )
-    
+        background_tasks.add_task(EmailService.send_password_reset_email, user.email, reset_token)
+
     return {"message": "If the email exists, a password reset link has been sent"}
 
 
 @router.post("/password/reset")
-async def reset_password(
-    request: ResetPasswordRequest,
-    db: Session = Depends(get_db)
-):
+async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
     """Reset password with token"""
     # Find valid reset token
-    result = await db.execute(select(PasswordReset).where(
-        PasswordReset.token == request.token,
-        PasswordReset.used == False,
-        PasswordReset.expires_at > datetime.utcnow()
-    ))
+    result = await db.execute(
+        select(PasswordReset).where(
+            PasswordReset.token == request.token,
+            PasswordReset.used == False,
+            PasswordReset.expires_at > datetime.utcnow(),
+        )
+    )
     reset = result.scalar_one_or_none()
-    
+
     if not reset:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-    
+
     # Validate new password
     valid, message = AuthService.validate_password(request.new_password)
     if not valid:
         raise HTTPException(status_code=400, detail=message)
-    
+
     # Update password
     user = await db.get(User, reset.user_id)
     user.password_hash = AuthService.hash_password(request.new_password)
-    
+
     # Mark token as used
     reset.used = True
     reset.used_at = datetime.utcnow()
-    
+
     await db.commit()
-    
+
     # Log activity
     await log_activity(db, str(user.id), "password_reset", {})
-    
+
     return {"message": "Password successfully reset"}
 
 
@@ -452,69 +433,65 @@ async def reset_password(
 async def change_password(
     request: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Change password for authenticated user"""
     # Verify current password
     if not AuthService.verify_password(request.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    
+
     # Validate new password
     valid, message = AuthService.validate_password(request.new_password)
     if not valid:
         raise HTTPException(status_code=400, detail=message)
-    
+
     # Update password
     current_user.password_hash = AuthService.hash_password(request.new_password)
     await db.commit()
-    
+
     # Log activity
     await log_activity(db, str(current_user.id), "password_change", {})
-    
+
     return {"message": "Password successfully changed"}
 
 
 # Alias for /email/verify (tests expect /verify-email)
 @router.post("/verify-email")
-async def verify_email_alias(
-    request: VerifyEmailRequest,
-    db: Session = Depends(get_db)
-):
+async def verify_email_alias(request: VerifyEmailRequest, db: Session = Depends(get_db)):
     """Verify email with token (alias for /email/verify)"""
     return await verify_email(request, db)
 
 
 @router.post("/email/verify")
-async def verify_email(
-    request: VerifyEmailRequest,
-    db: Session = Depends(get_db)
-):
+async def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db)):
     """Verify email with token"""
     # Find valid verification token
-    result = await db.execute(select(EmailVerification).where(
-        EmailVerification.token == request.token,
-        EmailVerification.verified == False,
-        EmailVerification.expires_at > datetime.utcnow()
-    ))
+    result = await db.execute(
+        select(EmailVerification).where(
+            EmailVerification.token == request.token,
+            EmailVerification.verified == False,
+            EmailVerification.expires_at > datetime.utcnow(),
+        )
+    )
     verification = result.scalar_one_or_none()
-    
+
     if not verification:
         raise HTTPException(status_code=400, detail="Invalid or expired verification token")
-    
+
     # Mark email as verified
     user = await db.get(User, verification.user_id)
     user.email_verified = True
     user.email_verified_at = datetime.utcnow()
-    
+
     # Mark verification as used
     verification.verified = True
     verification.verified_at = datetime.utcnow()
-    
+
     await db.commit()
-    
+
     # Log activity
     await log_activity(db, str(user.id), "email_verified", {})
-    
+
     return {"message": "Email successfully verified"}
 
 
@@ -524,33 +501,31 @@ async def resend_verification_email(
     request: Request,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Resend verification email"""
     if current_user.email_verified:
         raise HTTPException(status_code=400, detail="Email already verified")
-    
+
     if not settings.EMAIL_ENABLED:
         raise HTTPException(status_code=400, detail="Email service not configured")
-    
+
     # Create new verification token
     verification_token = secrets.token_urlsafe(32)
     verification = EmailVerification(
         user_id=current_user.id,
         token=verification_token,
         email=current_user.email,
-        expires_at=datetime.utcnow() + timedelta(hours=48)
+        expires_at=datetime.utcnow() + timedelta(hours=48),
     )
     db.add(verification)
     await db.commit()
-    
+
     # Send email in background
     background_tasks.add_task(
-        EmailService.send_verification_email,
-        current_user.email,
-        verification_token
+        EmailService.send_verification_email, current_user.email, verification_token
     )
-    
+
     return {"message": "Verification email sent"}
 
 
@@ -560,97 +535,90 @@ async def send_magic_link(
     req: Request,
     request: MagicLinkRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Send magic link for passwordless signin"""
     if not settings.ENABLE_MAGIC_LINKS:
         raise HTTPException(status_code=403, detail="Magic links are disabled")
-    
+
     if not settings.EMAIL_ENABLED:
         raise HTTPException(status_code=400, detail="Email service not configured")
-    
+
     # Find or create user
-    result = await db.execute(select(User).where(
-        User.email == request.email,
-        User.status == UserStatus.ACTIVE
-    ))
+    result = await db.execute(
+        select(User).where(User.email == request.email, User.status == UserStatus.ACTIVE)
+    )
     user = result.scalar_one_or_none()
-    
+
     if not user:
         # Create user without password for magic link only
         user = User(
             email=request.email,
             email_verified=True,  # Auto-verify for magic link users
-            status=UserStatus.ACTIVE
+            status=UserStatus.ACTIVE,
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
-    
+
     # Create magic link token
     magic_token = secrets.token_urlsafe(32)
     magic_link = MagicLink(
         user_id=user.id,
         token=magic_token,
         redirect_url=request.redirect_url,
-        expires_at=datetime.utcnow() + timedelta(minutes=15)
+        expires_at=datetime.utcnow() + timedelta(minutes=15),
     )
     db.add(magic_link)
     await db.commit()
-    
+
     # Send email in background
     background_tasks.add_task(
-        EmailService.send_magic_link_email,
-        user.email,
-        magic_token,
-        request.redirect_url
+        EmailService.send_magic_link_email, user.email, magic_token, request.redirect_url
     )
-    
+
     return {"message": "Magic link sent to email"}
 
 
 @router.post("/magic-link/verify", response_model=SignInResponse)
 async def verify_magic_link(
-    request: VerifyMagicLinkRequest,
-    req: Request,
-    db: Session = Depends(get_db)
+    request: VerifyMagicLinkRequest, req: Request, db: Session = Depends(get_db)
 ):
     """Sign in with magic link token"""
     # Find valid magic link
-    result = await db.execute(select(MagicLink).where(
-        MagicLink.token == request.token,
-        MagicLink.used == False,
-        MagicLink.expires_at > datetime.utcnow()
-    ))
+    result = await db.execute(
+        select(MagicLink).where(
+            MagicLink.token == request.token,
+            MagicLink.used == False,
+            MagicLink.expires_at > datetime.utcnow(),
+        )
+    )
     magic_link = result.scalar_one_or_none()
-    
+
     if not magic_link:
         raise HTTPException(status_code=400, detail="Invalid or expired magic link")
-    
+
     # Get user
-    result = await db.execute(select(User).where(
-        User.id == magic_link.user_id,
-        User.status == UserStatus.ACTIVE
-    ))
+    result = await db.execute(
+        select(User).where(User.id == magic_link.user_id, User.status == UserStatus.ACTIVE)
+    )
     user = result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(status_code=400, detail="User not found")
-    
+
     # Mark magic link as used
     magic_link.used = True
     magic_link.used_at = datetime.utcnow()
-    
+
     # Create session
     access_token, refresh_token, session = await AuthService.create_session(
-        db, user,
-        ip_address=req.client.host,
-        user_agent=req.headers.get('user-agent')
+        db, user, ip_address=req.client.host, user_agent=req.headers.get("user-agent")
     )
-    
+
     # Log activity
     await log_activity(db, str(user.id), "signin", {"method": "magic_link"}, req)
-    
+
     return SignInResponse(
         user=UserResponse(
             id=str(user.id),
@@ -662,11 +630,11 @@ async def verify_magic_link(
             profile_image_url=user.profile_image_url,
             created_at=user.created_at,
             updated_at=user.updated_at,
-            last_sign_in_at=user.last_sign_in_at
+            last_sign_in_at=user.last_sign_in_at,
         ),
         tokens=TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        )
+            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        ),
     )
