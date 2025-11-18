@@ -118,13 +118,21 @@ class SSOTestRequest(BaseModel):
 
 
 # SSO service dependency
-def get_sso_service() -> SSOService:
+async def get_sso_service(db: AsyncSession = Depends(get_db)) -> SSOService:
     """
     Create SSO service instance with dependencies.
-    This is a placeholder - in production, inject actual db, cache, and jwt_service
     """
-    # TODO: Replace with actual dependency injection
-    return None  # Will be properly initialized when dependencies are available
+    from app.core.database import get_redis
+    from app.services.cache import CacheService
+    from app.services.jwt_service import JWTService
+
+    # Initialize dependencies
+    redis_client = await get_redis()
+    cache_service = CacheService(redis_client)
+    jwt_service = JWTService()
+
+    # Create and return SSO service
+    return SSOService(db=db, cache=cache_service, jwt_service=jwt_service)
 
 
 @router.post("/configurations", response_model=SSOConfigurationResponse)

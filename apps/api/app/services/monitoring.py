@@ -4,15 +4,16 @@ Production monitoring and alerting system
 
 import asyncio
 import json
+import logging
 import time
-from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from enum import Enum
-import psutil
+from typing import Any, Dict, List, Optional
+
 import aiohttp
+import psutil
 
 from app.config import settings
-import logging
 from app.core.redis import get_redis
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 class MetricType(str, Enum):
     """Types of metrics to track"""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -28,6 +30,7 @@ class MetricType(str, Enum):
 
 class AlertSeverity(str, Enum):
     """Alert severity levels"""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -46,74 +49,42 @@ class MetricsCollector:
         self._metrics = {}  # For test compatibility
         self.flush_interval = 10  # seconds
         self._flush_task = None
-    
+
     async def initialize(self):
         """Initialize metrics collector"""
         self.redis = await get_redis()
         self._flush_task = asyncio.create_task(self._periodic_flush())
-    
+
     async def increment(
-        self,
-        metric_name: str,
-        value: float = 1,
-        tags: Optional[Dict[str, str]] = None
+        self, metric_name: str, value: float = 1, tags: Optional[Dict[str, str]] = None
     ):
         """Increment a counter metric"""
-        await self._record_metric(
-            metric_name,
-            MetricType.COUNTER,
-            value,
-            tags
-        )
-    
-    async def gauge(
-        self,
-        metric_name: str,
-        value: float,
-        tags: Optional[Dict[str, str]] = None
-    ):
+        await self._record_metric(metric_name, MetricType.COUNTER, value, tags)
+
+    async def gauge(self, metric_name: str, value: float, tags: Optional[Dict[str, str]] = None):
         """Set a gauge metric"""
-        await self._record_metric(
-            metric_name,
-            MetricType.GAUGE,
-            value,
-            tags
-        )
-    
+        await self._record_metric(metric_name, MetricType.GAUGE, value, tags)
+
     async def histogram(
-        self,
-        metric_name: str,
-        value: float,
-        tags: Optional[Dict[str, str]] = None
+        self, metric_name: str, value: float, tags: Optional[Dict[str, str]] = None
     ):
         """Record a histogram metric"""
-        await self._record_metric(
-            metric_name,
-            MetricType.HISTOGRAM,
-            value,
-            tags
-        )
-    
+        await self._record_metric(metric_name, MetricType.HISTOGRAM, value, tags)
+
     async def timing(
-        self,
-        metric_name: str,
-        duration_ms: float,
-        tags: Optional[Dict[str, str]] = None
+        self, metric_name: str, duration_ms: float, tags: Optional[Dict[str, str]] = None
     ):
         """Record a timing metric"""
         await self._record_metric(
-            f"{metric_name}.duration",
-            MetricType.HISTOGRAM,
-            duration_ms,
-            tags
+            f"{metric_name}.duration", MetricType.HISTOGRAM, duration_ms, tags
         )
-    
+
     def record_metric(
         self,
         metric_name: str,
         value: float,
         metric_type: MetricType,
-        tags: Optional[Dict[str, str]] = None
+        tags: Optional[Dict[str, str]] = None,
     ):
         """Synchronous metric recording for test compatibility"""
         key = f"{metric_name}:{metric_type.value}"
@@ -162,104 +133,94 @@ class MetricsCollector:
         name: str,
         metric_type: MetricType,
         value: float,
-        tags: Optional[Dict[str, str]] = None
+        tags: Optional[Dict[str, str]] = None,
     ):
         """Record a metric to buffer"""
-        
+
         key = f"{name}:{json.dumps(tags or {}, sort_keys=True)}"
-        
+
         if key not in self.metrics_buffer:
             self.metrics_buffer[key] = {
                 "name": name,
                 "type": metric_type,
                 "tags": tags or {},
                 "values": [],
-                "timestamp": time.time()
+                "timestamp": time.time(),
             }
-        
+
         self.metrics_buffer[key]["values"].append(value)
-        
+
         # Flush if buffer is too large
         if len(self.metrics_buffer) > 1000:
             await self._flush_metrics()
-    
+
     async def _flush_metrics(self):
         """Flush metrics to Redis and monitoring service"""
-        
+
         if not self.metrics_buffer:
             return
-        
+
         metrics_to_flush = self.metrics_buffer.copy()
         self.metrics_buffer.clear()
-        
+
         try:
             # Store in Redis for real-time dashboards
             for key, metric in metrics_to_flush.items():
                 redis_key = f"metrics:{metric['name']}"
-                
+
                 # Aggregate values based on metric type
                 if metric["type"] == MetricType.COUNTER:
                     total = sum(metric["values"])
                     await self.redis.hincrby(redis_key, "value", int(total))
-                
+
                 elif metric["type"] == MetricType.GAUGE:
                     latest = metric["values"][-1]
                     await self.redis.hset(redis_key, "value", latest)
-                
+
                 elif metric["type"] == MetricType.HISTOGRAM:
                     # Store histogram data
                     histogram_key = f"{redis_key}:histogram"
                     for value in metric["values"]:
-                        await self.redis.zadd(
-                            histogram_key,
-                            {str(time.time()): value}
-                        )
+                        await self.redis.zadd(histogram_key, {str(time.time()): value})
                     # Keep only last hour of data
                     cutoff = time.time() - 3600
-                    await self.redis.zremrangebyscore(
-                        histogram_key, 0, cutoff
-                    )
-                
+                    await self.redis.zremrangebyscore(histogram_key, 0, cutoff)
+
                 # Set expiry
                 await self.redis.expire(redis_key, 86400)  # 24 hours
-            
+
             # Send to external monitoring service if configured
             if settings.MONITORING_ENDPOINT:
                 await self._send_to_monitoring_service(metrics_to_flush)
-            
+
         except Exception as e:
             logger.error(f"Failed to flush metrics: {e}")
             # Re-add to buffer for retry
             self.metrics_buffer.update(metrics_to_flush)
-    
-    async def _send_to_monitoring_service(
-        self,
-        metrics: Dict[str, Any]
-    ):
+
+    async def _send_to_monitoring_service(self, metrics: Dict[str, Any]):
         """Send metrics to external monitoring service"""
-        
+
         payload = {
             "timestamp": datetime.utcnow().isoformat(),
             "environment": settings.ENVIRONMENT,
             "service": "plinto-api",
-            "metrics": list(metrics.values())
+            "metrics": list(metrics.values()),
         }
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.post(
                     settings.MONITORING_ENDPOINT,
                     json=payload,
                     headers={"Authorization": f"Bearer {settings.MONITORING_API_KEY}"},
-                    timeout=5
+                    timeout=5,
                 ) as response:
                     if response.status != 200:
-                        logger.warning(
-                            f"Failed to send metrics: {response.status}"
-                        )
+                        logger.warning(f"Failed to send metrics: {response.status}")
             except asyncio.TimeoutError:
                 logger.warning("Timeout sending metrics to monitoring service")
-    
+
     async def _periodic_flush(self):
         """Periodically flush metrics"""
         while True:
@@ -278,85 +239,74 @@ class HealthChecker:
         self._checks = {}  # For test compatibility
         self.check_interval = 30  # seconds
         self._check_task = None
-    
+
     async def initialize(self):
         """Initialize health checker"""
         self._check_task = asyncio.create_task(self._periodic_check())
-    
+
     def add_check(self, name: str, check_func, critical: bool = False):
         """Add a health check (test-compatible name)"""
         self._checks[name] = {
             "func": check_func,
             "critical": critical,
             "last_result": None,
-            "last_check": None
+            "last_check": None,
         }
         self.checks[name] = self._checks[name]
 
-    def register_check(
-        self,
-        name: str,
-        check_func,
-        critical: bool = False
-    ):
+    def register_check(self, name: str, check_func, critical: bool = False):
         """Register a health check"""
         self.checks[name] = {
             "func": check_func,
             "critical": critical,
             "last_result": None,
-            "last_check": None
+            "last_check": None,
         }
         self._checks[name] = self.checks[name]
-    
+
     async def check_health(self) -> Dict[str, Any]:
         """Run all health checks"""
-        
-        results = {
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "checks": {}
-        }
-        
+
+        results = {"status": "healthy", "timestamp": datetime.utcnow().isoformat(), "checks": {}}
+
         for name, check in self.checks.items():
             try:
                 start_time = time.time()
                 result = await check["func"]()
                 duration = (time.time() - start_time) * 1000
-                
+
                 results["checks"][name] = {
                     "status": "healthy" if result else "unhealthy",
                     "duration_ms": duration,
-                    "critical": check["critical"]
+                    "critical": check["critical"],
                 }
-                
+
                 # Record metric
                 await self.metrics.gauge(
-                    f"health.{name}",
-                    1 if result else 0,
-                    {"critical": str(check["critical"])}
+                    f"health.{name}", 1 if result else 0, {"critical": str(check["critical"])}
                 )
-                
+
                 # Update overall status
                 if not result and check["critical"]:
                     results["status"] = "unhealthy"
-                
+
                 # Update check info
                 check["last_result"] = result
                 check["last_check"] = time.time()
-                
+
             except Exception as e:
                 logger.error(f"Health check {name} failed: {e}")
                 results["checks"][name] = {
                     "status": "error",
                     "error": str(e),
-                    "critical": check["critical"]
+                    "critical": check["critical"],
                 }
-                
+
                 if check["critical"]:
                     results["status"] = "unhealthy"
-        
+
         return results
-    
+
     async def _periodic_check(self):
         """Run health checks periodically"""
         while True:
@@ -368,7 +318,7 @@ class AlertManager:
     """
     Manages alerts and notifications
     """
-    
+
     def __init__(self, metrics: Optional[MetricsCollector] = None):
         self.metrics = metrics
         self.redis = None
@@ -377,13 +327,13 @@ class AlertManager:
         self.alert_history = {}
         self.check_interval = 60  # seconds
         self._check_task = None
-    
+
     async def initialize(self):
         """Initialize alert manager"""
         self.redis = await get_redis()
         self._load_alert_rules()
         self._check_task = asyncio.create_task(self._periodic_check())
-    
+
     def add_rule(self, rule: Dict[str, Any]):
         """Add an alert rule (test-compatible)"""
         self._rules.append(rule)
@@ -404,7 +354,7 @@ class AlertManager:
                 "condition": "rate > 10",
                 "window": 300,  # 5 minutes
                 "severity": AlertSeverity.ERROR,
-                "message": "High error rate detected: {value} errors/min"
+                "message": "High error rate detected: {value} errors/min",
             },
             {
                 "name": "high_response_time",
@@ -412,7 +362,7 @@ class AlertManager:
                 "condition": "p95 > 1000",
                 "window": 300,
                 "severity": AlertSeverity.WARNING,
-                "message": "High response time: {value}ms (p95)"
+                "message": "High response time: {value}ms (p95)",
             },
             {
                 "name": "low_disk_space",
@@ -420,7 +370,7 @@ class AlertManager:
                 "condition": "value < 1073741824",  # 1GB
                 "window": 60,
                 "severity": AlertSeverity.CRITICAL,
-                "message": "Low disk space: {value} bytes remaining"
+                "message": "Low disk space: {value} bytes remaining",
             },
             {
                 "name": "high_memory_usage",
@@ -428,7 +378,7 @@ class AlertManager:
                 "condition": "value > 90",
                 "window": 300,
                 "severity": AlertSeverity.WARNING,
-                "message": "High memory usage: {value}%"
+                "message": "High memory usage: {value}%",
             },
             {
                 "name": "rate_limit_violations",
@@ -436,45 +386,38 @@ class AlertManager:
                 "condition": "rate > 100",
                 "window": 300,
                 "severity": AlertSeverity.WARNING,
-                "message": "High rate limit violations: {value}/min"
-            }
+                "message": "High rate limit violations: {value}/min",
+            },
         ]
-    
+
     async def check_alerts(self):
         """Check all alert rules"""
-        
+
         for rule in self.alert_rules:
             try:
                 # Get metric value
-                value = await self._get_metric_value(
-                    rule["metric"],
-                    rule["window"]
-                )
-                
+                value = await self._get_metric_value(rule["metric"], rule["window"])
+
                 # Evaluate condition
                 if self._evaluate_condition(rule["condition"], value):
                     await self._trigger_alert(rule, value)
                 else:
                     await self._clear_alert(rule)
-                    
+
             except Exception as e:
                 logger.error(f"Failed to check alert {rule['name']}: {e}")
-    
-    async def _get_metric_value(
-        self,
-        metric_name: str,
-        window: int
-    ) -> float:
+
+    async def _get_metric_value(self, metric_name: str, window: int) -> float:
         """Get metric value from Redis"""
-        
+
         redis_key = f"metrics:{metric_name}"
-        
+
         # Get value based on metric type
         if "rate" in metric_name:
             # Calculate rate
             count = await self.redis.get(f"{redis_key}:count") or 0
             return float(count) / (window / 60)  # per minute
-        
+
         elif "p95" in metric_name or "p99" in metric_name:
             # Get percentile from histogram
             histogram_key = f"{redis_key}:histogram"
@@ -484,19 +427,15 @@ class AlertManager:
                 index = int(len(values) * (percentile / 100))
                 return float(values[index])
             return 0
-        
+
         else:
             # Get gauge value
             value = await self.redis.hget(redis_key, "value")
             return float(value) if value else 0
-    
-    def _evaluate_condition(
-        self,
-        condition: str,
-        value: float
-    ) -> bool:
+
+    def _evaluate_condition(self, condition: str, value: float) -> bool:
         """Evaluate alert condition"""
-        
+
         # Simple evaluation (in production, use a proper expression evaluator)
         try:
             # Replace 'value' with actual value
@@ -504,27 +443,23 @@ class AlertManager:
             condition = condition.replace("rate", str(value))
             condition = condition.replace("p95", str(value))
             condition = condition.replace("p99", str(value))
-            
+
             # Evaluate
             return eval(condition)
         except:
             return False
-    
-    async def _trigger_alert(
-        self,
-        rule: Dict[str, Any],
-        value: float
-    ):
+
+    async def _trigger_alert(self, rule: Dict[str, Any], value: float):
         """Trigger an alert"""
-        
+
         alert_id = f"{rule['name']}:{int(time.time())}"
-        
+
         # Check if already alerted recently
         if rule["name"] in self.alert_history:
             last_alert = self.alert_history[rule["name"]]
             if time.time() - last_alert < 300:  # 5 min cooldown
                 return
-        
+
         # Create alert
         alert = {
             "id": alert_id,
@@ -532,60 +467,75 @@ class AlertManager:
             "severity": rule["severity"],
             "message": rule["message"].format(value=value),
             "value": value,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
-        
+
         # Store in Redis
         await self.redis.lpush("alerts:active", json.dumps(alert))
         await self.redis.ltrim("alerts:active", 0, 99)  # Keep last 100
-        
+
         # Record metric
         await self.metrics.increment(
-            "alerts.triggered",
-            tags={"severity": rule["severity"], "rule": rule["name"]}
+            "alerts.triggered", tags={"severity": rule["severity"], "rule": rule["name"]}
         )
-        
+
         # Send notifications
         await self._send_notifications(alert)
-        
+
         # Update history
         self.alert_history[rule["name"]] = time.time()
-        
+
         logger.warning(f"Alert triggered: {alert['message']}")
-    
+
     async def _clear_alert(self, rule: Dict[str, Any]):
         """Clear an alert if it was active"""
-        
+
         # Remove from history after cooldown
         if rule["name"] in self.alert_history:
             if time.time() - self.alert_history[rule["name"]] > 600:
                 del self.alert_history[rule["name"]]
-    
+
     async def _send_notifications(self, alert: Dict[str, Any]):
         """Send alert notifications"""
-        
+
         # Send to webhook if configured
         if settings.ALERT_WEBHOOK_URL:
             async with aiohttp.ClientSession() as session:
                 try:
                     payload = {
                         "text": f"🚨 *{alert['severity'].upper()}*: {alert['message']}",
-                        "alert": alert
+                        "alert": alert,
                     }
-                    
-                    await session.post(
-                        settings.ALERT_WEBHOOK_URL,
-                        json=payload,
-                        timeout=5
-                    )
+
+                    await session.post(settings.ALERT_WEBHOOK_URL, json=payload, timeout=5)
                 except Exception as e:
                     logger.error(f"Failed to send alert notification: {e}")
-        
+
         # Send email for critical alerts
         if alert["severity"] == AlertSeverity.CRITICAL:
-            # TODO: Implement email notification
-            pass
-    
+            # Send email notification to admins
+            try:
+                from app.config import settings
+                from app.core.database import get_redis
+                from app.services.resend_email_service import get_resend_email_service
+
+                redis_client = await get_redis()
+                email_service = get_resend_email_service(redis_client)
+
+                # Send to configured alert email or fallback to support email
+                alert_email = settings.ALERT_EMAIL or settings.SUPPORT_EMAIL
+
+                if alert_email:
+                    await email_service.send_compliance_alert_email(
+                        to_email=alert_email,
+                        alert_type=alert["rule"],
+                        severity=alert["severity"].value,
+                        details=alert.get("details", {}),
+                        timestamp=alert["timestamp"],
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send critical alert email: {e}")
+
     async def _periodic_check(self):
         """Check alerts periodically"""
         while True:
@@ -597,49 +547,49 @@ class SystemMonitor:
     """
     Monitor system resources
     """
-    
+
     def __init__(self, metrics: MetricsCollector):
         self.metrics = metrics
         self.collect_interval = 30  # seconds
         self._collect_task = None
-    
+
     async def initialize(self):
         """Initialize system monitor"""
         self._collect_task = asyncio.create_task(self._periodic_collect())
-    
+
     async def collect_system_metrics(self):
         """Collect system metrics"""
-        
+
         try:
             # CPU usage
             cpu_percent = psutil.cpu_percent(interval=1)
             await self.metrics.gauge("system.cpu_percent", cpu_percent)
-            
+
             # Memory usage
             memory = psutil.virtual_memory()
             await self.metrics.gauge("system.memory_percent", memory.percent)
             await self.metrics.gauge("system.memory_used", memory.used)
             await self.metrics.gauge("system.memory_available", memory.available)
-            
+
             # Disk usage
             disk = psutil.disk_usage("/")
             await self.metrics.gauge("system.disk_percent", disk.percent)
             await self.metrics.gauge("system.disk_free", disk.free)
-            
+
             # Network I/O
             net_io = psutil.net_io_counters()
             await self.metrics.gauge("system.network_bytes_sent", net_io.bytes_sent)
             await self.metrics.gauge("system.network_bytes_recv", net_io.bytes_recv)
-            
+
             # Process info
             process = psutil.Process()
             await self.metrics.gauge("process.cpu_percent", process.cpu_percent())
             await self.metrics.gauge("process.memory_rss", process.memory_info().rss)
             await self.metrics.gauge("process.num_threads", process.num_threads())
-            
+
         except Exception as e:
             logger.error(f"Failed to collect system metrics: {e}")
-    
+
     async def _periodic_collect(self):
         """Collect metrics periodically"""
         while True:
@@ -652,41 +602,47 @@ class MonitoringService:
     Main monitoring service that coordinates metrics collection,
     health checking, and alerting
     """
-    
+
     def __init__(self):
         self.metrics = MetricsCollector()
         self.health_checker = HealthChecker(self.metrics)
         self.alerting = AlertManager(self.metrics)
         self.system_monitor = SystemMonitor(self.metrics)
         self.initialized = False
-    
+
     async def initialize(self):
         """Initialize all monitoring components"""
         if self.initialized:
             return
-            
+
         await self.metrics.initialize()
         await self.health_checker.initialize()
         await self.alerting.initialize()
         await self.system_monitor.initialize()
         self.initialized = True
-        
+
         logger.info("Monitoring service initialized")
-    
+
     async def shutdown(self):
         """Shutdown monitoring service"""
         if not self.initialized:
             return
-            
+
         await self.system_monitor.shutdown()
         await self.alerting.shutdown()
         await self.health_checker.shutdown()
         await self.metrics.shutdown()
         self.initialized = False
-        
+
         logger.info("Monitoring service shutdown")
-    
-    async def record_metric(self, name: str, value: float, metric_type: MetricType = MetricType.GAUGE, tags: Optional[Dict[str, str]] = None):
+
+    async def record_metric(
+        self,
+        name: str,
+        value: float,
+        metric_type: MetricType = MetricType.GAUGE,
+        tags: Optional[Dict[str, str]] = None,
+    ):
         """Record a metric"""
         if metric_type == MetricType.COUNTER:
             await self.metrics.counter(name, value, tags)
@@ -694,12 +650,18 @@ class MonitoringService:
             await self.metrics.gauge(name, value, tags)
         elif metric_type == MetricType.HISTOGRAM:
             await self.metrics.histogram(name, value, tags)
-    
+
     async def get_health_status(self) -> Dict[str, Any]:
         """Get current health status"""
         return await self.health_checker.get_status()
-    
-    async def trigger_alert(self, title: str, message: str, severity: AlertSeverity = AlertSeverity.WARNING, tags: Optional[Dict[str, str]] = None):
+
+    async def trigger_alert(
+        self,
+        title: str,
+        message: str,
+        severity: AlertSeverity = AlertSeverity.WARNING,
+        tags: Optional[Dict[str, str]] = None,
+    ):
         """Trigger an alert"""
         await self.alerting.send_alert(title, message, severity, tags)
 
@@ -708,18 +670,14 @@ class MonitoringService:
         self.metrics.histogram(
             "http_request_duration_seconds",
             duration,
-            {"path": path, "method": method, "status_code": str(status_code)}
+            {"path": path, "method": method, "status_code": str(status_code)},
         )
 
     def track_error(self, error_type: str, message: str, path: str):
         """Track error events"""
-        self.metrics.counter(
-            "errors_total",
-            1,
-            {"error_type": error_type, "path": path}
-        )
+        self.metrics.counter("errors_total", 1, {"error_type": error_type, "path": path})
         # Get logger attribute for compatibility with tests
-        if hasattr(self, 'logger'):
+        if hasattr(self, "logger"):
             self.logger.error(f"{error_type}: {message} at {path}")
         else:
             logger.error(f"{error_type}: {message} at {path}")
@@ -736,33 +694,35 @@ class MonitoringService:
         """Perform comprehensive health check"""
         # Check database if method exists
         db_status = True
-        if hasattr(self, 'check_database'):
+        if hasattr(self, "check_database"):
             db_status = await self.check_database()
-        elif hasattr(self.health_checker, 'check_database'):
+        elif hasattr(self.health_checker, "check_database"):
             db_status = await self.health_checker.check_database()
 
         # Check Redis if method exists
         redis_status = True
-        if hasattr(self, 'check_redis'):
+        if hasattr(self, "check_redis"):
             redis_status = await self.check_redis()
-        elif hasattr(self.health_checker, 'check_redis'):
+        elif hasattr(self.health_checker, "check_redis"):
             redis_status = await self.health_checker.check_redis()
 
         # Check external services if method exists
         external_status = True
-        if hasattr(self, 'check_external_services'):
+        if hasattr(self, "check_external_services"):
             external_status = await self.check_external_services()
-        elif hasattr(self.health_checker, 'check_external_services'):
+        elif hasattr(self.health_checker, "check_external_services"):
             external_status = await self.health_checker.check_external_services()
 
         # Determine overall status
-        overall_status = "healthy" if all([db_status, redis_status, external_status]) else "degraded"
+        overall_status = (
+            "healthy" if all([db_status, redis_status, external_status]) else "degraded"
+        )
 
         return {
             "status": overall_status,
             "database": "healthy" if db_status else "degraded",
             "redis": "healthy" if redis_status else "degraded",
-            "external_services": "healthy" if external_status else "degraded"
+            "external_services": "healthy" if external_status else "degraded",
         }
 
 
