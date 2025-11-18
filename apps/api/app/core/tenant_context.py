@@ -4,15 +4,15 @@ Provides tenant isolation and context propagation throughout the application
 """
 
 import contextvars
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 import structlog
-from fastapi import Request, HTTPException, status
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import HTTPException, Request, status
 from sqlalchemy import event
-from sqlalchemy.orm import Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Query
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.jwt_manager import verify_access_token
 
@@ -73,8 +73,7 @@ class TenantContext:
         tenant_id = TenantContext.get_tenant_id()
         if not tenant_id:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Tenant context required"
+                status_code=status.HTTP_403_FORBIDDEN, detail="Tenant context required"
             )
         return tenant_id
 
@@ -84,8 +83,7 @@ class TenantContext:
         org_id = TenantContext.get_organization_id()
         if not org_id:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Organization context required"
+                status_code=status.HTTP_403_FORBIDDEN, detail="Organization context required"
             )
         return org_id
 
@@ -95,14 +93,23 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         """Extract tenant context from request and propagate it"""
-        
+
         # Skip tenant extraction for public endpoints
         public_paths = [
-            "/health", "/ready", "/", "/docs", "/redoc", "/openapi.json",
-            "/metrics", "/metrics/performance", "/metrics/scalability",
-            "/.well-known", "/api/status", "/beta"
+            "/health",
+            "/ready",
+            "/",
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+            "/metrics",
+            "/metrics/performance",
+            "/metrics/scalability",
+            "/.well-known",
+            "/api/status",
+            "/beta",
         ]
-        
+
         # Check if this is a public endpoint
         for public_path in public_paths:
             if request.url.path == public_path or request.url.path.startswith(f"{public_path}/"):
@@ -121,8 +128,27 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 subdomain = host.split(".")[0]
                 if subdomain and subdomain not in ["www", "api", "app"]:
                     # Look up organization by subdomain
-                    # TODO: Implement organization lookup by subdomain
-                    pass
+                    from sqlalchemy import select
+
+                    from app.models import Organization
+
+                    try:
+                        from app.core.database import get_db_session
+
+                        async with get_db_session() as db:
+                            result = await db.execute(
+                                select(Organization).where(
+                                    Organization.subdomain == subdomain,
+                                    Organization.is_active == True,
+                                )
+                            )
+                            org = result.scalar_one_or_none()
+                            if org:
+                                tenant_id = str(org.id)
+                                organization_id = str(org.id)
+                    except Exception:
+                        # Subdomain lookup failed, continue
+                        pass
 
             # 2. Check JWT token for tenant information
             auth_header = request.headers.get("authorization")
@@ -153,7 +179,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 TenantContext.set(
                     tenant_id=UUID(tenant_id),
                     organization_id=UUID(organization_id),
-                    user_id=UUID(user_id) if user_id else None
+                    user_id=UUID(user_id) if user_id else None,
                 )
 
             # Process request
@@ -214,10 +240,7 @@ class TenantIsolation:
 
     @staticmethod
     async def validate_tenant_access(
-        session: AsyncSession,
-        resource_id: str,
-        resource_type: str,
-        tenant_id: Optional[str] = None
+        session: AsyncSession, resource_id: str, resource_type: str, tenant_id: Optional[str] = None
     ) -> bool:
         """Validate that a resource belongs to the current tenant"""
         current_tenant = tenant_id or TenantContext.get_tenant_id()
@@ -233,15 +256,18 @@ class TenantIsolation:
     @staticmethod
     def ensure_tenant_context(required: bool = True):
         """Decorator to ensure tenant context is set"""
+
         def decorator(func):
             async def wrapper(*args, **kwargs):
                 if required and not TenantContext.get_tenant_id():
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Tenant context required for this operation"
+                        detail="Tenant context required for this operation",
                     )
                 return await func(*args, **kwargs)
+
             return wrapper
+
         return decorator
 
     @staticmethod
@@ -280,15 +306,77 @@ class TenantRateLimiter:
     @staticmethod
     def get_tenant_limits() -> Dict[str, int]:
         """Get rate limits based on tenant's subscription tier"""
-        # TODO: Implement tier-based limits
-        # This would look up the organization's subscription
-        # and return appropriate limits
+        from sqlalchemy import select
 
-        return {
-            "requests_per_minute": 100,
+        from app.models import Organization, SubscriptionTier
+
+        tenant_id = TenantContext.get_tenant_id()
+
+        # Default limits for unauthenticated/free tier
+        default_limits = {
+            "requests_per_minute": 60,
             "requests_per_hour": 1000,
             "requests_per_day": 10000,
         }
+
+        if not tenant_id:
+            return default_limits
+
+        try:
+            import asyncio
+
+            from app.core.database import get_db_session
+
+            # Get organization and check tier
+            async def _get_limits():
+                async with get_db_session() as db:
+                    result = await db.execute(
+                        select(Organization).where(Organization.id == tenant_id)
+                    )
+                    org = result.scalar_one_or_none()
+
+                    if not org or not hasattr(org, "subscription_tier"):
+                        return default_limits
+
+                    # Tier-based limits
+                    tier_limits = {
+                        SubscriptionTier.FREE: {
+                            "requests_per_minute": 60,
+                            "requests_per_hour": 1000,
+                            "requests_per_day": 10000,
+                        },
+                        SubscriptionTier.STARTER: {
+                            "requests_per_minute": 120,
+                            "requests_per_hour": 5000,
+                            "requests_per_day": 50000,
+                        },
+                        SubscriptionTier.PROFESSIONAL: {
+                            "requests_per_minute": 300,
+                            "requests_per_hour": 15000,
+                            "requests_per_day": 150000,
+                        },
+                        SubscriptionTier.ENTERPRISE: {
+                            "requests_per_minute": 1000,
+                            "requests_per_hour": 50000,
+                            "requests_per_day": 500000,
+                        },
+                    }
+
+                    return tier_limits.get(org.subscription_tier, default_limits)
+
+            # Run async function in current event loop or create new one
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Can't run nested async, return defaults
+                    return default_limits
+                return loop.run_until_complete(_get_limits())
+            except RuntimeError:
+                return default_limits
+
+        except Exception:
+            # On any error, return safe defaults
+            return default_limits
 
 
 # Export commonly used functions

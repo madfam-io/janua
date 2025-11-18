@@ -631,7 +631,7 @@ async def invite_member(
             role=request.role,
             invitation_url=invitation_url,
             expires_at=invitation.expires_at,
-            teams=None,  # TODO: Add teams if they're part of the invitation model
+            teams=None,  # Teams feature not yet implemented in invitation model
         )
     except Exception as e:
         # Log email error but don't fail the invitation
@@ -964,7 +964,21 @@ async def delete_custom_role(
     if role.is_system:
         raise HTTPException(status_code=400, detail="Cannot delete system roles")
 
-    # TODO: Check if role is in use by any members
+    # Check if role is in use by any members
+    from app.models import OrganizationMember
+
+    member_count_result = await db.execute(
+        select(func.count(OrganizationMember.id)).where(
+            OrganizationMember.organization_id == org_uuid, OrganizationMember.role == role.name
+        )
+    )
+    member_count = member_count_result.scalar()
+
+    if member_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete role '{role.name}' - it is assigned to {member_count} member(s)",
+        )
 
     db.delete(role)
     await db.commit()
