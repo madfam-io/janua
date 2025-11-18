@@ -85,9 +85,11 @@ async def generate_sp_metadata(
                 current_user.organization_id, request.certificate_id
             )
 
-        # Construct entity ID and URLs
-        # In production, these would come from configuration
-        base_url = "https://api.plinto.dev"  # TODO: Get from settings
+        # Construct entity ID and URLs from configuration
+        from app.config import get_settings
+
+        settings = get_settings()
+        base_url = settings.BASE_URL
         entity_id = f"{base_url}/sso/sp"
         acs_url = f"{base_url}/api/v1/sso/saml/acs"
         sls_url = f"{base_url}/api/v1/sso/saml/sls"
@@ -131,8 +133,11 @@ async def get_sp_metadata(current_user: User = Depends(get_current_user)):
         # Initialize managers
         metadata_manager = MetadataManager()
 
-        # Construct entity ID and URLs
-        base_url = "https://api.plinto.dev"  # TODO: Get from settings
+        # Construct entity ID and URLs from configuration
+        from app.config import get_settings
+
+        settings = get_settings()
+        base_url = settings.BASE_URL
         entity_id = f"{base_url}/sso/sp"
         acs_url = f"{base_url}/api/v1/sso/saml/acs"
         sls_url = f"{base_url}/api/v1/sso/saml/sls"

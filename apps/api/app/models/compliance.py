@@ -2,18 +2,23 @@
 Compliance and data protection models for GDPR, SOC 2, HIPAA, and other frameworks
 """
 
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text, Integer, Enum as SQLEnum
-from app.models.types import GUID as UUID, JSON as JSONB
-from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta
-import uuid
 import enum
+import uuid
+from datetime import datetime, timedelta
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.orm import relationship
+
+from app.models.types import GUID as UUID
+from app.models.types import JSON as JSONB
 
 from . import Base
 
 
 class ComplianceFramework(str, enum.Enum):
     """Supported compliance frameworks"""
+
     GDPR = "gdpr"
     SOC2 = "soc2"
     HIPAA = "hipaa"
@@ -24,6 +29,7 @@ class ComplianceFramework(str, enum.Enum):
 
 class ConsentType(str, enum.Enum):
     """Types of consent under GDPR"""
+
     MARKETING = "marketing"
     ANALYTICS = "analytics"
     FUNCTIONAL = "functional"
@@ -36,6 +42,7 @@ class ConsentType(str, enum.Enum):
 
 class ConsentStatus(str, enum.Enum):
     """Consent status"""
+
     GIVEN = "given"
     WITHDRAWN = "withdrawn"
     EXPIRED = "expired"
@@ -44,6 +51,7 @@ class ConsentStatus(str, enum.Enum):
 
 class LegalBasis(str, enum.Enum):
     """GDPR lawful basis for processing"""
+
     CONSENT = "consent"
     CONTRACT = "contract"
     LEGAL_OBLIGATION = "legal_obligation"
@@ -54,6 +62,7 @@ class LegalBasis(str, enum.Enum):
 
 class DataCategory(str, enum.Enum):
     """Categories of personal data"""
+
     IDENTITY = "identity"  # Name, username, email
     CONTACT = "contact"  # Email, phone, address
     DEMOGRAPHIC = "demographic"  # Age, gender, location
@@ -70,6 +79,7 @@ class DataCategory(str, enum.Enum):
 
 class DataSubjectRequestType(str, enum.Enum):
     """GDPR Article 15-22 data subject rights"""
+
     ACCESS = "access"  # Article 15 - Right of access
     RECTIFICATION = "rectification"  # Article 16 - Right to rectification
     ERASURE = "erasure"  # Article 17 - Right to erasure (right to be forgotten)
@@ -80,16 +90,31 @@ class DataSubjectRequestType(str, enum.Enum):
 
 class RequestStatus(str, enum.Enum):
     """Status of data subject requests"""
+
     RECEIVED = "received"
     ACKNOWLEDGED = "acknowledged"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     REJECTED = "rejected"
     EXPIRED = "expired"
+    FAILED = "failed"
+
+
+class ControlStatus(str, enum.Enum):
+    """SOC2 control effectiveness status"""
+
+    COMPLIANT = "compliant"  # Control meets requirements
+    NON_COMPLIANT = "non_compliant"  # Control fails requirements
+    EFFECTIVE = "effective"
+    INEFFECTIVE = "ineffective"
+    NEEDS_IMPROVEMENT = "needs_improvement"
+    NOT_TESTED = "not_tested"
+    EXCEPTION = "exception"
 
 
 class ConsentRecord(Base):
     """GDPR consent management"""
+
     __tablename__ = "consent_records"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -132,6 +157,7 @@ class ConsentRecord(Base):
 
 class DataRetentionPolicy(Base):
     """Data retention and deletion policies"""
+
     __tablename__ = "data_retention_policies"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -150,7 +176,9 @@ class DataRetentionPolicy(Base):
 
     # Retention rules
     retention_period_days = Column(Integer, nullable=False)
-    deletion_method = Column(String(100), default="soft_delete")  # soft_delete, hard_delete, anonymize
+    deletion_method = Column(
+        String(100), default="soft_delete"
+    )  # soft_delete, hard_delete, anonymize
     archival_required = Column(Boolean, default=False)
     archival_period_days = Column(Integer)
 
@@ -172,6 +200,7 @@ class DataRetentionPolicy(Base):
 
 class DataSubjectRequest(Base):
     """GDPR data subject rights requests"""
+
     __tablename__ = "data_subject_requests"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -229,6 +258,7 @@ class DataSubjectRequest(Base):
 
 class PrivacySettings(Base):
     """User privacy preferences and settings"""
+
     __tablename__ = "privacy_settings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -279,6 +309,7 @@ class PrivacySettings(Base):
 
 class DataBreachIncident(Base):
     """Data breach incident tracking"""
+
     __tablename__ = "data_breach_incidents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -355,6 +386,7 @@ class DataBreachIncident(Base):
 
 class ComplianceReport(Base):
     """Compliance reporting and audit trails"""
+
     __tablename__ = "compliance_reports"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -410,6 +442,7 @@ class ComplianceReport(Base):
 
 class ComplianceControl(Base):
     """SOC 2 and other compliance controls tracking"""
+
     __tablename__ = "compliance_controls"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -430,7 +463,9 @@ class ComplianceControl(Base):
     control_frequency = Column(String(50))  # continuous, daily, weekly, monthly, quarterly, annual
 
     # Implementation
-    implementation_status = Column(String(50), default="not_implemented")  # not_implemented, in_progress, implemented, effective
+    implementation_status = Column(
+        String(50), default="not_implemented"
+    )  # not_implemented, in_progress, implemented, effective
     implementation_date = Column(DateTime)
     implementation_evidence = Column(JSONB, default={})
     responsible_party = Column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -441,11 +476,18 @@ class ComplianceControl(Base):
     test_results = Column(JSONB, default={})
     effectiveness_rating = Column(String(50))  # effective, partially_effective, ineffective
 
+    # Control effectiveness status (used by compliance service)
+    status = Column(SQLEnum(ControlStatus), default=ControlStatus.NOT_TESTED, nullable=False)
+    last_assessed = Column(DateTime, nullable=True)
+    assessed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
     # Deficiencies and remediation
     deficiencies_identified = Column(JSONB, default=[])
     remediation_plan = Column(Text)
     remediation_due_date = Column(DateTime)
-    remediation_status = Column(String(50), default="not_required")  # not_required, planned, in_progress, completed
+    remediation_status = Column(
+        String(50), default="not_required"
+    )  # not_required, planned, in_progress, completed
 
     # Evidence and documentation
     evidence_location = Column(String(500))  # Where evidence is stored
@@ -476,14 +518,34 @@ class ComplianceControl(Base):
 
 
 # Add relationships
-ConsentRecord.user = relationship("User", back_populates="consent_records", foreign_keys=[ConsentRecord.user_id])
-DataSubjectRequest.user = relationship("User", back_populates="data_subject_requests", foreign_keys=[DataSubjectRequest.user_id])
-DataSubjectRequest.assigned_user = relationship("User", foreign_keys=[DataSubjectRequest.assigned_to])
-DataSubjectRequest.legal_reviewer = relationship("User", foreign_keys=[DataSubjectRequest.legal_reviewer_id])
-PrivacySettings.user = relationship("User", back_populates="privacy_settings", foreign_keys=[PrivacySettings.user_id])
-DataBreachIncident.incident_commander = relationship("User", foreign_keys=[DataBreachIncident.incident_commander_id])
-ComplianceReport.generated_by_user = relationship("User", foreign_keys=[ComplianceReport.generated_by])
-ComplianceReport.reviewed_by_user = relationship("User", foreign_keys=[ComplianceReport.reviewed_by])
-ComplianceReport.approved_by_user = relationship("User", foreign_keys=[ComplianceReport.approved_by])
-ComplianceControl.responsible_user = relationship("User", foreign_keys=[ComplianceControl.responsible_party])
+ConsentRecord.user = relationship(
+    "User", back_populates="consent_records", foreign_keys=[ConsentRecord.user_id]
+)
+DataSubjectRequest.user = relationship(
+    "User", back_populates="data_subject_requests", foreign_keys=[DataSubjectRequest.user_id]
+)
+DataSubjectRequest.assigned_user = relationship(
+    "User", foreign_keys=[DataSubjectRequest.assigned_to]
+)
+DataSubjectRequest.legal_reviewer = relationship(
+    "User", foreign_keys=[DataSubjectRequest.legal_reviewer_id]
+)
+PrivacySettings.user = relationship(
+    "User", back_populates="privacy_settings", foreign_keys=[PrivacySettings.user_id]
+)
+DataBreachIncident.incident_commander = relationship(
+    "User", foreign_keys=[DataBreachIncident.incident_commander_id]
+)
+ComplianceReport.generated_by_user = relationship(
+    "User", foreign_keys=[ComplianceReport.generated_by]
+)
+ComplianceReport.reviewed_by_user = relationship(
+    "User", foreign_keys=[ComplianceReport.reviewed_by]
+)
+ComplianceReport.approved_by_user = relationship(
+    "User", foreign_keys=[ComplianceReport.approved_by]
+)
+ComplianceControl.responsible_user = relationship(
+    "User", foreign_keys=[ComplianceControl.responsible_party]
+)
 ComplianceControl.reviewer = relationship("User", foreign_keys=[ComplianceControl.reviewer_id])

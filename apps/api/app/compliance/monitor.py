@@ -4,30 +4,33 @@ Supports SOC2 Trust Services Criteria monitoring and enterprise compliance requi
 """
 
 import asyncio
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Union
-from enum import Enum
-from dataclasses import dataclass, asdict
-from pathlib import Path
 import json
+import logging
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
 import psutil
 import redis.asyncio as aioredis
-from sqlalchemy import select, and_, func
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.models.audit import AuditLog
-from app.models.users import User
 from app.models.organizations import Organization
+from app.models.users import User
 from app.monitoring.stability import SystemMetrics
-
 
 logger = logging.getLogger(__name__)
 
 
 class ControlStatus(str, Enum):
     """SOC2 control effectiveness status"""
+
+    COMPLIANT = "compliant"  # Control meets requirements
+    NON_COMPLIANT = "non_compliant"  # Control fails requirements
     EFFECTIVE = "effective"
     INEFFECTIVE = "ineffective"
     NEEDS_IMPROVEMENT = "needs_improvement"
@@ -37,6 +40,7 @@ class ControlStatus(str, Enum):
 
 class EvidenceType(str, Enum):
     """Types of compliance evidence"""
+
     SYSTEM_GENERATED = "system_generated"
     MANUAL_REVIEW = "manual_review"
     DOCUMENTATION = "documentation"
@@ -48,6 +52,7 @@ class EvidenceType(str, Enum):
 @dataclass
 class ControlResult:
     """Result of a compliance control test"""
+
     control_id: str
     control_name: str
     status: ControlStatus
@@ -63,6 +68,7 @@ class ControlResult:
 @dataclass
 class ComplianceEvidence:
     """Compliance evidence item"""
+
     evidence_id: str
     control_id: str
     evidence_type: EvidenceType
@@ -115,21 +121,17 @@ class ComplianceMonitor:
             "CC7.3": "System Operations - Environmental Protections",
             "CC7.4": "System Operations - System Capacity",
             "CC8.1": "Change Management - Authorization",
-
             # Availability (A)
             "A1.1": "Availability - System Processing",
             "A1.2": "Availability - System Monitoring",
             "A1.3": "Availability - System Recovery",
-
             # Processing Integrity (PI)
             "PI1.1": "Processing Integrity - Input Validation",
             "PI1.2": "Processing Integrity - Data Processing",
             "PI1.3": "Processing Integrity - Output Validation",
-
             # Confidentiality (C)
             "C1.1": "Confidentiality - Information Classification",
             "C1.2": "Confidentiality - Access Controls",
-
             # Privacy (P)
             "P1.1": "Privacy - Notice and Communication",
             "P2.1": "Privacy - Choice and Consent",
@@ -138,7 +140,7 @@ class ComplianceMonitor:
             "P5.1": "Privacy - Access",
             "P6.1": "Privacy - Disclosure to Third Parties",
             "P7.1": "Privacy - Quality",
-            "P8.1": "Privacy - Monitoring and Enforcement"
+            "P8.1": "Privacy - Monitoring and Enforcement",
         }
 
     async def run_daily_monitoring(self) -> Dict[str, Any]:
@@ -151,7 +153,7 @@ class ComplianceMonitor:
             "controls_tested": {},
             "evidence_collected": [],
             "exceptions_identified": [],
-            "recommendations": []
+            "recommendations": [],
         }
 
         try:
@@ -179,7 +181,9 @@ class ComplianceMonitor:
             summary = await self.generate_compliance_summary(results)
             results["summary"] = summary
 
-            logger.info(f"Daily compliance monitoring completed: {len(results['controls_tested'])} control categories tested")
+            logger.info(
+                f"Daily compliance monitoring completed: {len(results['controls_tested'])} control categories tested"
+            )
 
         except Exception as e:
             logger.error(f"Error in daily compliance monitoring: {e}")
@@ -272,12 +276,16 @@ class ComplianceMonitor:
                     exceptions.append(f"{weak_passwords} users with weak passwords")
 
                 # Collect evidence
-                evidence_items.extend([
-                    f"mfa_enforcement_report_{datetime.utcnow().date()}",
-                    f"password_policy_report_{datetime.utcnow().date()}"
-                ])
+                evidence_items.extend(
+                    [
+                        f"mfa_enforcement_report_{datetime.utcnow().date()}",
+                        f"password_policy_report_{datetime.utcnow().date()}",
+                    ]
+                )
 
-                status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
+                status = (
+                    ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
+                )
 
         except Exception as e:
             logger.error(f"Error testing user authentication: {e}")
@@ -293,7 +301,7 @@ class ComplianceMonitor:
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
             next_test_date=datetime.utcnow() + timedelta(days=30),
-            description="Multi-factor authentication and password policy enforcement"
+            description="Multi-factor authentication and password policy enforcement",
         )
 
     async def _test_privileged_access(self) -> ControlResult:
@@ -316,7 +324,9 @@ class ComplianceMonitor:
                 privileged_actions = await self._get_privileged_audit_logs(session)
                 evidence_items.append(f"privileged_access_log_{datetime.utcnow().date()}")
 
-                status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
+                status = (
+                    ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
+                )
 
         except Exception as e:
             logger.error(f"Error testing privileged access: {e}")
@@ -331,7 +341,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(days=30)
+            next_test_date=datetime.utcnow() + timedelta(days=30),
         )
 
     async def _test_system_monitoring(self) -> ControlResult:
@@ -355,10 +365,12 @@ class ComplianceMonitor:
             if not await self._verify_log_collection():
                 exceptions.append("Log collection not functioning properly")
 
-            evidence_items.extend([
-                f"system_metrics_{datetime.utcnow().date()}",
-                f"monitoring_status_{datetime.utcnow().date()}"
-            ])
+            evidence_items.extend(
+                [
+                    f"system_metrics_{datetime.utcnow().date()}",
+                    f"monitoring_status_{datetime.utcnow().date()}",
+                ]
+            )
 
             status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
 
@@ -375,7 +387,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(days=1)
+            next_test_date=datetime.utcnow() + timedelta(days=1),
         )
 
     async def _test_technology_controls(self) -> ControlResult:
@@ -396,11 +408,13 @@ class ComplianceMonitor:
             if not await self._verify_encryption_in_transit():
                 exceptions.append("Encryption in transit issues detected")
 
-            evidence_items.extend([
-                f"security_headers_check_{datetime.utcnow().date()}",
-                f"rate_limiting_test_{datetime.utcnow().date()}",
-                f"encryption_validation_{datetime.utcnow().date()}"
-            ])
+            evidence_items.extend(
+                [
+                    f"security_headers_check_{datetime.utcnow().date()}",
+                    f"rate_limiting_test_{datetime.utcnow().date()}",
+                    f"encryption_validation_{datetime.utcnow().date()}",
+                ]
+            )
 
             status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
 
@@ -417,7 +431,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(days=7)
+            next_test_date=datetime.utcnow() + timedelta(days=7),
         )
 
     async def _test_system_processing(self) -> ControlResult:
@@ -441,11 +455,13 @@ class ComplianceMonitor:
             if not await self._verify_redis_connectivity():
                 exceptions.append("Redis connectivity issues detected")
 
-            evidence_items.extend([
-                f"api_performance_metrics_{datetime.utcnow().date()}",
-                f"database_health_check_{datetime.utcnow().date()}",
-                f"redis_health_check_{datetime.utcnow().date()}"
-            ])
+            evidence_items.extend(
+                [
+                    f"api_performance_metrics_{datetime.utcnow().date()}",
+                    f"database_health_check_{datetime.utcnow().date()}",
+                    f"redis_health_check_{datetime.utcnow().date()}",
+                ]
+            )
 
             status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
 
@@ -462,7 +478,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(hours=6)
+            next_test_date=datetime.utcnow() + timedelta(hours=6),
         )
 
     async def _test_availability_monitoring(self) -> ControlResult:
@@ -482,10 +498,12 @@ class ComplianceMonitor:
             if not await self._verify_alert_system():
                 exceptions.append("Alert system not functioning properly")
 
-            evidence_items.extend([
-                f"uptime_report_{datetime.utcnow().date()}",
-                f"alert_system_test_{datetime.utcnow().date()}"
-            ])
+            evidence_items.extend(
+                [
+                    f"uptime_report_{datetime.utcnow().date()}",
+                    f"alert_system_test_{datetime.utcnow().date()}",
+                ]
+            )
 
             status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
 
@@ -502,7 +520,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(hours=12)
+            next_test_date=datetime.utcnow() + timedelta(hours=12),
         )
 
     async def _test_input_validation(self) -> ControlResult:
@@ -521,10 +539,12 @@ class ComplianceMonitor:
             if not await self._verify_sql_injection_protection():
                 exceptions.append("SQL injection protection issues detected")
 
-            evidence_items.extend([
-                f"input_validation_test_{datetime.utcnow().date()}",
-                f"injection_protection_test_{datetime.utcnow().date()}"
-            ])
+            evidence_items.extend(
+                [
+                    f"input_validation_test_{datetime.utcnow().date()}",
+                    f"injection_protection_test_{datetime.utcnow().date()}",
+                ]
+            )
 
             status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
 
@@ -541,7 +561,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(days=7)
+            next_test_date=datetime.utcnow() + timedelta(days=7),
         )
 
     async def _test_data_processing(self) -> ControlResult:
@@ -560,10 +580,12 @@ class ComplianceMonitor:
             if not await self._verify_transaction_integrity():
                 exceptions.append("Transaction integrity issues detected")
 
-            evidence_items.extend([
-                f"data_consistency_check_{datetime.utcnow().date()}",
-                f"transaction_integrity_test_{datetime.utcnow().date()}"
-            ])
+            evidence_items.extend(
+                [
+                    f"data_consistency_check_{datetime.utcnow().date()}",
+                    f"transaction_integrity_test_{datetime.utcnow().date()}",
+                ]
+            )
 
             status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
 
@@ -580,7 +602,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(days=7)
+            next_test_date=datetime.utcnow() + timedelta(days=7),
         )
 
     async def _test_user_provisioning(self) -> ControlResult:
@@ -599,12 +621,16 @@ class ComplianceMonitor:
                 if improper_roles:
                     exceptions.append(f"Improper role assignments: {improper_roles}")
 
-                evidence_items.extend([
-                    f"user_provisioning_report_{datetime.utcnow().date()}",
-                    f"role_assignment_audit_{datetime.utcnow().date()}"
-                ])
+                evidence_items.extend(
+                    [
+                        f"user_provisioning_report_{datetime.utcnow().date()}",
+                        f"role_assignment_audit_{datetime.utcnow().date()}",
+                    ]
+                )
 
-                status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
+                status = (
+                    ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
+                )
 
         except Exception as e:
             logger.error(f"Error testing user provisioning: {e}")
@@ -619,7 +645,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(days=30)
+            next_test_date=datetime.utcnow() + timedelta(days=30),
         )
 
     async def _test_access_reviews(self) -> ControlResult:
@@ -641,12 +667,16 @@ class ComplianceMonitor:
                 if inactive_admins:
                     exceptions.append(f"Inactive admin accounts: {len(inactive_admins)}")
 
-                evidence_items.extend([
-                    f"access_review_report_{datetime.utcnow().date()}",
-                    f"stale_accounts_report_{datetime.utcnow().date()}"
-                ])
+                evidence_items.extend(
+                    [
+                        f"access_review_report_{datetime.utcnow().date()}",
+                        f"stale_accounts_report_{datetime.utcnow().date()}",
+                    ]
+                )
 
-                status = ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
+                status = (
+                    ControlStatus.EFFECTIVE if not exceptions else ControlStatus.NEEDS_IMPROVEMENT
+                )
 
         except Exception as e:
             logger.error(f"Error testing access reviews: {e}")
@@ -661,7 +691,7 @@ class ComplianceMonitor:
             evidence_items=evidence_items,
             exceptions=exceptions,
             remediation_required=len(exceptions) > 0,
-            next_test_date=datetime.utcnow() + timedelta(days=90)
+            next_test_date=datetime.utcnow() + timedelta(days=90),
         )
 
     async def collect_daily_evidence(self) -> List[ComplianceEvidence]:
@@ -692,7 +722,9 @@ class ComplianceMonitor:
 
         return evidence_items
 
-    async def generate_compliance_summary(self, monitoring_results: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_compliance_summary(
+        self, monitoring_results: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Generate executive compliance summary"""
         summary = {
             "overall_status": "COMPLIANT",
@@ -701,7 +733,7 @@ class ComplianceMonitor:
             "controls_ineffective": 0,
             "critical_issues": [],
             "recommendations": [],
-            "compliance_score": 0.0
+            "compliance_score": 0.0,
         }
 
         try:
@@ -736,7 +768,9 @@ class ComplianceMonitor:
                 summary["recommendations"].append("Address control improvement areas")
 
             if summary["controls_ineffective"] > 0:
-                summary["recommendations"].append("Immediate remediation required for ineffective controls")
+                summary["recommendations"].append(
+                    "Immediate remediation required for ineffective controls"
+                )
 
         except Exception as e:
             logger.error(f"Error generating compliance summary: {e}")
@@ -753,17 +787,24 @@ class ComplianceMonitor:
 
     async def _get_privileged_audit_logs(self, session: AsyncSession) -> List[Dict]:
         """Get recent privileged user actions"""
-        query = select(AuditLog).where(
-            and_(
-                AuditLog.created_at >= datetime.utcnow() - timedelta(days=1),
-                AuditLog.action.in_(['admin_login', 'user_create', 'role_change'])
+        query = (
+            select(AuditLog)
+            .where(
+                and_(
+                    AuditLog.created_at >= datetime.utcnow() - timedelta(days=1),
+                    AuditLog.action.in_(["admin_login", "user_create", "role_change"]),
+                )
             )
-        ).limit(100)
+            .limit(100)
+        )
 
         result = await session.execute(query)
         logs = result.scalars().all()
 
-        return [{"action": log.action, "user_id": log.user_id, "timestamp": log.created_at} for log in logs]
+        return [
+            {"action": log.action, "user_id": log.user_id, "timestamp": log.created_at}
+            for log in logs
+        ]
 
     async def _verify_log_collection(self) -> bool:
         """Verify log collection is functioning"""
@@ -805,7 +846,7 @@ class ComplianceMonitor:
         return {
             "average": 150.5,  # milliseconds
             "p95": 300.0,
-            "p99": 500.0
+            "p99": 500.0,
         }
 
     async def _verify_database_connectivity(self) -> bool:
@@ -865,14 +906,17 @@ class ComplianceMonitor:
 
     async def _get_recent_user_provisioning(self, session: AsyncSession) -> List[Dict]:
         """Get recent user provisioning activities"""
-        query = select(User).where(
-            User.created_at >= datetime.utcnow() - timedelta(days=30)
-        ).limit(50)
+        query = (
+            select(User).where(User.created_at >= datetime.utcnow() - timedelta(days=30)).limit(50)
+        )
 
         result = await session.execute(query)
         users = result.scalars().all()
 
-        return [{"user_id": user.id, "email": user.email, "created_at": user.created_at} for user in users]
+        return [
+            {"user_id": user.id, "email": user.email, "created_at": user.created_at}
+            for user in users
+        ]
 
     async def _check_role_assignments(self, session: AsyncSession) -> List[str]:
         """Check for improper role assignments"""
@@ -885,30 +929,31 @@ class ComplianceMonitor:
         # Users who haven't logged in for 90+ days
         cutoff_date = datetime.utcnow() - timedelta(days=90)
 
-        query = select(User).where(
-            User.last_login_at < cutoff_date
-        ).limit(100)
+        query = select(User).where(User.last_login_at < cutoff_date).limit(100)
 
         result = await session.execute(query)
         stale_users = result.scalars().all()
 
-        return [{"user_id": user.id, "email": user.email, "last_login": user.last_login_at} for user in stale_users]
+        return [
+            {"user_id": user.id, "email": user.email, "last_login": user.last_login_at}
+            for user in stale_users
+        ]
 
     async def _identify_inactive_admins(self, session: AsyncSession) -> List[Dict]:
         """Identify inactive admin accounts"""
         cutoff_date = datetime.utcnow() - timedelta(days=30)
 
         query = select(User).where(
-            and_(
-                User.is_superuser == True,
-                User.last_login_at < cutoff_date
-            )
+            and_(User.is_superuser == True, User.last_login_at < cutoff_date)
         )
 
         result = await session.execute(query)
         inactive_admins = result.scalars().all()
 
-        return [{"user_id": user.id, "email": user.email, "last_login": user.last_login_at} for user in inactive_admins]
+        return [
+            {"user_id": user.id, "email": user.email, "last_login": user.last_login_at}
+            for user in inactive_admins
+        ]
 
     async def _collect_system_metrics_evidence(self) -> List[ComplianceEvidence]:
         """Collect system metrics as compliance evidence"""
@@ -923,7 +968,7 @@ class ComplianceMonitor:
                 control_id="CC7.2",
                 evidence_type=EvidenceType.SYSTEM_GENERATED,
                 description="Daily system performance metrics",
-                data=metrics
+                data=metrics,
             )
 
             evidence_items.append(evidence)
@@ -940,12 +985,16 @@ class ComplianceMonitor:
         try:
             async with get_session() as session:
                 # Collect authentication events
-                auth_query = select(AuditLog).where(
-                    and_(
-                        AuditLog.created_at >= datetime.utcnow() - timedelta(days=1),
-                        AuditLog.action.in_(['login', 'logout', 'failed_login'])
+                auth_query = (
+                    select(AuditLog)
+                    .where(
+                        and_(
+                            AuditLog.created_at >= datetime.utcnow() - timedelta(days=1),
+                            AuditLog.action.in_(["login", "logout", "failed_login"]),
+                        )
                     )
-                ).limit(1000)
+                    .limit(1000)
+                )
 
                 result = await session.execute(auth_query)
                 auth_logs = result.scalars().all()
@@ -962,11 +1011,13 @@ class ComplianceMonitor:
                                 "action": log.action,
                                 "user_id": log.user_id,
                                 "timestamp": log.created_at.isoformat(),
-                                "ip_address": log.metadata.get("ip_address") if log.metadata else None
+                                "ip_address": log.metadata.get("ip_address")
+                                if log.metadata
+                                else None,
                             }
                             for log in auth_logs[:100]  # Include first 100 for evidence
-                        ]
-                    }
+                        ],
+                    },
                 )
 
                 evidence_items.append(evidence)
@@ -991,8 +1042,8 @@ class ComplianceMonitor:
                     "monitoring_active": True,
                     "alerts_24h": 0,  # Would be actual count from monitoring system
                     "incidents_24h": 0,
-                    "last_scan": datetime.utcnow().isoformat()
-                }
+                    "last_scan": datetime.utcnow().isoformat(),
+                },
             )
 
             evidence_items.append(evidence)
@@ -1016,8 +1067,8 @@ class ComplianceMonitor:
                     "backup_status": "completed",
                     "last_backup": datetime.utcnow().isoformat(),
                     "backup_size_gb": 2.5,  # Would be actual backup metrics
-                    "retention_days": 30
-                }
+                    "retention_days": 30,
+                },
             )
 
             evidence_items.append(evidence)
@@ -1063,7 +1114,7 @@ class ControlMonitor:
             "effectiveness_rate": effectiveness_rate,
             "trend": "improving" if effectiveness_rate > 0.8 else "declining",
             "last_test": recent_results[-1].test_date,
-            "total_tests": len(self.test_history)
+            "total_tests": len(self.test_history),
         }
 
 
@@ -1074,21 +1125,26 @@ class EvidenceCollector:
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
-    async def collect_evidence(self, control_id: str, evidence_type: EvidenceType,
-                              description: str, data: Optional[Dict] = None) -> ComplianceEvidence:
+    async def collect_evidence(
+        self,
+        control_id: str,
+        evidence_type: EvidenceType,
+        description: str,
+        data: Optional[Dict] = None,
+    ) -> ComplianceEvidence:
         """Collect and store compliance evidence"""
         evidence = ComplianceEvidence(
             evidence_id=f"{control_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
             control_id=control_id,
             evidence_type=evidence_type,
             description=description,
-            data=data
+            data=data,
         )
 
         # Store evidence to file
         evidence_file = self.storage_path / f"{evidence.evidence_id}.json"
 
-        with open(evidence_file, 'w') as f:
+        with open(evidence_file, "w") as f:
             json.dump(asdict(evidence), f, indent=2, default=str)
 
         evidence.file_path = str(evidence_file)
@@ -1103,7 +1159,7 @@ class EvidenceCollector:
 
         for evidence_file in self.storage_path.glob(f"{control_id}_*.json"):
             try:
-                with open(evidence_file, 'r') as f:
+                with open(evidence_file, "r") as f:
                     evidence_data = json.load(f)
 
                 evidence = ComplianceEvidence(**evidence_data)
@@ -1120,10 +1176,10 @@ class EvidenceCollector:
 
         for evidence_file in self.storage_path.glob("*.json"):
             try:
-                with open(evidence_file, 'r') as f:
+                with open(evidence_file, "r") as f:
                     evidence_data = json.load(f)
 
-                retention_date = datetime.fromisoformat(evidence_data.get('retention_date', ''))
+                retention_date = datetime.fromisoformat(evidence_data.get("retention_date", ""))
 
                 if retention_date < cutoff_date:
                     evidence_file.unlink()
