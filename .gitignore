@@ -8,6 +8,8 @@ node_modules
 dist/
 build/
 *.tsbuildinfo
+storybook-static/
+out/
 
 # Environment variables
 # Exclude ALL environment files except .example files
@@ -46,6 +48,8 @@ test-results/
 test-results.json
 playwright-report/
 playwright/.cache/
+junit.xml
+*.xml.bak
 
 # Temporary files
 *.tmp
@@ -81,3 +85,9 @@ coverage.xml
 .mypy_cache/
 *.egg-info/
 *.tgz
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
