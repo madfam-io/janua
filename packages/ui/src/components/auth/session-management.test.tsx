@@ -260,7 +260,7 @@ describe('SessionManagement', () => {
         />
       )
 
-      const revokeButtons = screen.getAllByRole('button', { name: /revoke/i })
+      const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' })
       await user.click(revokeButtons[0])
 
       await waitFor(() => {
@@ -277,7 +277,8 @@ describe('SessionManagement', () => {
         />
       )
 
-      const revokeButtons = screen.getAllByRole('button', { name: /revoke/i })
+      // Look for individual "Revoke" buttons (exact match, not "Revoke all other sessions")
+      const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' })
       // Should only have 2 revoke buttons (for session-2 and session-3, not session-1)
       expect(revokeButtons.length).toBe(2)
     })
@@ -296,7 +297,7 @@ describe('SessionManagement', () => {
         />
       )
 
-      const revokeButtons = screen.getAllByRole('button', { name: /revoke/i })
+      const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' })
       await user.click(revokeButtons[0])
 
       expect(screen.getByText(/revoking\.\.\./i)).toBeInTheDocument()
@@ -320,7 +321,7 @@ describe('SessionManagement', () => {
         />
       )
 
-      const revokeButtons = screen.getAllByRole('button', { name: /revoke/i })
+      const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' })
       await user.click(revokeButtons[0])
 
       await waitFor(() => {
@@ -343,7 +344,7 @@ describe('SessionManagement', () => {
         />
       )
 
-      const revokeButtons = screen.getAllByRole('button', { name: /revoke/i })
+      const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' })
       await user.click(revokeButtons[0])
 
       expect(revokeButtons[0]).toBeDisabled()
