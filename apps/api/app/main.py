@@ -37,8 +37,10 @@ from app.core.error_handling import (
     ErrorHandlingMiddleware,
     api_exception_handler,
     http_exception_handler,
+    plinto_exception_handler,
     validation_exception_handler,
 )
+from app.core.exceptions import PlintoAPIException
 from app.routers.v1 import (
     admin as admin_v1,
 )
@@ -353,6 +355,9 @@ Rate limit headers returned in response:
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Add Plinto-specific exception handler
+app.add_exception_handler(PlintoAPIException, plinto_exception_handler)
 
 # Add comprehensive error handling
 app.add_exception_handler(APIException, api_exception_handler)

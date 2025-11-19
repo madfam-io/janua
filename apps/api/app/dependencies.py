@@ -1,7 +1,7 @@
 """
 Shared dependencies for FastAPI routes and services
 
-Ensures proper module structure for Railway deployment
+Ensures proper module structure for Railway deployment and dependency injection
 """
 
 from fastapi import Depends, HTTPException
@@ -11,11 +11,148 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.core.redis import get_redis
+from app.core.redis import get_redis, ResilientRedisClient
 from .models import User, UserStatus, Organization, OrganizationMember
 from app.services.auth_service import AuthService
 
 security = HTTPBearer()
+
+
+# ============================================================================
+# Service Dependencies
+# ============================================================================
+# These factory functions enable dependency injection for services, making
+# them easier to test, mock, and configure across the application.
+# ============================================================================
+
+
+async def get_email_service():
+    """
+    Get EmailService instance with Redis dependency.
+
+    Returns:
+        EmailService: Configured email service instance
+
+    Example usage in router:
+        @router.post("/send-email")
+        async def send_email(
+            email_service: EmailService = Depends(get_email_service)
+        ):
+            await email_service.send_verification_email(...)
+    """
+    from app.services.email_service import EmailService
+
+    redis_client = await get_redis()
+    return EmailService(redis_client=redis_client)
+
+
+async def get_jwt_service():
+    """
+    Get JWTService instance.
+
+    Returns:
+        JWTService: Configured JWT service instance
+
+    Example usage in router:
+        @router.post("/token")
+        async def create_token(
+            jwt_service: JWTService = Depends(get_jwt_service)
+        ):
+            return jwt_service.create_token(...)
+    """
+    from app.services.jwt_service import JWTService
+
+    return JWTService()
+
+
+async def get_audit_service(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get AuditService instance with database dependency.
+
+    Args:
+        db: Database session
+
+    Returns:
+        AuditService: Configured audit service instance
+
+    Example usage in router:
+        @router.post("/action")
+        async def perform_action(
+            audit_service: AuditService = Depends(get_audit_service)
+        ):
+            await audit_service.log_action(...)
+    """
+    from app.services.audit_service import AuditService
+
+    return AuditService(db)
+
+
+async def get_webhook_service(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get WebhookService instance with database dependency.
+
+    Args:
+        db: Database session
+
+    Returns:
+        WebhookService: Configured webhook service instance
+    """
+    from app.services.webhooks import WebhookService
+
+    return WebhookService(db)
+
+
+async def get_rbac_service(
+    db: AsyncSession = Depends(get_db),
+    redis_client: ResilientRedisClient = Depends(get_redis)
+):
+    """
+    Get RBACService instance with dependencies.
+
+    Args:
+        db: Database session
+        redis_client: Redis client for caching
+
+    Returns:
+        RBACService: Configured RBAC service instance
+
+    Example usage in router:
+        @router.get("/permissions")
+        async def check_permissions(
+            rbac_service: RBACService = Depends(get_rbac_service),
+            current_user: User = Depends(get_current_user)
+        ):
+            return await rbac_service.check_permission(current_user, "read:users")
+    """
+    from app.services.rbac_service import RBACService
+
+    return RBACService(db, redis_client)
+
+
+async def get_sso_service(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get SSOService instance with database dependency.
+
+    Args:
+        db: Database session
+
+    Returns:
+        SSOService: Configured SSO service instance
+    """
+    from app.services.sso_service import SSOService
+
+    return SSOService(db)
+
+
+# ============================================================================
+# Authentication & Authorization Dependencies (existing)
+# ============================================================================
 
 
 async def get_current_user(

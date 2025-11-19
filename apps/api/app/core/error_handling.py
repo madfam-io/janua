@@ -16,6 +16,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import ValidationError
 
+# Import unified exception system
+from app.core.exceptions import PlintoException, PlintoAPIException
+
 logger = structlog.get_logger()
 
 
@@ -161,7 +164,24 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
     async def _create_error_response(self, exc: Exception, request_id: int) -> JSONResponse:
         """Create standardized error response"""
 
-        if isinstance(exc, APIException):
+        # Handle unified Plinto exceptions (from app.core.exceptions)
+        if isinstance(exc, PlintoAPIException):
+            error_data = {
+                "error": {
+                    "code": exc.error_code,
+                    "message": exc.message,
+                    "details": exc.details,
+                    "request_id": request_id,
+                    "timestamp": time.time()
+                }
+            }
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=error_data
+            )
+
+        # Handle legacy APIException (from this file) for backward compatibility
+        elif isinstance(exc, APIException):
             # Custom API exceptions
             error_data = {
                 "error": {
@@ -314,6 +334,35 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
             "timestamp": time.time()
         }
     }
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_data
+    )
+
+
+async def plinto_exception_handler(request: Request, exc: PlintoAPIException) -> JSONResponse:
+    """Handler for unified Plinto exceptions"""
+    error_data = {
+        "error": {
+            "code": exc.error_code,
+            "message": exc.message,
+            "details": exc.details,
+            "request_id": id(request),
+            "timestamp": time.time()
+        }
+    }
+
+    # Log the exception with context
+    logger.error(
+        "Plinto exception occurred",
+        error_code=exc.error_code,
+        message=exc.message,
+        details=exc.details,
+        status_code=exc.status_code,
+        request_id=id(request),
+        path=str(request.url)
+    )
+
     return JSONResponse(
         status_code=exc.status_code,
         content=error_data
