@@ -54,7 +54,7 @@ Currently, Railway will deploy the **marketing site** as the primary application
 
 ## Build Configuration
 
-The `railway.json` file is configured with:
+The `config/railway.json` file is configured with:
 - **Build Command**: `yarn install --frozen-lockfile && yarn build`
 - **Start Command**: `yarn workspace @plinto/marketing start`
 - **Health Check**: `/health` endpoint

@@ -506,4 +506,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a list of changes and migration guides.
+See the main [CHANGELOG.md](../../docs/CHANGELOG.md) for a list of changes and migration guides.

@@ -653,7 +653,7 @@ railway variables set JWT_PRIVATE_KEY="$(openssl genrsa 2048)"
 railway logs
 ```
 
-**Railway Configuration** (`railway.json`):
+**Railway Configuration** (`config/railway.json`):
 
 ```json
 {

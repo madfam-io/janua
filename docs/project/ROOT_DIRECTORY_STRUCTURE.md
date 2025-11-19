@@ -22,10 +22,6 @@ This document describes the proper organization of files in the Plinto project r
 - **playwright.config.ts** - Playwright E2E testing configuration
 - **.babelrc** - Babel transpiler configuration
 
-### Deployment Configuration
-- **vercel.json** - Vercel deployment configuration
-- **railway.json** - Railway deployment configuration
-
 ## 📁 Directory Structure
 
 ```
@@ -56,7 +52,7 @@ plinto/
 ├── deployment/          # Deployment configurations
 ├── infrastructure/      # Infrastructure as code
 ├── monitoring/          # Monitoring configurations
-├── config/              # Additional configurations
+├── config/              # Configuration files (docker-compose, railway, vercel)
 ├── assets/              # Static assets
 ├── .github/             # GitHub configurations
 ├── .claude/             # Claude configuration
@@ -65,13 +61,22 @@ plinto/
 
 ## 🚫 Files That Should NOT Be in Root
 
-### Documentation Reports
-These have been moved to `docs/production/`:
-- ~~ALPHA_LAUNCH_READINESS_REPORT.md~~
-- ~~BETA_LAUNCH_READINESS_REPORT.md~~
-- ~~COMPREHENSIVE_BETA_READINESS_REPORT.md~~
-- ~~PRODUCTION_STATUS_REPORT.md~~
-- ~~PRODUCTION_BETA_READINESS_ASSESSMENT.md~~
+### Documentation Files
+These have been moved to `docs/`:
+- ~~CHANGELOG.md~~ → `docs/CHANGELOG.md`
+- ~~QUICK_START.md~~ → `docs/guides/QUICK_START.md`
+- ~~DEMO_WALKTHROUGH.md~~ → `docs/guides/DEMO_WALKTHROUGH.md`
+- ~~LOCAL_DEMO_GUIDE.md~~ → `docs/guides/LOCAL_DEMO_GUIDE.md`
+- ~~VERSION_GUIDE.md~~ → `docs/guides/VERSION_GUIDE.md`
+- ~~SECURITY.md~~ → `docs/security/SECURITY.md`
+- ~~TEST_FIXES_PROGRESS.md~~ → `docs/testing/TEST_FIXES_PROGRESS.md`
+- ~~TEST_STABILIZATION_PLAN.md~~ → `docs/testing/TEST_STABILIZATION_PLAN.md`
+
+### Configuration Files
+These have been moved to `config/`:
+- ~~vercel.json~~ → `config/vercel.json`
+- ~~railway.json~~ → `config/railway.json`
+- ~~docker-compose.test.yml~~ → `config/docker-compose.test.yml`
 
 ### Temporary Files
 Should be automatically cleaned:
@@ -90,6 +95,26 @@ Should be in .gitignore:
 - *.pyc
 - __pycache__/
 
-## Cleanup Complete
+## Recent Cleanup (November 2025)
 
-The root directory has been organized with all documentation reports moved to their proper location in `docs/production/`. The root now contains only essential configuration files and standard project structure directories.
+The root directory has been comprehensively organized:
+
+### Documentation Reorganization
+- All documentation files moved to appropriate `docs/` subdirectories
+- Guides (QUICK_START, DEMO_WALKTHROUGH, etc.) moved to `docs/guides/`
+- Security documentation moved to `docs/security/`
+- Testing documentation moved to `docs/testing/`
+- Project status files moved to `docs/project/`
+
+### Configuration Consolidation
+- Deployment configs moved to `config/` directory
+- Test infrastructure (docker-compose.test.yml) moved to `config/`
+- Build artifacts properly ignored in .gitignore
+
+### Build Artifacts Removed
+- Database files (*.db, *.sqlite)
+- Test reports (junit.xml)
+- Storybook build output
+- Orphaned/empty code directories
+
+The root now contains only essential configuration files and standard project structure directories.

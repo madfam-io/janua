@@ -173,9 +173,9 @@ Platforms:
   ✅ Docker: Containerized deployments
 
 Configuration Files:
-  - vercel.json (root + apps/marketing)
-  - railway.json (api, react-sdk, root)
-  - docker-compose.yml (deployment, apps/api)
+  - vercel.json (config/ + apps/marketing)
+  - railway.json (config/ + apps/api)
+  - docker-compose.yml (deployment, apps/api, config/)
   - Dockerfiles: 4 (api, dashboard, test-app)
 
 CI/CD:
