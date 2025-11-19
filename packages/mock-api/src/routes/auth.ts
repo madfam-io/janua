@@ -22,7 +22,7 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
   }
   
   // Hash password
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(password, 12);  // NIST recommendation: minimum 12 rounds
   
   // Create user
   const user = await db.createUser({

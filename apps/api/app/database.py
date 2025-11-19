@@ -28,8 +28,10 @@ if hasattr(settings, 'DATABASE_URL') and settings.DATABASE_URL:
     # Add pooling parameters only for non-SQLite databases
     if "sqlite" not in async_database_url:
         engine_kwargs.update({
-            "pool_size": 5,
-            "max_overflow": 10,
+            "pool_size": 50,  # Increased from 5 to handle concurrent requests
+            "max_overflow": 100,  # Increased from 10 for burst capacity
+            "pool_recycle": 3600,  # Recycle connections after 1 hour
+            "pool_timeout": 30,  # Wait up to 30 seconds for a connection
         })
     else:
         # Use NullPool for SQLite to avoid connection sharing issues
@@ -51,11 +53,14 @@ if hasattr(settings, 'DATABASE_URL') and settings.DATABASE_URL:
         pool_pre_ping=True,
     )
 else:
-    # Fallback for local development
-    DATABASE_URL = os.getenv(
-        "DATABASE_URL",
-        "postgresql://plinto:plinto@localhost/plinto"
-    )
+    # Require explicit DATABASE_URL configuration
+    DATABASE_URL = os.getenv("DATABASE_URL")
+
+    if not DATABASE_URL:
+        raise RuntimeError(
+            "DATABASE_URL environment variable must be set. "
+            "Example: postgresql://user:password@localhost:5432/plinto"
+        )
 
     # Convert to async URL
     async_database_url = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
@@ -64,12 +69,20 @@ else:
         async_database_url,
         echo=True,
         pool_pre_ping=True,
+        pool_size=50,  # Handle concurrent requests
+        max_overflow=100,  # Burst capacity
+        pool_recycle=3600,  # Recycle connections after 1 hour
+        pool_timeout=30,  # Wait up to 30 seconds for a connection
     )
 
     sync_engine = create_engine(
         DATABASE_URL,
         echo=True,
         pool_pre_ping=True,
+        pool_size=50,
+        max_overflow=100,
+        pool_recycle=3600,
+        pool_timeout=30,
     )
 
 # Create session factories

@@ -86,15 +86,43 @@ export class ConfigService {
         password: process.env.REDIS_PASSWORD,
         db: parseInt(process.env.REDIS_DB || '0')
       },
-      security: {
-        jwtSecret: process.env.JWT_SECRET || 'dev-secret',
-        encryptionKey: process.env.ENCRYPTION_KEY || 'dev-encryption-key',
-        sessionSecret: process.env.SESSION_SECRET || 'dev-session-secret',
-        maxLoginAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5'),
-        lockoutDuration: parseInt(process.env.LOCKOUT_DURATION || '900000') // 15 minutes
-      },
+      security: this.loadSecurityConfig(),
       enableClustering: process.env.ENABLE_CLUSTERING === 'true',
       logLevel: (process.env.LOG_LEVEL as any) || 'info'
+    };
+  }
+
+  private loadSecurityConfig(): SecurityConfig {
+    const isProduction = (process.env.NODE_ENV as any) === 'production';
+
+    // Get secrets from environment
+    const jwtSecret = process.env.JWT_SECRET;
+    const encryptionKey = process.env.ENCRYPTION_KEY;
+    const sessionSecret = process.env.SESSION_SECRET;
+
+    // In production, require all secrets to be set
+    if (isProduction) {
+      if (!jwtSecret || !encryptionKey || !sessionSecret) {
+        throw new Error(
+          'CRITICAL SECURITY ERROR: JWT_SECRET, ENCRYPTION_KEY, and SESSION_SECRET must be set in production. ' +
+          'Generate secure secrets using: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
+        );
+      }
+
+      // Validate secret strength (minimum 32 characters)
+      if (jwtSecret.length < 32 || encryptionKey.length < 32 || sessionSecret.length < 32) {
+        throw new Error(
+          'CRITICAL SECURITY ERROR: All secrets must be at least 32 characters long in production'
+        );
+      }
+    }
+
+    return {
+      jwtSecret: jwtSecret || 'dev-secret-ONLY-FOR-DEVELOPMENT',
+      encryptionKey: encryptionKey || 'dev-encryption-key-ONLY-FOR-DEVELOPMENT',
+      sessionSecret: sessionSecret || 'dev-session-secret-ONLY-FOR-DEVELOPMENT',
+      maxLoginAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5'),
+      lockoutDuration: parseInt(process.env.LOCKOUT_DURATION || '900000') // 15 minutes
     };
   }
 

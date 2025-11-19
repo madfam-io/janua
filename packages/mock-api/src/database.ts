@@ -74,7 +74,7 @@ class MockDatabase {
       throw new Error('Email already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const hashedPassword = await bcrypt.hash(data.password, 12);  // NIST recommendation: minimum 12 rounds
     const user: User = {
       id: uuidv4(),
       email: data.email,
@@ -151,7 +151,7 @@ class MockDatabase {
     const user = this.users.get(userId);
     if (!user) return false;
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, 12);  // NIST recommendation: minimum 12 rounds
     user.password = hashedPassword;
     user.updated_at = new Date().toISOString();
     

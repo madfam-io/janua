@@ -293,12 +293,30 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY", mode="before")
     @classmethod
     def validate_secret_key(cls, v):
-        # Only validate in production environment
+        # Validate secret key security
         import os
 
         environment = os.getenv("ENVIRONMENT", "development")
-        if environment == "production" and v == "change-this-in-production":
-            raise ValueError("SECRET_KEY must be changed in production")
+
+        # Check for default/weak secrets
+        weak_secrets = [
+            "change-this-in-production",
+            "development-secret-key-change-in-production",
+            "development-secret-key",
+            "secret",
+            "secret-key",
+        ]
+
+        if environment == "production":
+            # In production, require strong secret
+            if not v or v in weak_secrets:
+                raise ValueError(
+                    "SECRET_KEY must be set to a strong, unique value in production. "
+                    "Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                )
+            if len(v) < 32:
+                raise ValueError("SECRET_KEY must be at least 32 characters in production")
+
         return v
 
     @property

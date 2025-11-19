@@ -4,6 +4,7 @@ OAuth authentication endpoints
 
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
@@ -20,6 +21,52 @@ from ...models import ActivityLog, OAuthAccount, OAuthProvider, Passkey, User
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth/oauth", tags=["oauth"])
+
+
+def validate_redirect_url(url: Optional[str]) -> Optional[str]:
+    """
+    Validate that a redirect URL is safe and allowed.
+
+    Args:
+        url: The URL to validate
+
+    Returns:
+        The validated URL
+
+    Raises:
+        HTTPException: If the URL is invalid or not allowed
+    """
+    if not url:
+        return url
+
+    try:
+        parsed = urlparse(url)
+
+        # Get allowed origins from settings
+        allowed_origins = settings.cors_origins_list
+
+        # Allow relative URLs (no scheme or netloc)
+        if not parsed.scheme and not parsed.netloc:
+            return url
+
+        # For absolute URLs, check against allowed origins
+        if parsed.netloc:
+            # Construct origin from parsed URL
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+
+            # Check if origin is in allowed list
+            if origin not in allowed_origins and not any(
+                allowed in origin for allowed in allowed_origins
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Redirect URL domain not allowed. Must be one of: {', '.join(allowed_origins)}",
+                )
+
+        return url
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid redirect URL: {str(e)}")
 
 
 class OAuthInitRequest(BaseModel):
@@ -70,6 +117,10 @@ async def oauth_authorize(
 ):
     """Initialize OAuth flow for a provider"""
     try:
+        # Validate redirect URLs to prevent open redirect vulnerabilities
+        redirect_to = validate_redirect_url(redirect_to)
+        redirect_uri = validate_redirect_url(redirect_uri)
+
         # Parse provider enum
         try:
             oauth_provider = OAuthProvider(provider.lower())

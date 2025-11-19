@@ -89,6 +89,8 @@ export class SessionManager extends EventEmitter {
   private userSessions: Map<string, Set<string>> = new Map();
   private deviceSessions: Map<string, Set<string>> = new Map();
   private anomalyHistory: Map<string, SessionAnomalyReport[]> = new Map();
+  private cleanupTimer?: NodeJS.Timeout;
+  private anomalyDetectionTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly config: {
@@ -103,6 +105,33 @@ export class SessionManager extends EventEmitter {
     super();
     this.startCleanupTimer();
     this.startAnomalyDetection();
+  }
+
+  /**
+   * Destroy session manager and cleanup resources
+   * IMPORTANT: Call this method when destroying the instance to prevent memory leaks
+   */
+  destroy(): void {
+    // Clear timers to prevent memory leaks
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+    if (this.anomalyDetectionTimer) {
+      clearInterval(this.anomalyDetectionTimer);
+      this.anomalyDetectionTimer = undefined;
+    }
+
+    // Clear all maps to free memory
+    this.sessions.clear();
+    this.refreshTokenFamilies.clear();
+    this.usedRefreshTokens.clear();
+    this.userSessions.clear();
+    this.deviceSessions.clear();
+    this.anomalyHistory.clear();
+
+    // Remove all event listeners
+    this.removeAllListeners();
   }
 
   /**
@@ -722,7 +751,7 @@ export class SessionManager extends EventEmitter {
    * Start cleanup timer
    */
   private startCleanupTimer(): void {
-    setInterval(() => {
+    this.cleanupTimer = setInterval(() => {
       this.cleanup();
     }, 60000); // Every minute
   }
@@ -731,7 +760,7 @@ export class SessionManager extends EventEmitter {
    * Start anomaly detection monitoring
    */
   private startAnomalyDetection(): void {
-    setInterval(() => {
+    this.anomalyDetectionTimer = setInterval(() => {
       this.performPeriodicAnomalyAnalysis();
     }, 300000); // Every 5 minutes
   }
