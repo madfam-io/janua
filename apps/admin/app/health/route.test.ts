@@ -1,5 +1,4 @@
 import { GET } from './route'
-import { NextResponse } from 'next/server'
 
 // Mock Next.js server environment
 jest.mock('next/server', () => ({
