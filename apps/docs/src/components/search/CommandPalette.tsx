@@ -137,7 +137,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                         {category}
                       </h2>
                       <ul>
-                        {results.map((result, index) => {
+                        {results.map((result, _index) => {
                           const globalIndex = filteredResults.indexOf(result);
                           return (
                             <li key={result.id}>

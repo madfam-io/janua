@@ -1,5 +1,4 @@
-import Link from 'next/link'
-import { Code, Download, ExternalLink, Github, Play, Star } from 'lucide-react'
+import { ExternalLink, Github, Play, Star } from 'lucide-react'
 
 export default function ExamplesPage() {
   return (
@@ -439,10 +438,10 @@ function UseCaseExample({ title, description, features, tech, githubUrl, demoUrl
   )
 }
 
-function CodeSnippet({ title, description, language, code }: {
+function CodeSnippet({ title, description, _language, code }: {
   title: string
   description: string
-  language: string
+  _language: string
   code: string
 }) {
   return (

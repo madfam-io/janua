@@ -215,7 +215,7 @@ export function InlineAlgoliaSearch({
   placeholder = 'Search...',
   className = ''
 }: AlgoliaSearchProps) {
-  const [query, setQuery] = useState('');
+  const [_query, _setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
   return (

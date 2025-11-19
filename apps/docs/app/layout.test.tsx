@@ -1,10 +1,10 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { layout } from './layout'
+import { layout as _layout } from './layout'
 
 describe('layout', () => {
   it('should render without crashing', () => {
-    render(<layout />)
+    render(<_layout />)
     expect(screen.getByTestId('layout')).toBeInTheDocument()
   })
 })

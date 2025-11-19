@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Play, Copy, Check, Globe, Lock } from 'lucide-react';
+import { ChevronDown, ChevronRight, Play, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CodeBlock, TabbedCodeBlock } from '../CodeBlock/CodeBlock';
 
@@ -118,7 +118,7 @@ export function ApiEndpoint({
   const [environment, setEnvironment] = useState<'test' | 'live'>('test');
   const [apiKey, setApiKey] = useState('');
   const [requestBody, setRequestBody] = useState('');
-  const [queryParams, setQueryParams] = useState<Record<string, string>>({});
+  const [queryParams, _setQueryParams] = useState<Record<string, string>>({});
   const [pathParams, setPathParams] = useState<Record<string, string>>({});
   const [executing, setExecuting] = useState(false);
   const [response, setResponse] = useState<any>(null);

@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { Menu, X, Search, Github, Moon, Sun, Command } from 'lucide-react'
-import { Button } from '@plinto/ui'
 import { useTheme } from 'next-themes'
 import { SearchModal } from '@/components/search/search-modal'
 

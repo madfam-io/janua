@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Code, Download, BookOpen, Github, ExternalLink } from 'lucide-react'
+import { BookOpen, Github, ExternalLink } from 'lucide-react'
 
 export default function SDKsPage() {
   return (

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     // Read the LLM-friendly documentation file
     const filePath = join(process.cwd(), 'public', 'llms-full.txt')

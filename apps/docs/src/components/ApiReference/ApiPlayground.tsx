@@ -43,7 +43,7 @@ interface ApiPlaygroundProps {
 export function ApiPlayground({
   method,
   path,
-  baseUrl = 'https://api.plinto.dev',
+  baseUrl: _baseUrl = 'https://api.plinto.dev',
   defaultEnvironment = 'test',
   headers = {},
   parameters

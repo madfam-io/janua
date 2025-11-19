@@ -610,7 +610,7 @@ export async function POST(request: Request) {
         'Content-Type': 'text/plain; charset=utf-8',
       },
     })
-  } catch (error) {
+  } catch (_error) {
     return new NextResponse('Invalid request', { status: 400 })
   }
 }

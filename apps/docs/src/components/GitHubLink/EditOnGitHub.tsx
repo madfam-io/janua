@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Github, ExternalLink, GitBranch, History } from 'lucide-react';
+import { Github, ExternalLink, History } from 'lucide-react';
 
 interface EditOnGitHubProps {
   filePath: string;
@@ -24,7 +24,7 @@ export function EditOnGitHub({
   const githubBaseUrl = `https://github.com/${repository}`;
   const editUrl = `${githubBaseUrl}/edit/${branch}/${filePath}`;
   const historyUrl = `${githubBaseUrl}/commits/${branch}/${filePath}`;
-  const blobUrl = `${githubBaseUrl}/blob/${branch}/${filePath}`;
+  const _blobUrl = `${githubBaseUrl}/blob/${branch}/${filePath}`;
 
   if (variant === 'minimal') {
     return (
