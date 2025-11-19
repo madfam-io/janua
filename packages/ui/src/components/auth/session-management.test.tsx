@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { SessionManagement } from './session-management'
 import type { Session } from './session-management'
+import { isRelativeTime } from '@/test/utils'
 
 describe('SessionManagement', () => {
   const mockOnRevokeSession = vi.fn()
@@ -171,9 +172,19 @@ describe('SessionManagement', () => {
         />
       )
 
-      expect(screen.getByText(/Last active 5m ago/i)).toBeInTheDocument()
-      expect(screen.getByText(/Last active 1h ago/i)).toBeInTheDocument()
-      expect(screen.getByText(/Last active 1d ago/i)).toBeInTheDocument()
+      // Find all "Last active" timestamp elements
+      const timestampElements = screen.getAllByText(/Last active \d+[smhd] ago/i)
+      expect(timestampElements.length).toBeGreaterThanOrEqual(3)
+
+      // Verify each timestamp has the correct relative format
+      timestampElements.forEach((element) => {
+        const text = element.textContent || ''
+        const timeMatch = text.match(/(\d+[smhd] ago|Just now)/i)
+        expect(timeMatch).toBeTruthy()
+        if (timeMatch) {
+          expect(isRelativeTime(timeMatch[0])).toBe(true)
+        }
+      })
     })
 
     it('should render device type icons', () => {

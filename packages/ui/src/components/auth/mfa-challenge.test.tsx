@@ -32,7 +32,9 @@ describe('MFAChallenge', () => {
     it('should show TOTP method description', () => {
       render(<MFAChallenge method="totp" />)
 
-      expect(screen.getByText(/authenticator app/i)).toBeInTheDocument()
+      // Use getAllByText since "authenticator app" may appear in multiple places
+      const elements = screen.getAllByText(/authenticator app/i)
+      expect(elements.length).toBeGreaterThan(0)
     })
 
     it('should show SMS method description', () => {
