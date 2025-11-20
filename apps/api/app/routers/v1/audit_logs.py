@@ -136,34 +136,36 @@ async def list_audit_logs(
     # Get paginated results
     result = await db.execute(stmt.order_by(desc(AuditLog.timestamp)).limit(limit + 1))
     logs = result.scalars().all()
-    
+
     # Check if there are more results
     has_more = len(logs) > limit
     if has_more:
         logs = logs[:-1]  # Remove the extra item
-    
+
     # Get next cursor
     next_cursor = None
     if has_more and logs:
         next_cursor = logs[-1].timestamp.isoformat()
-    
+
+    # OPTIMIZED: Bulk fetch user emails to avoid N+1 queries
+    # Collect unique user IDs
+    user_ids = list(set(log.user_id for log in logs if log.user_id))
+    user_email_map = {}
+
+    if user_ids:
+        from app.models.user import User
+        users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+        users = users_result.scalars().all()
+        user_email_map = {str(user.id): user.email for user in users}
+
     # Convert to response models
     log_responses = []
     for log in logs:
-        # Get user email if available
-        user_email = None
-        if log.user_id:
-            from app.models.user import User
-            user_result = await db.execute(select(User).where(User.id == log.user_id))
-            user = user_result.scalar_one_or_none()
-            if user:
-                user_email = user.email
-        
         log_responses.append(AuditLogResponse(
             id=str(log.id),
             action=log.action,
             user_id=log.user_id,
-            user_email=user_email,
+            user_email=user_email_map.get(log.user_id),
             resource_type=log.resource_type,
             resource_id=log.resource_id,
             details=log.details,
@@ -228,15 +230,22 @@ async def get_audit_stats(
         if log.user_id:
             events_by_user_dict[log.user_id] = events_by_user_dict.get(log.user_id, 0) + 1
     
-    events_by_user = []
-    for user_id, count in sorted(events_by_user_dict.items(), key=lambda x: x[1], reverse=True)[:10]:
-        # Get user details
+    # OPTIMIZED: Bulk fetch user emails for top 10 users
+    top_10_users = sorted(events_by_user_dict.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_user_ids = [user_id for user_id, _ in top_10_users]
+
+    user_email_map = {}
+    if top_user_ids:
         from app.models.user import User
-        user_result = await db.execute(select(User).where(User.id == user_id))
-        user = user_result.scalar_one_or_none()
+        users_result = await db.execute(select(User).where(User.id.in_(top_user_ids)))
+        users = users_result.scalars().all()
+        user_email_map = {str(user.id): user.email for user in users}
+
+    events_by_user = []
+    for user_id, count in top_10_users:
         events_by_user.append({
             "user_id": user_id,
-            "email": user.email if user else "Unknown",
+            "email": user_email_map.get(user_id, "Unknown"),
             "count": count
         })
     
@@ -368,39 +377,40 @@ async def export_audit_logs(
     # Get logs
     result = await db.execute(stmt.order_by(desc(AuditLog.timestamp)))
     logs = result.scalars().all()
-    
+
+    # OPTIMIZED: Bulk fetch user emails to avoid N+1 queries
+    user_ids = list(set(log.user_id for log in logs if log.user_id))
+    user_email_map = {}
+
+    if user_ids:
+        from app.models.user import User
+        users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+        users = users_result.scalars().all()
+        user_email_map = {str(user.id): user.email for user in users}
+
     # Generate export
     if export_request.format == "csv":
         import csv
         import io
-        
+
         output = io.StringIO()
         writer = csv.writer(output)
-        
+
         # Write header
         writer.writerow([
             "ID", "Timestamp", "Action", "User ID", "User Email",
             "Resource Type", "Resource ID", "IP Address", "User Agent",
             "Organization ID", "Details"
         ])
-        
+
         # Write data
         for log in logs:
-            # Get user email
-            user_email = None
-            if log.user_id:
-                from app.models.user import User
-                user_result = await db.execute(select(User).where(User.id == log.user_id))
-                user = user_result.scalar_one_or_none()
-                if user:
-                    user_email = user.email
-            
             writer.writerow([
                 str(log.id),
                 log.timestamp.isoformat(),
                 log.action,
                 log.user_id or "",
-                user_email or "",
+                user_email_map.get(log.user_id, ""),
                 log.resource_type or "",
                 log.resource_id or "",
                 log.ip_address or "",
@@ -408,31 +418,22 @@ async def export_audit_logs(
                 str(log.organization_id) if log.organization_id else "",
                 json.dumps(log.details) if log.details else ""
             ])
-        
+
         content = output.getvalue()
         content_type = "text/csv"
         filename = f"audit_logs_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
-        
+
     else:  # JSON format
         import json
-        
+
         export_data = []
         for log in logs:
-            # Get user email
-            user_email = None
-            if log.user_id:
-                from app.models.user import User
-                user_result = await db.execute(select(User).where(User.id == log.user_id))
-                user = user_result.scalar_one_or_none()
-                if user:
-                    user_email = user.email
-            
             export_data.append({
                 "id": str(log.id),
                 "timestamp": log.timestamp.isoformat(),
                 "action": log.action,
                 "user_id": log.user_id,
-                "user_email": user_email,
+                "user_email": user_email_map.get(log.user_id),
                 "resource_type": log.resource_type,
                 "resource_id": log.resource_id,
                 "ip_address": log.ip_address,
@@ -440,7 +441,7 @@ async def export_audit_logs(
                 "organization_id": str(log.organization_id) if log.organization_id else None,
                 "details": log.details
             })
-        
+
         content = json.dumps(export_data, indent=2)
         content_type = "application/json"
         filename = f"audit_logs_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"

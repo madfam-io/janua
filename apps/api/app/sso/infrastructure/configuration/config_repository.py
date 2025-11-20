@@ -3,11 +3,13 @@ Repository for SSO configuration management
 """
 
 from typing import List, Optional
+import json
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import SSOConfiguration as SSOConfigModel
+from app.core.redis import get_redis
 
 from ...domain.protocols.base import SSOConfiguration
 
@@ -17,6 +19,48 @@ class SSOConfigurationRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._redis = None
+
+    async def _get_redis(self):
+        """Lazy load Redis client"""
+        if self._redis is None:
+            try:
+                self._redis = await get_redis()
+            except Exception:
+                pass  # Redis is optional, continue without caching
+        return self._redis
+
+    async def _cache_get(self, key: str) -> Optional[dict]:
+        """Get from cache"""
+        try:
+            redis = await self._get_redis()
+            if redis:
+                cached = await redis.get(key)
+                if cached:
+                    return json.loads(cached)
+        except Exception:
+            pass
+        return None
+
+    async def _cache_set(self, key: str, value: dict, ttl: int = 900):
+        """Set to cache (15 min default)"""
+        try:
+            redis = await self._get_redis()
+            if redis:
+                await redis.set(key, json.dumps(value, default=str), ex=ttl)
+        except Exception:
+            pass
+
+    async def _cache_delete(self, pattern: str):
+        """Delete from cache by pattern"""
+        try:
+            redis = await self._get_redis()
+            if redis:
+                keys = await redis.keys(pattern)
+                if keys:
+                    await redis.delete(*keys)
+        except Exception:
+            pass
 
     async def create(self, config: SSOConfiguration) -> SSOConfiguration:
         """Create new SSO configuration"""
@@ -57,7 +101,13 @@ class SSOConfigurationRepository:
     async def get_by_organization(
         self, organization_id: str, protocol: Optional[str] = None
     ) -> Optional[SSOConfiguration]:
-        """Get SSO configuration by organization and optional protocol"""
+        """Get SSO configuration by organization and optional protocol (cached 15 min)"""
+
+        # Try cache first
+        cache_key = f"sso:config:{organization_id}:{protocol or 'any'}"
+        cached = await self._cache_get(cache_key)
+        if cached:
+            return SSOConfiguration(**cached)
 
         stmt = select(SSOConfigModel).where(
             SSOConfigModel.organization_id == organization_id, SSOConfigModel.is_active == True
@@ -72,7 +122,20 @@ class SSOConfigurationRepository:
         if not db_config:
             return None
 
-        return self._to_domain_object(db_config)
+        domain_obj = self._to_domain_object(db_config)
+
+        # Cache the result (SSO configs change infrequently)
+        await self._cache_set(cache_key, {
+            "organization_id": domain_obj.organization_id,
+            "protocol": domain_obj.protocol,
+            "provider_name": domain_obj.provider_name,
+            "config": domain_obj.config,
+            "attribute_mapping": domain_obj.attribute_mapping,
+            "jit_provisioning": domain_obj.jit_provisioning,
+            "default_role": domain_obj.default_role,
+        }, ttl=900)  # 15 minutes
+
+        return domain_obj
 
     async def list_by_organization(self, organization_id: str) -> List[SSOConfiguration]:
         """List all SSO configurations for an organization"""
@@ -88,6 +151,11 @@ class SSOConfigurationRepository:
     async def update(self, config_id: str, updates: dict) -> Optional[SSOConfiguration]:
         """Update SSO configuration"""
 
+        # Get org ID before update for cache invalidation
+        stmt_get = select(SSOConfigModel.organization_id).where(SSOConfigModel.id == config_id)
+        result = await self.db.execute(stmt_get)
+        org_id = result.scalar_one_or_none()
+
         stmt = (
             update(SSOConfigModel)
             .where(SSOConfigModel.id == config_id, SSOConfigModel.is_active == True)
@@ -97,16 +165,29 @@ class SSOConfigurationRepository:
         await self.db.execute(stmt)
         await self.db.commit()
 
+        # Invalidate cache for this organization
+        if org_id:
+            await self._cache_delete(f"sso:config:{org_id}:*")
+
         # Return updated config
         return await self.get_by_id(config_id)
 
     async def delete(self, config_id: str) -> bool:
         """Soft delete SSO configuration"""
 
+        # Get org ID before delete for cache invalidation
+        stmt_get = select(SSOConfigModel.organization_id).where(SSOConfigModel.id == config_id)
+        result = await self.db.execute(stmt_get)
+        org_id = result.scalar_one_or_none()
+
         stmt = update(SSOConfigModel).where(SSOConfigModel.id == config_id).values(is_active=False)
 
         result = await self.db.execute(stmt)
         await self.db.commit()
+
+        # Invalidate cache for this organization
+        if org_id:
+            await self._cache_delete(f"sso:config:{org_id}:*")
 
         return result.rowcount > 0
 
