@@ -168,4 +168,4 @@ We welcome contributions! Please see our [Contributing Guide](../../CONTRIBUTING
 
 ## License
 
-This SDK is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
+This SDK is licensed under the AGPL-3.0 License. See [LICENSE](../../LICENSE) for details.

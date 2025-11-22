@@ -318,9 +318,12 @@ echo ""
 echo "Step 5: Creating LICENSE files"
 echo "------------------------------"
 
-# MIT License for public SDKs
+# AGPL-3.0 License for all components
 cat > ../$PUBLIC_REPO/LICENSE << 'EOF'
-MIT License
+                    GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+ Copyright (C) 2025 Innovaciones MADFAM SAS de CV
 
 Copyright (c) 2025 Janua
 
@@ -474,7 +477,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for de
 
 ## 📄 License
 
-MIT License - see [LICENSE](./LICENSE) for details.
+AGPL-3.0 License - see [LICENSE](./LICENSE) for details.
 
 ## 💬 Support
 

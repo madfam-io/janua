@@ -141,4 +141,4 @@ See main repository [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT License - see main repository [LICENSE](../../LICENSE) file.
+AGPL-3.0 License - see main repository [LICENSE](../../LICENSE) file.

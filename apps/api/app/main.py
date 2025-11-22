@@ -335,8 +335,8 @@ Rate limit headers returned in response:
         "email": "support@janua.dev",
     },
     license_info={
-        "name": "MIT License (Core) + Commercial License (Enterprise)",
-        "url": "https://github.com/janua/janua/blob/main/LICENSE",
+        "name": "AGPL-3.0",
+        "url": "https://github.com/madfam-io/janua/blob/main/LICENSE",
     },
     servers=[
         {
@@ -816,7 +816,7 @@ async def beta_list_users():
             logger.warning(
                 "Failed to fetch users from Redis, falling back to memory",
                 error=str(e),
-                error_type=type(e).__name__
+                error_type=type(e).__name__,
             )
 
         # Add memory users

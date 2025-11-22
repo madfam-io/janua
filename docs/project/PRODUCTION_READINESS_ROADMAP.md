@@ -876,7 +876,7 @@ twine upload dist/*
 ### Pre-Publication Requirements
 
 **Legal & Licensing**:
-- [ ] MIT License confirmed in all packages
+- [x] AGPL-3.0 License confirmed in all packages
 - [ ] Copyright notices updated
 - [ ] Third-party license compliance
 - [ ] Terms of Service published

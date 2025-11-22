@@ -17,7 +17,7 @@
     "janua"
   ],
   "author": "Janua",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "dependencies": {
     "zod": "^3.22.4"
   },

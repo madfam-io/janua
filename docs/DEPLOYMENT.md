@@ -1205,9 +1205,10 @@ appendfsync everysec
 
 ## License
 
-Janua is open-core:
-- **MIT License** (Core features): Self-host freely
-- **Commercial License** (Enterprise features): SSO, SCIM, Advanced compliance
+Janua is licensed under AGPL-3.0:
+- **AGPL-3.0 License**: GNU Affero General Public License v3.0
+- **Copyright**: (C) 2025 Innovaciones MADFAM SAS de CV
+- **Infrastructure Sovereignty**: Mandatory copyleft for network software
 
 See [LICENSE](../LICENSE) for details.
 

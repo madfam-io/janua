@@ -342,7 +342,9 @@ We'll build what the community needs. Tell us what you need.
 
 ## License
 
-MIT License - use it however you want.
+AGPL-3.0 License - GNU Affero General Public License v3.0
+
+Copyright (C) 2025 Innovaciones MADFAM SAS de CV
 
 See [LICENSE](LICENSE) for details.
 

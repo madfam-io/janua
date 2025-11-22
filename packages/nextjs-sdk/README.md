@@ -338,7 +338,7 @@ const org: Organization = await janua.organizations.get('org_123');
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE) file for details.
+AGPL-3.0 License - see [LICENSE](./LICENSE) file for details.
 
 ## Support
 

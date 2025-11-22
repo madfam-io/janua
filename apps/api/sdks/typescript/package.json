@@ -32,7 +32,7 @@
     "identity"
   ],
   "author": "Janua Team <team@janua.dev>",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "homepage": "https://janua.dev",
   "repository": {
     "type": "git",
