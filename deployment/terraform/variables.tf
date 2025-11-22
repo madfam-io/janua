@@ -16,13 +16,13 @@ variable "environment" {
 variable "project_name" {
   description = "Project name"
   type        = string
-  default     = "plinto"
+  default     = "janua"
 }
 
 variable "domain" {
   description = "Base domain for the application"
   type        = string
-  default     = "plinto.dev"
+  default     = "janua.dev"
 }
 
 variable "vpc_cidr" {

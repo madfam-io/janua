@@ -1,11 +1,11 @@
-# Plinto API Documentation
+# Janua API Documentation
 
-Welcome to the Plinto API documentation. This guide covers all endpoints available in our secure identity platform API.
+Welcome to the Janua API documentation. This guide covers all endpoints available in our secure identity platform API.
 
 ## Base URL
 
 ```
-Production: https://api.plinto.dev
+Production: https://api.janua.dev
 Development: http://localhost:8000
 ```
 
@@ -30,7 +30,7 @@ Use the authentication endpoints to obtain access tokens:
 ### 1. Create a User Account
 
 ```bash
-curl -X POST https://api.plinto.dev/api/v1/auth/signup \
+curl -X POST https://api.janua.dev/api/v1/auth/signup \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -42,7 +42,7 @@ curl -X POST https://api.plinto.dev/api/v1/auth/signup \
 ### 2. Sign In
 
 ```bash
-curl -X POST https://api.plinto.dev/api/v1/auth/signin \
+curl -X POST https://api.janua.dev/api/v1/auth/signin \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -53,7 +53,7 @@ curl -X POST https://api.plinto.dev/api/v1/auth/signin \
 ### 3. Access Protected Resources
 
 ```bash
-curl -X GET https://api.plinto.dev/api/v1/users/profile \
+curl -X GET https://api.janua.dev/api/v1/users/profile \
   -H "Authorization: Bearer <your_access_token>"
 ```
 
@@ -322,14 +322,14 @@ All API communication must use HTTPS in production. HTTP requests will be reject
 ### JavaScript/TypeScript
 
 ```bash
-npm install @plinto/js-sdk
+npm install @janua/js-sdk
 ```
 
 ```javascript
-import { PlintoClient } from '@plinto/js-sdk'
+import { JanuaClient } from '@janua/js-sdk'
 
-const client = new PlintoClient({
-  apiUrl: 'https://api.plinto.dev',
+const client = new JanuaClient({
+  apiUrl: 'https://api.janua.dev',
   apiKey: 'your-api-key'
 })
 
@@ -346,14 +346,14 @@ const profile = await client.users.getProfile()
 ### Python
 
 ```bash
-pip install plinto-python
+pip install janua-python
 ```
 
 ```python
-from plinto import PlintoClient
+from janua import JanuaClient
 
-client = PlintoClient(
-    api_url="https://api.plinto.dev",
+client = JanuaClient(
+    api_url="https://api.janua.dev",
     api_key="your-api-key"
 )
 
@@ -371,9 +371,9 @@ profile = client.users.get_profile()
 
 For API support and questions:
 
-- **Documentation**: [https://docs.plinto.dev](https://docs.plinto.dev)
-- **GitHub Issues**: [https://github.com/plinto/api/issues](https://github.com/plinto/api/issues)
-- **Email**: [api-support@plinto.dev](mailto:api-support@plinto.dev)
+- **Documentation**: [https://docs.janua.dev](https://docs.janua.dev)
+- **GitHub Issues**: [https://github.com/madfam-io/janua/api/issues](https://github.com/madfam-io/janua/api/issues)
+- **Email**: [api-support@janua.dev](mailto:api-support@janua.dev)
 
 ## Changelog
 

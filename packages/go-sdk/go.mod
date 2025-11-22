@@ -1,4 +1,4 @@
-module github.com/madfam-io/plinto/go-sdk
+module github.com/madfam-io/janua/go-sdk
 
 go 1.21
 

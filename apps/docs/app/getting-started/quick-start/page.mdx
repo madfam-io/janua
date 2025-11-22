@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get Plinto up and running in your application in under 5 minutes.
+Get Janua up and running in your application in under 5 minutes.
 
 ## 1. Install the SDK
 
@@ -8,13 +8,13 @@ Choose your preferred package manager:
 
 ```bash
 # npm
-npm install @plinto/nextjs
+npm install @janua/nextjs
 
 # yarn
-yarn add @plinto/nextjs
+yarn add @janua/nextjs
 
 # pnpm
-pnpm add @plinto/nextjs
+pnpm add @janua/nextjs
 ```
 
 ## 2. Set Up Environment Variables
@@ -22,26 +22,26 @@ pnpm add @plinto/nextjs
 Create a `.env.local` file in your project root:
 
 ```bash
-PLINTO_ISSUER=https://api.plinto.dev
-PLINTO_AUDIENCE=your-app-identifier
-PLINTO_CLIENT_ID=your-client-id
-PLINTO_CLIENT_SECRET=your-client-secret
+JANUA_ISSUER=https://api.janua.dev
+JANUA_AUDIENCE=your-app-identifier
+JANUA_CLIENT_ID=your-client-id
+JANUA_CLIENT_SECRET=your-client-secret
 ```
 
-> **Get your credentials**: Sign up at [app.plinto.dev](https://app.plinto.dev) to get your client credentials.
+> **Get your credentials**: Sign up at [app.janua.dev](https://app.janua.dev) to get your client credentials.
 
-## 3. Configure Plinto
+## 3. Configure Janua
 
-Create a `lib/plinto.ts` file:
+Create a `lib/janua.ts` file:
 
 ```typescript
-import { Plinto } from '@plinto/nextjs'
+import { Janua } from '@janua/nextjs'
 
-export const plinto = new Plinto(\{
-  issuer: process.env.PLINTO_ISSUER!,
-  audience: process.env.PLINTO_AUDIENCE!,
-  clientId: process.env.PLINTO_CLIENT_ID!,
-  clientSecret: process.env.PLINTO_CLIENT_SECRET!,
+export const janua = new Janua(\{
+  issuer: process.env.JANUA_ISSUER!,
+  audience: process.env.JANUA_AUDIENCE!,
+  clientId: process.env.JANUA_CLIENT_ID!,
+  clientSecret: process.env.JANUA_CLIENT_SECRET!,
 \})
 ```
 
@@ -50,11 +50,11 @@ export const plinto = new Plinto(\{
 Create a protected API route in `app/api/protected/route.ts`:
 
 ```typescript
-import \{ plinto \} from '@/lib/plinto'
+import \{ janua \} from '@/lib/janua'
 import \{ NextRequest \} from 'next/server'
 
 export async function GET(request: NextRequest) \{
-  const session = await plinto.getSession(request)
+  const session = await janua.getSession(request)
   
   if (!session) \{
     return new Response('Unauthorized', \{ status: 401 \})
@@ -76,7 +76,7 @@ Create a login component:
 'use client'
 
 import \{ useState \} from 'react'
-import \{ plinto \} from '@/lib/plinto'
+import \{ janua \} from '@/lib/janua'
 
 export function LoginForm() \{
   const [email, setEmail] = useState('')
@@ -88,7 +88,7 @@ export function LoginForm() \{
     setLoading(true)
     
     try \{
-      const result = await plinto.signIn(\{
+      const result = await janua.signIn(\{
         email,
         password
       \})
@@ -151,7 +151,7 @@ export function LoginForm() \{
 
 ## 🎉 Congratulations!
 
-You've successfully integrated Plinto authentication into your application. Your users can now:
+You've successfully integrated Janua authentication into your application. Your users can now:
 
 - Sign in with email and password
 - Access protected routes and API endpoints
@@ -168,7 +168,7 @@ You've successfully integrated Plinto authentication into your application. Your
 
 - Check our [API Reference](/api) for detailed endpoint documentation
 - Browse [Examples](/examples) for complete sample applications
-- Join our [Discord community](https://discord.gg/plinto) for support
+- Join our [Discord community](https://discord.gg/janua) for support
 
 ## Framework-Specific Guides
 

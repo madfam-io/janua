@@ -1,15 +1,15 @@
 # Installation Guide
 
-Complete installation instructions for integrating Plinto into your project.
+Complete installation instructions for integrating Janua into your project.
 
 ## Prerequisites
 
-Before installing Plinto, ensure you have:
+Before installing Janua, ensure you have:
 
 - **Node.js 16.8+** for JavaScript/TypeScript projects
 - **Python 3.8+** for Python projects
 - **Go 1.19+** for Go projects
-- A Plinto account ([sign up here](https://app.plinto.dev))
+- A Janua account ([sign up here](https://app.janua.dev))
 
 ## JavaScript/TypeScript Installation
 
@@ -18,7 +18,7 @@ Before installing Plinto, ensure you have:
 For Next.js applications with App Router:
 
 ```bash
-npm install @plinto/nextjs
+npm install @janua/nextjs
 ```
 
 ### React
@@ -26,7 +26,7 @@ npm install @plinto/nextjs
 For standalone React applications:
 
 ```bash
-npm install @plinto/react-sdk
+npm install @janua/react-sdk
 ```
 
 ### Vue
@@ -34,7 +34,7 @@ npm install @plinto/react-sdk
 For Vue 3 applications:
 
 ```bash
-npm install @plinto/vue
+npm install @janua/vue
 ```
 
 ### Universal JavaScript
@@ -42,7 +42,7 @@ npm install @plinto/vue
 For other JavaScript frameworks or Node.js:
 
 ```bash
-npm install @plinto/js
+npm install @janua/js
 ```
 
 ## Python Installation
@@ -50,43 +50,43 @@ npm install @plinto/js
 ### Using pip
 
 ```bash
-pip install plinto-python
+pip install janua-python
 ```
 
 ### Using poetry
 
 ```bash
-poetry add plinto-python
+poetry add janua-python
 ```
 
 ### Framework-specific packages
 
 For Django:
 ```bash
-pip install plinto-django
+pip install janua-django
 ```
 
 For FastAPI:
 ```bash
-pip install plinto-fastapi
+pip install janua-fastapi
 ```
 
 For Flask:
 ```bash
-pip install plinto-flask
+pip install janua-flask
 ```
 
 ## Go Installation
 
 ```bash
-go get github.com/plinto/plinto-go
+go get github.com/janua/janua-go
 ```
 
 ## Environment Setup
 
 ### 1. Create Your Application
 
-1. Go to [app.plinto.dev](https://app.plinto.dev)
+1. Go to [app.janua.dev](https://app.janua.dev)
 2. Sign up or log in to your account
 3. Click "Create New Application"
 4. Configure your application settings:
@@ -100,10 +100,10 @@ go get github.com/plinto/plinto-go
 After creating your application, you'll receive:
 
 ```bash
-PLINTO_ISSUER=https://api.plinto.dev
-PLINTO_AUDIENCE=your-unique-audience-id
-PLINTO_CLIENT_ID=your-client-id
-PLINTO_CLIENT_SECRET=your-client-secret
+JANUA_ISSUER=https://api.janua.dev
+JANUA_AUDIENCE=your-unique-audience-id
+JANUA_CLIENT_ID=your-client-id
+JANUA_CLIENT_SECRET=your-client-secret
 ```
 
 ### 3. Environment Variables
@@ -113,50 +113,50 @@ Create appropriate environment files for your framework:
 #### Next.js (`.env.local`)
 
 ```bash
-PLINTO_ISSUER=https://api.plinto.dev
-PLINTO_AUDIENCE=your-audience
-PLINTO_CLIENT_ID=your-client-id
-PLINTO_CLIENT_SECRET=your-client-secret
-PLINTO_REDIRECT_URI=http://localhost:3000/api/auth/callback
+JANUA_ISSUER=https://api.janua.dev
+JANUA_AUDIENCE=your-audience
+JANUA_CLIENT_ID=your-client-id
+JANUA_CLIENT_SECRET=your-client-secret
+JANUA_REDIRECT_URI=http://localhost:3000/api/auth/callback
 ```
 
 #### Python (`.env`)
 
 ```bash
-PLINTO_ISSUER=https://api.plinto.dev
-PLINTO_AUDIENCE=your-audience
-PLINTO_CLIENT_ID=your-client-id
-PLINTO_CLIENT_SECRET=your-client-secret
-PLINTO_REDIRECT_URI=http://localhost:8000/auth/callback
+JANUA_ISSUER=https://api.janua.dev
+JANUA_AUDIENCE=your-audience
+JANUA_CLIENT_ID=your-client-id
+JANUA_CLIENT_SECRET=your-client-secret
+JANUA_REDIRECT_URI=http://localhost:8000/auth/callback
 ```
 
 #### Go (environment or config file)
 
 ```bash
-export PLINTO_ISSUER=https://api.plinto.dev
-export PLINTO_AUDIENCE=your-audience
-export PLINTO_CLIENT_ID=your-client-id
-export PLINTO_CLIENT_SECRET=your-client-secret
+export JANUA_ISSUER=https://api.janua.dev
+export JANUA_AUDIENCE=your-audience
+export JANUA_CLIENT_ID=your-client-id
+export JANUA_CLIENT_SECRET=your-client-secret
 ```
 
 ## Framework-Specific Configuration
 
 ### Next.js Configuration
 
-Create `lib/plinto.ts`:
+Create `lib/janua.ts`:
 
 ```typescript
-import \{ Plinto \} from '@plinto/nextjs'
+import \{ Janua \} from '@janua/nextjs'
 
-export const plinto = new Plinto(\{
-  issuer: process.env.PLINTO_ISSUER!,
-  audience: process.env.PLINTO_AUDIENCE!,
-  clientId: process.env.PLINTO_CLIENT_ID!,
-  clientSecret: process.env.PLINTO_CLIENT_SECRET!,
-  redirectUri: process.env.PLINTO_REDIRECT_URI!,
+export const janua = new Janua(\{
+  issuer: process.env.JANUA_ISSUER!,
+  audience: process.env.JANUA_AUDIENCE!,
+  clientId: process.env.JANUA_CLIENT_ID!,
+  clientSecret: process.env.JANUA_CLIENT_SECRET!,
+  redirectUri: process.env.JANUA_REDIRECT_URI!,
   
   // Optional configuration
-  sessionCookieName: 'plinto-session',
+  sessionCookieName: 'janua-session',
   sessionDuration: 24 * 60 * 60 * 1000, // 24 hours
   refreshTokenRotation: true,
 \})
@@ -164,42 +164,42 @@ export const plinto = new Plinto(\{
 
 ### React Configuration
 
-Create `lib/plinto.ts`:
+Create `lib/janua.ts`:
 
 ```typescript
-import \{ PlintoProvider \} from '@plinto/react-sdk'
+import \{ JanuaProvider \} from '@janua/react-sdk'
 
-const plintoConfig = \{
-  issuer: process.env.REACT_APP_PLINTO_ISSUER!,
-  audience: process.env.REACT_APP_PLINTO_AUDIENCE!,
-  clientId: process.env.REACT_APP_PLINTO_CLIENT_ID!,
+const januaConfig = \{
+  issuer: process.env.REACT_APP_JANUA_ISSUER!,
+  audience: process.env.REACT_APP_JANUA_AUDIENCE!,
+  clientId: process.env.REACT_APP_JANUA_CLIENT_ID!,
   redirectUri: window.location.origin + '/callback',
 \}
 
-// Wrap your app with PlintoProvider
+// Wrap your app with JanuaProvider
 function App() \{
   return (
-    <PlintoProvider config=\{plintoConfig\}>
+    <JanuaProvider config=\{januaConfig\}>
       <YourAppComponents />
-    </PlintoProvider>
+    </JanuaProvider>
   )
 \}
 ```
 
 ### Python Configuration
 
-Create `config/plinto.py`:
+Create `config/janua.py`:
 
 ```python
 import os
-from plinto import Plinto
+from janua import Janua
 
-plinto = Plinto(
-    issuer=os.getenv('PLINTO_ISSUER'),
-    audience=os.getenv('PLINTO_AUDIENCE'),
-    client_id=os.getenv('PLINTO_CLIENT_ID'),
-    client_secret=os.getenv('PLINTO_CLIENT_SECRET'),
-    redirect_uri=os.getenv('PLINTO_REDIRECT_URI'),
+janua = Janua(
+    issuer=os.getenv('JANUA_ISSUER'),
+    audience=os.getenv('JANUA_AUDIENCE'),
+    client_id=os.getenv('JANUA_CLIENT_ID'),
+    client_secret=os.getenv('JANUA_CLIENT_SECRET'),
+    redirect_uri=os.getenv('JANUA_REDIRECT_URI'),
     
     # Optional configuration
     session_duration=86400,  # 24 hours in seconds
@@ -209,23 +209,23 @@ plinto = Plinto(
 
 ### Go Configuration
 
-Create `config/plinto.go`:
+Create `config/janua.go`:
 
 ```go
 package config
 
 import (
     "os"
-    "github.com/plinto/plinto-go"
+    "github.com/janua/janua-go"
 )
 
-func NewPlintoClient() *plinto.Client \{
-    return plinto.New(\{
-        Issuer:       os.Getenv("PLINTO_ISSUER"),
-        Audience:     os.Getenv("PLINTO_AUDIENCE"),
-        ClientID:     os.Getenv("PLINTO_CLIENT_ID"),
-        ClientSecret: os.Getenv("PLINTO_CLIENT_SECRET"),
-        RedirectURI:  os.Getenv("PLINTO_REDIRECT_URI"),
+func NewJanuaClient() *janua.Client \{
+    return janua.New(\{
+        Issuer:       os.Getenv("JANUA_ISSUER"),
+        Audience:     os.Getenv("JANUA_AUDIENCE"),
+        ClientID:     os.Getenv("JANUA_CLIENT_ID"),
+        ClientSecret: os.Getenv("JANUA_CLIENT_SECRET"),
+        RedirectURI:  os.Getenv("JANUA_REDIRECT_URI"),
         
         // Optional configuration
         SessionDuration: time.Hour * 24,
@@ -243,12 +243,12 @@ Create a simple test to verify your installation:
 #### JavaScript/TypeScript
 
 ```typescript
-import \{ plinto \} from './lib/plinto'
+import \{ janua \} from './lib/janua'
 
 async function testConnection() \{
   try \{
-    const config = await plinto.getConfiguration()
-    console.log('✅ Plinto connected successfully:', config.issuer)
+    const config = await janua.getConfiguration()
+    console.log('✅ Janua connected successfully:', config.issuer)
   \} catch (error) \{
     console.error('❌ Connection failed:', error)
   \}
@@ -260,12 +260,12 @@ testConnection()
 #### Python
 
 ```python
-from config.plinto import plinto
+from config.janua import janua
 
 def test_connection():
     try:
-        config = plinto.get_configuration()
-        print(f"✅ Plinto connected successfully: \{config['issuer']\}")
+        config = janua.get_configuration()
+        print(f"✅ Janua connected successfully: \{config['issuer']\}")
     except Exception as error:
         print(f"❌ Connection failed: \{error\}")
 
@@ -285,14 +285,14 @@ import (
 )
 
 func main() \{
-    client := config.NewPlintoClient()
+    client := config.NewJanuaClient()
     
     config, err := client.GetConfiguration()
     if err != nil \{
         log.Fatalf("❌ Connection failed: %v", err)
     \}
     
-    fmt.Printf("✅ Plinto connected successfully: %s\\n", config.Issuer)
+    fmt.Printf("✅ Janua connected successfully: %s\\n", config.Issuer)
 \}
 ```
 
@@ -301,19 +301,19 @@ func main() \{
 ### Common Issues
 
 #### "Invalid client credentials"
-- Verify your `PLINTO_CLIENT_ID` and `PLINTO_CLIENT_SECRET`
+- Verify your `JANUA_CLIENT_ID` and `JANUA_CLIENT_SECRET`
 - Ensure no extra spaces in your environment variables
-- Check that your application is active in the Plinto dashboard
+- Check that your application is active in the Janua dashboard
 
 #### "Invalid redirect URI"
-- Ensure your redirect URI exactly matches what's configured in Plinto
+- Ensure your redirect URI exactly matches what's configured in Janua
 - Include the full path (e.g., `http://localhost:3000/api/auth/callback`)
 - For production, use HTTPS URLs
 
 #### "Network connection failed"
 - Check your internet connection
-- Verify the `PLINTO_ISSUER` URL is correct
-- Ensure no firewall is blocking requests to `api.plinto.dev`
+- Verify the `JANUA_ISSUER` URL is correct
+- Ensure no firewall is blocking requests to `api.janua.dev`
 
 #### "Module not found" errors
 - Run `npm install` / `pip install` / `go mod tidy` again
@@ -325,13 +325,13 @@ func main() \{
 If you encounter issues:
 
 1. Check our [troubleshooting guide](/guides/troubleshooting)
-2. Search [GitHub issues](https://github.com/plinto/plinto/issues)
-3. Join our [Discord community](https://discord.gg/plinto)
-4. Contact support at [support@plinto.dev](mailto:support@plinto.dev)
+2. Search [GitHub issues](https://github.com/madfam-io/janua/issues)
+3. Join our [Discord community](https://discord.gg/janua)
+4. Contact support at [support@janua.dev](mailto:support@janua.dev)
 
 ## Next Steps
 
-Now that Plinto is installed, you can:
+Now that Janua is installed, you can:
 
 - Follow the [Quick Start Guide](/getting-started/quick-start) for immediate setup
 - Learn about [Authentication Patterns](/guides/authentication)

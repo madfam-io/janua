@@ -17,11 +17,11 @@ terraform {
   }
   
   backend "s3" {
-    bucket         = "plinto-terraform-state"
+    bucket         = "janua-terraform-state"
     key            = "infrastructure/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
-    dynamodb_table = "plinto-terraform-locks"
+    dynamodb_table = "janua-terraform-locks"
   }
 }
 
@@ -31,7 +31,7 @@ provider "aws" {
   default_tags {
     tags = {
       Environment = var.environment
-      Project     = "plinto"
+      Project     = "janua"
       ManagedBy   = "terraform"
     }
   }
@@ -133,8 +133,8 @@ module "rds" {
   allocated_storage    = var.rds_allocated_storage
   storage_encrypted    = true
   
-  database_name = "plinto"
-  username      = "plinto_admin"
+  database_name = "janua"
+  username      = "janua_admin"
   
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnet_ids
@@ -217,7 +217,7 @@ module "s3" {
       versioning = false
       cors_rules = [
         {
-          allowed_origins = ["https://*.plinto.dev"]
+          allowed_origins = ["https://*.janua.dev"]
           allowed_methods = ["GET", "HEAD"]
           allowed_headers = ["*"]
           max_age_seconds = 3600
@@ -323,12 +323,12 @@ resource "random_password" "api_key" {
   special = false
 }
 
-# Helm Release for Plinto
-resource "helm_release" "plinto" {
-  name       = "plinto"
-  repository = "file://../helm/plinto"
-  chart      = "plinto"
-  namespace  = "plinto"
+# Helm Release for Janua
+resource "helm_release" "janua" {
+  name       = "janua"
+  repository = "file://../helm/janua"
+  chart      = "janua"
+  namespace  = "janua"
   
   create_namespace = true
   

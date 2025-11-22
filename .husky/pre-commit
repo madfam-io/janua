@@ -31,11 +31,11 @@ if [ -n "$DEBUG_FILES" ]; then
       echo "  - $file"
     fi
   done
-  
+
   if [ $DEBUG_COUNT -gt 0 ]; then
     echo ""
     echo "Consider using the logger utility instead:"
-    echo "  TypeScript: import { createLogger } from '@plinto/core/utils/logger'"
+    echo "  TypeScript: import { createLogger } from '@janua/core/utils/logger'"
     echo "  Python: from app.utils.logger import create_logger"
     echo ""
     echo "Press Ctrl+C to cancel commit, or Continue to commit anyway."

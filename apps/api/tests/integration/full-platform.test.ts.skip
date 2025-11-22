@@ -5,7 +5,7 @@ import { createTestApp } from '../helpers/test-app';
 import { seedDatabase } from '../helpers/seed';
 import { generateTestData } from '../helpers/generators';
 
-describe('Plinto Platform - Full Integration Tests', () => {
+describe('Janua Platform - Full Integration Tests', () => {
   let app: any;
   let adminToken: string;
   let userToken: string;
