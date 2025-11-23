@@ -17,7 +17,7 @@
 
 ### 2. Python SDK Build System ✅
 **Modernized pyproject.toml**:
-- Changed license from table to SPDX string `"MIT"`
+- Changed license from table to SPDX string `"AGPL-3.0"`
 - Removed deprecated license classifier
 - Fixed setuptools deprecation warnings
 

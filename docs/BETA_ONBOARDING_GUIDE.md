@@ -428,7 +428,7 @@ Please share feedback on:
 ### Post-Beta Pricing (Locked for Beta Users)
 - **Starter**: $0.005/MAU (vs $0.02 for Clerk)
 - **Pro**: Custom enterprise pricing
-- **Self-Hosted**: Free (MIT license)
+- **Self-Hosted**: Free (AGPL v3 license)
 
 Beta users get 12 months at beta pricing.
 

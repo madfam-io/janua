@@ -48,7 +48,7 @@
 - **Complete exports**: ESM/CJS dual builds
 - **Type definitions**: Full TypeScript support
 - **Peer dependencies**: Proper framework integration
-- **License**: MIT (developer-friendly)
+- **License**: AGPL v3 (copyleft open source)
 
 #### ✅ **Documentation Quality**:
 - Comprehensive READMEs with examples

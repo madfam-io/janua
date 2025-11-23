@@ -54,7 +54,7 @@
 2. ✅ Vue SDK package name - Renamed from @janua/vue to @janua/vue-sdk
 3. ✅ **React SDK TypeScript definitions** - Fixed 6 code errors, types now generated successfully
 4. ✅ README repository links - Fixed in typescript-sdk and react-sdk
-5. ✅ Next.js LICENSE file - MIT license added
+5. ✅ Next.js LICENSE file - AGPL v3 license added
 
 ### React SDK TypeScript Fix (COMPLETED)
 **Files Fixed**: 

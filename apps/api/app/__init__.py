@@ -8,7 +8,7 @@ and enterprise security features for modern applications.
 __version__ = "0.1.0-beta.1"
 __author__ = "Janua Team"
 __email__ = "team@janua.dev"
-__license__ = "MIT"
+__license__ = "AGPL-3.0"
 __url__ = "https://janua.dev"
 
 # Core API exports for package consumers

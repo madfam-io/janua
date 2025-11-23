@@ -93,7 +93,7 @@ Lines 622-626 - Same GitHub repository URL issue
 
 ### Package Metadata
 - ✅ All SDKs at version 0.1.0-beta.1
-- ✅ All have MIT license
+- ✅ All have AGPL v3 license
 - ✅ All have proper keywords
 - ✅ All have publishConfig.access: "public"
 - ✅ All have correct main/module/types entries

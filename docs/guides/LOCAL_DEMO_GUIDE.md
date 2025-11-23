@@ -518,7 +518,7 @@ Use this script to demonstrate Janua's capabilities:
 **Talking Points**:
 - "These features cost $2,000-5,000/month in Auth0"
 - "Clerk charges $1,000+/month for SSO"
-- "In Janua? Free forever in our MIT-licensed OSS"
+- "In Janua? Free forever in our AGPL v3-licensed OSS"
 - "We charge for managed hosting convenience, not capabilities"
 
 ### Minute 11-13: Migration Path (Anti-Lock-In)

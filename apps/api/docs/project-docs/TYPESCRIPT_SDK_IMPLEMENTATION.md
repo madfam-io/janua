@@ -108,7 +108,7 @@ sdks/typescript/
 ├── tsconfig.json                 # TypeScript configuration
 ├── README.md                     # Comprehensive documentation
 ├── CHANGELOG.md                  # Version history
-├── LICENSE                       # MIT license
+├── LICENSE                       # AGPL v3 license
 └── .github/workflows/ci.yml      # CI/CD pipeline
 ```
 

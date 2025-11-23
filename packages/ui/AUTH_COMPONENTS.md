@@ -824,7 +824,7 @@ function VerifyPhonePage() {
 ## 📦 Package Info
 
 **Current Version:** 1.0.0
-**License:** MIT
+**License:** AGPL-3.0
 **Bundle Size:** ~45KB (gzipped)
 
 ## 🤝 Contributing
@@ -833,4 +833,4 @@ We welcome contributions! Please see our contributing guidelines for more inform
 
 ## 📄 License
 
-MIT © Janua
+AGPL-3.0 © Janua

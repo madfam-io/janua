@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/@janua/typescript-sdk.svg)](https://www.npmjs.com/package/@janua/typescript-sdk)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 Official TypeScript/JavaScript SDK for the Janua authentication API. This SDK provides a complete interface for user authentication, organization management, webhooks, and administrative operations.
 

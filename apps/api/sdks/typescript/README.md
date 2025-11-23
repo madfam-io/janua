@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/@janua%2Ftypescript-sdk.svg)](https://badge.fury.io/js/@janua%2Ftypescript-sdk)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.2+-blue.svg)](https://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 Official TypeScript SDK for [Janua](https://janua.dev) - Enterprise-grade authentication and user management platform.
 

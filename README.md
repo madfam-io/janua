@@ -2,9 +2,9 @@
 
 **Open-source authentication for developers who want to own their auth infrastructure.**
 
-MIT licensed. No features locked behind paid tiers. No SaaS required.
+AGPL v3 licensed. No features locked behind paid tiers. No SaaS required.
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)](https://fastapi.tiangolo.com)
 
@@ -42,7 +42,7 @@ A self-hosted authentication platform built with FastAPI and modern web technolo
 
 **Our take:** Authentication features shouldn't cost enterprise prices. Self-hosting shouldn't mean suffering through Keycloak's Java-era UI.
 
-So we built this. All features are free and open source. MIT licensed.
+So we built this. All features are free and open source. AGPL v3 licensed.
 
 ---
 
@@ -366,7 +366,7 @@ See [LICENSE](LICENSE) for details.
 - **Stars:** Just getting started (star us if you find this useful!)
 - **Production users:** Unknown (tell us if you're using it!)
 - **Contributors:** Looking for more
-- **Funding:** None (bootstrapped, MIT licensed)
+- **Funding:** None (bootstrapped, AGPL v3 licensed)
 
 **We're building this in public.** The good, the bad, and the bugs.
 

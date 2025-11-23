@@ -1092,7 +1092,7 @@ Janua successfully delivers on its blue-ocean market positioning:
 1. **Only OSS authentication with free enterprise SSO and SCIM 2.0**
    - Auth0: $24,000-60,000/year
    - Clerk: $12,000+/year
-   - Janua: $0/year (MIT license)
+   - Janua: $0/year (AGPL v3 license)
 
 2. **Better-Auth control + Clerk DX**
    - Unique combination in market

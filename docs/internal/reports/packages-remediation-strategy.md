@@ -872,7 +872,7 @@ Use the standard template from `scripts/readme-template.md`
   },
   "keywords": ["janua", "relevant", "keywords"],
   "author": "Janua Team",
-  "license": "MIT"
+  "license": "AGPL-3.0"
 }
 ```
 

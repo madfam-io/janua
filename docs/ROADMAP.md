@@ -467,7 +467,7 @@ This roadmap prioritizes features and improvements based on competitive differen
 ## 🎯 Strategic Priorities
 
 ### Must-Have (Non-Negotiable)
-1. **100% features free in OSS** (MIT license, no gates)
+1. **100% features free in OSS** (AGPL v3 license, no gates)
 2. **Anti-lock-in guarantee** (migration path documented)
 3. **Synchronous database writes** (no webhook sync)
 4. **Production-ready quality** (comprehensive testing, documentation)

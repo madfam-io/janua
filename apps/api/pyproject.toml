@@ -7,7 +7,7 @@ name = "janua"
 dynamic = ["version"]
 description = "Enterprise-grade authentication and user management platform"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "AGPL-3.0"}
 authors = [
     {name = "Janua Team", email = "team@janua.dev"},
 ]

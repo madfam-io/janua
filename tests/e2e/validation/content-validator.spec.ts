@@ -23,7 +23,7 @@ test.describe('Content Validation', () => {
     // Check trust indicators
     const trustIndicators = await page.locator('.text-3xl.font-bold.text-primary-600').allTextContents();
     
-    // "100% Open Source" - verify repo is public and MIT licensed
+    // "100% Open Source" - verify repo is public and AGPL v3 licensed
     expect(trustIndicators).toContain('100%');
     
     // "6 SDKs" - verify we have exactly 6 SDKs

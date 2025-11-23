@@ -93,7 +93,7 @@ This session focused on validating and correcting Janua's "blue-ocean" market po
 - ✅ MFA - ALL TYPES (TOTP, SMS, WebAuthn/Passkeys, backup codes)
 - ✅ Multi-Tenancy (unlimited organizations, RBAC, custom roles)
 - ✅ Enterprise SSO (SAML 2.0, OIDC)
-- ✅ Self-hosting (MIT license, Docker, K8s)
+- ✅ Self-hosting (AGPL v3 license, Docker, K8s)
 
 ### 💼 Professional (Managed Cloud) - $99/mo
 - Everything in Community +
