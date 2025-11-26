@@ -21,7 +21,8 @@ import type {
   OAuthProvider,
   OAuthProvidersResponse,
   LinkedAccountsResponse,
-  Passkey
+  Passkey,
+  PublicKeyCredentialJSON
 } from './types';
 import { AuthenticationError, ValidationError } from './errors';
 import { ValidationUtils, TokenManager } from './utils';
@@ -33,7 +34,7 @@ export class Auth {
   constructor(
     private http: HttpClient,
     private tokenManager: TokenManager,
-    private onSignIn?: (data?: any) => void,
+    private onSignIn?: (data?: { user: User }) => void,
     private onSignOut?: () => void
   ) {}
 
@@ -48,7 +49,7 @@ export class Auth {
 
     const passwordValidation = ValidationUtils.validatePassword(request.password);
     if (!passwordValidation.isValid) {
-      throw new ValidationError('Password validation failed', 
+      throw new ValidationError('Password validation failed',
         passwordValidation.errors.map(err => ({ field: 'password', message: err }))
       );
     }
@@ -163,11 +164,11 @@ export class Auth {
       }
       request = { refresh_token: refreshToken };
     }
-    
+
     const response = await this.http.post<TokenResponse>('/api/v1/auth/refresh', request, {
       skipAuth: true
     });
-    
+
     // Store new tokens
     if (response.data.access_token && response.data.refresh_token) {
       await this.tokenManager.setTokens({
@@ -176,7 +177,7 @@ export class Auth {
         expires_at: Date.now() + ((response.data as any).expires_in * 1000)
       });
     }
-    
+
     return {
       access_token: response.data.access_token,
       refresh_token: response.data.refresh_token,
@@ -244,7 +245,7 @@ export class Auth {
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
     const passwordValidation = ValidationUtils.validatePassword(newPassword);
     if (!passwordValidation.isValid) {
-      throw new ValidationError('Password validation failed', 
+      throw new ValidationError('Password validation failed',
         passwordValidation.errors.map(err => ({ field: 'password', message: err }))
       );
     }
@@ -264,7 +265,7 @@ export class Auth {
   async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
     const passwordValidation = ValidationUtils.validatePassword(newPassword);
     if (!passwordValidation.isValid) {
-      throw new ValidationError('Password validation failed', 
+      throw new ValidationError('Password validation failed',
         passwordValidation.errors.map(err => ({ field: 'password', message: err }))
       );
     }
@@ -513,7 +514,7 @@ export class Auth {
     provider: string;
   }> {
     const params: Record<string, any> = {};
-    
+
     if (options?.redirect_uri) {
       params.redirect_uri = options.redirect_uri;
     }
@@ -524,7 +525,7 @@ export class Auth {
       params.scopes = options.scopes.join(',');
     }
 
-    const response = await this.http.post(`/api/v1/auth/oauth/authorize/${provider}`, null, {
+    const response = await this.http.post<{ authorization_url: string; state: string; provider: string }>(`/api/v1/auth/oauth/authorize/${provider}`, null, {
       params,
       skipAuth: true
     });
@@ -620,13 +621,13 @@ export class Auth {
     provider: string;
     action: string;
   }> {
-    const params: Record<string, any> = {};
-    
+    const params: Record<string, string> = {};
+
     if (options?.redirect_uri) {
       params.redirect_uri = options.redirect_uri;
     }
 
-    const response = await this.http.post(`/api/v1/auth/oauth/link/${provider}`, null, {
+    const response = await this.http.post<{ authorization_url: string; state: string; provider: string; action: string }>(`/api/v1/auth/oauth/link/${provider}`, null, {
       params
     });
     return response.data;
@@ -639,7 +640,7 @@ export class Auth {
     message: string;
     provider: string;
   }> {
-    const response = await this.http.delete(`/api/v1/auth/oauth/unlink/${provider}`);
+    const response = await this.http.delete<{ message: string; provider: string }>(`/api/v1/auth/oauth/unlink/${provider}`);
     return response.data;
   }
 
@@ -681,10 +682,30 @@ export class Auth {
     pubKeyCredParams: Array<{ type: string; alg: number }>;
     timeout: number;
     excludeCredentials: Array<{ id: string; type: string }>;
-    authenticatorSelection: any;
+    authenticatorSelection: {
+      authenticatorAttachment?: 'platform' | 'cross-platform';
+      residentKey?: 'discouraged' | 'preferred' | 'required';
+      requireResidentKey?: boolean;
+      userVerification?: 'required' | 'preferred' | 'discouraged';
+    };
     attestation: string;
   }> {
-    const response = await this.http.post('/api/v1/passkeys/register/options', options || {});
+    type PasskeyRegisterOptions = {
+      challenge: string;
+      rp: { id: string; name: string };
+      user: { id: string; name: string; displayName: string };
+      pubKeyCredParams: Array<{ type: string; alg: number }>;
+      timeout: number;
+      excludeCredentials: Array<{ id: string; type: string }>;
+      authenticatorSelection: {
+        authenticatorAttachment?: 'platform' | 'cross-platform';
+        residentKey?: 'discouraged' | 'preferred' | 'required';
+        requireResidentKey?: boolean;
+        userVerification?: 'required' | 'preferred' | 'discouraged';
+      };
+      attestation: string;
+    };
+    const response = await this.http.post<PasskeyRegisterOptions>('/api/v1/passkeys/register/options', options || {});
     return response.data;
   }
 
@@ -692,14 +713,14 @@ export class Auth {
    * Verify passkey registration
    */
   async verifyPasskeyRegistration(
-    credential: any,
+    credential: PublicKeyCredentialJSON,
     name?: string
   ): Promise<{
     verified: boolean;
     passkey_id: string;
     message: string;
   }> {
-    const response = await this.http.post('/api/v1/passkeys/register/verify', {
+    const response = await this.http.post<{ verified: boolean; passkey_id: string; message: string }>('/api/v1/passkeys/register/verify', {
       credential,
       name
     });
@@ -716,8 +737,15 @@ export class Auth {
     allowCredentials: Array<{ id: string; type: string }>;
     userVerification: string;
   }> {
+    type PasskeyAuthOptions = {
+      challenge: string;
+      rpId: string;
+      timeout: number;
+      allowCredentials: Array<{ id: string; type: string }>;
+      userVerification: string;
+    };
     const data = email ? { email } : {};
-    const response = await this.http.post('/api/v1/passkeys/authenticate/options', data, {
+    const response = await this.http.post<PasskeyAuthOptions>('/api/v1/passkeys/authenticate/options', data, {
       skipAuth: true
     });
     return response.data;
@@ -727,7 +755,7 @@ export class Auth {
    * Verify passkey authentication
    */
   async verifyPasskeyAuthentication(
-    credential: any,
+    credential: PublicKeyCredentialJSON,
     challenge: string,
     email?: string
   ): Promise<{
@@ -738,7 +766,16 @@ export class Auth {
     expires_in: number;
     user: User;
   }> {
-    const response = await this.http.post('/api/v1/passkeys/authenticate/verify', {
+    type PasskeyAuthResponse = {
+      verified: boolean;
+      access_token: string;
+      refresh_token: string;
+      token_type: string;
+      expires_in: number;
+      user: User;
+      tokens?: { access_token: string; refresh_token: string; expires_in: number };
+    };
+    const response = await this.http.post<PasskeyAuthResponse>('/api/v1/passkeys/authenticate/verify', {
       credential,
       challenge,
       email

@@ -6,6 +6,22 @@
 export type UUID = string;
 export type ISODateString = string;
 
+// WebAuthn/Passkey Types
+export interface PublicKeyCredentialJSON {
+  id: string;
+  rawId: string;
+  type: 'public-key';
+  response: {
+    clientDataJSON: string;
+    attestationObject?: string;
+    authenticatorData?: string;
+    signature?: string;
+    userHandle?: string;
+  };
+  authenticatorAttachment?: 'platform' | 'cross-platform';
+  clientExtensionResults?: Record<string, unknown>;
+}
+
 // Environment Types
 export type Environment = 'production' | 'staging' | 'development';
 
@@ -462,18 +478,28 @@ export interface JanuaConfig {
 export interface RequestConfig {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   url: string;
-  data?: any;
+  data?: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params?: Record<string, any>;
   headers?: Record<string, string>;
   timeout?: number;
   skipAuth?: boolean;
 }
 
-export interface HttpResponse<T = any> {
+/** Full HTTP response with all metadata */
+export interface HttpResponseFull<T = unknown> {
   data: T;
   status: number;
   statusText: string;
   headers: Record<string, string>;
+}
+
+/** HTTP response - status/headers optional for backward compatibility with test mocks */
+export interface HttpResponse<T = unknown> {
+  data: T;
+  status?: number;
+  statusText?: string;
+  headers?: Record<string, string>;
 }
 
 // Token Storage
@@ -489,7 +515,7 @@ export interface SdkEventMap {
   'token:expired': {};
   'auth:signedIn': { user: User };
   'auth:signedOut': {};
-  'error': { error: any };
+  'error': { error: unknown };
   // Backward compatibility aliases
   'signIn': { user: User };
   'signOut': {};

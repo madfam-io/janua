@@ -20,7 +20,7 @@ export interface WebSocketConfig {
 export interface WebSocketMessage {
   type: string
   channel?: string
-  data?: any
+  data?: unknown
   event?: string
   timestamp?: number
 }
@@ -51,7 +51,7 @@ export class WebSocket extends EventEmitter<WebSocketEventMap> {
 
   constructor(config: WebSocketConfig) {
     super()
-    
+
     this.config = {
       url: config.url,
       getAuthToken: config.getAuthToken || (() => null),
@@ -78,7 +78,7 @@ export class WebSocket extends EventEmitter<WebSocketEventMap> {
 
     try {
       const token = await this.config.getAuthToken()
-      const url = token 
+      const url = token
         ? `${this.config.url}?token=${encodeURIComponent(token)}`
         : this.config.url
 
@@ -100,7 +100,7 @@ export class WebSocket extends EventEmitter<WebSocketEventMap> {
   disconnect(): void {
     this.intentionallyClosed = true
     this.clearTimers()
-    
+
     if (this.ws) {
       this.ws.close(1000, 'Client disconnect')
       this.ws = null
@@ -172,7 +172,7 @@ export class WebSocket extends EventEmitter<WebSocketEventMap> {
   /**
    * Publish a message to a channel
    */
-  publish(channel: string, data: any, event?: string): void {
+  publish(channel: string, data: unknown, event?: string): void {
     this.send({
       type: 'publish',
       channel,

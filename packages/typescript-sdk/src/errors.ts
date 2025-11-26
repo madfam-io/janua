@@ -10,13 +10,13 @@ import type { ApiError, RateLimitInfo } from './types';
 export class JanuaError extends Error {
   public readonly code: string;
   public readonly statusCode?: number;
-  public readonly details?: Record<string, any>;
+  public readonly details?: Record<string, unknown>;
 
   constructor(
     message: string,
     code = 'JANUA_ERROR',
     statusCode?: number,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'JanuaError';
@@ -33,7 +33,7 @@ export class JanuaError extends Error {
   /**
    * Convert error to JSON representation
    */
-  toJSON(): Record<string, any> {
+  toJSON(): Record<string, unknown> {
     return {
       name: this.name,
       message: this.message,
@@ -49,7 +49,7 @@ export class JanuaError extends Error {
    */
   static fromApiError(apiError: ApiError): JanuaError {
     const { error, message, details, status_code } = apiError;
-    
+
     // Map common HTTP status codes to specific error classes
     switch (status_code) {
       case 400:
@@ -79,7 +79,7 @@ export class JanuaError extends Error {
  * Authentication related errors (401)
  */
 export class AuthenticationError extends JanuaError {
-  constructor(message = 'Authentication failed', code?: string, statusCode?: number, details?: Record<string, any>) {
+  constructor(message = 'Authentication failed', code?: string, statusCode?: number, details?: Record<string, unknown>) {
     super(message, code || 'AUTHENTICATION_ERROR', statusCode || 401, details);
     this.name = 'AuthenticationError';
   }
@@ -89,7 +89,7 @@ export class AuthenticationError extends JanuaError {
  * Permission/authorization related errors (403)
  */
 export class PermissionError extends JanuaError {
-  constructor(message = 'Permission denied', details?: Record<string, any>) {
+  constructor(message = 'Permission denied', details?: Record<string, unknown>) {
     super(message, 'PERMISSION_ERROR', 403, details);
     this.name = 'PermissionError';
   }
@@ -102,14 +102,14 @@ export class ValidationError extends JanuaError {
   public readonly field?: string;
   public readonly violations?: Array<{field: string, message: string}>;
 
-  constructor(message = 'Validation failed', violations?: Array<{field: string, message: string}>, details?: Record<string, any>) {
+  constructor(message = 'Validation failed', violations?: Array<{field: string, message: string}>, details?: Record<string, unknown>) {
     super(message, 'VALIDATION_ERROR', 400, details);
     this.name = 'ValidationError';
-    
-    this.violations = violations || [];
-    
+
+    this.violations = violations;
+
     // Extract field-specific validation errors if available
-    if (details?.field) {
+    if (details?.field && typeof details.field === 'string') {
       this.field = details.field;
     }
   }
@@ -121,11 +121,11 @@ export class ValidationError extends JanuaError {
 export class NotFoundError extends JanuaError {
   public readonly resource?: string;
 
-  constructor(message = 'Resource not found', details?: Record<string, any>) {
+  constructor(message = 'Resource not found', details?: Record<string, unknown>) {
     super(message, 'NOT_FOUND', 404, details);
     this.name = 'NotFoundError';
-    
-    if (details?.resource) {
+
+    if (details?.resource && typeof details.resource === 'string') {
       this.resource = details.resource;
     }
   }
@@ -135,7 +135,7 @@ export class NotFoundError extends JanuaError {
  * Conflict errors (409)
  */
 export class ConflictError extends JanuaError {
-  constructor(message = 'Resource conflict', details?: Record<string, any>) {
+  constructor(message = 'Resource conflict', details?: Record<string, unknown>) {
     super(message, 'CONFLICT', 409, details);
     this.name = 'ConflictError';
   }
@@ -148,12 +148,12 @@ export class RateLimitError extends JanuaError {
   public readonly rateLimitInfo?: RateLimitInfo;
   public readonly retryAfter?: number;
 
-  constructor(message = 'Rate limit exceeded', rateLimitInfo?: RateLimitInfo, details?: Record<string, any>) {
+  constructor(message = 'Rate limit exceeded', rateLimitInfo?: RateLimitInfo, details?: Record<string, unknown>) {
     super(message, 'RATE_LIMIT_EXCEEDED', 429, details);
     this.name = 'RateLimitError';
-    
+
     this.rateLimitInfo = rateLimitInfo;
-    
+
     if (rateLimitInfo?.retry_after) {
       this.retryAfter = rateLimitInfo.retry_after;
     }
@@ -167,7 +167,7 @@ export class ServerError extends JanuaError {
   constructor(
     message = 'Internal server error',
     statusCode = 500,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ) {
     super(message, 'SERVER_ERROR', statusCode, details);
     this.name = 'ServerError';
@@ -180,7 +180,7 @@ export class ServerError extends JanuaError {
 export class NetworkError extends JanuaError {
   public readonly cause?: Error;
 
-  constructor(message = 'Network error', cause?: Error, details?: Record<string, any>) {
+  constructor(message = 'Network error', cause?: Error, details?: Record<string, unknown>) {
     super(message, 'NETWORK_ERROR', undefined, details);
     this.name = 'NetworkError';
     this.cause = cause;
@@ -191,7 +191,7 @@ export class NetworkError extends JanuaError {
  * Token related errors
  */
 export class TokenError extends JanuaError {
-  constructor(message = 'Token error', details?: Record<string, any>) {
+  constructor(message = 'Token error', details?: Record<string, unknown>) {
     super(message, 'TOKEN_ERROR', undefined, details);
     this.name = 'TokenError';
   }
@@ -201,7 +201,7 @@ export class TokenError extends JanuaError {
  * Configuration errors
  */
 export class ConfigurationError extends JanuaError {
-  constructor(message = 'Configuration error', details?: Record<string, any>) {
+  constructor(message = 'Configuration error', details?: Record<string, unknown>) {
     super(message, 'CONFIGURATION_ERROR', undefined, details);
     this.name = 'ConfigurationError';
   }
@@ -218,7 +218,7 @@ export class MFAError extends JanuaError {
     message = 'MFA error',
     mfaRequired = false,
     availableMethods?: string[],
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ) {
     super(message, 'MFA_ERROR', undefined, details);
     this.name = 'MFAError';
@@ -231,7 +231,7 @@ export class MFAError extends JanuaError {
  * Webhook related errors
  */
 export class WebhookError extends JanuaError {
-  constructor(message = 'Webhook error', details?: Record<string, any>) {
+  constructor(message = 'Webhook error', details?: Record<string, unknown>) {
     super(message, 'WEBHOOK_ERROR', undefined, details);
     this.name = 'WebhookError';
   }
@@ -248,7 +248,7 @@ export class OAuthError extends JanuaError {
     message = 'OAuth error',
     provider?: string,
     oauthCode?: string,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ) {
     super(message, 'OAUTH_ERROR', undefined, details);
     this.name = 'OAuthError';
@@ -263,7 +263,7 @@ export class OAuthError extends JanuaError {
 export class PasskeyError extends JanuaError {
   public readonly webauthnError?: string;
 
-  constructor(message = 'Passkey error', webauthnError?: string, details?: Record<string, any>) {
+  constructor(message = 'Passkey error', webauthnError?: string, details?: Record<string, unknown>) {
     super(message, 'PASSKEY_ERROR', undefined, details);
     this.name = 'PasskeyError';
     this.webauthnError = webauthnError;
@@ -271,27 +271,28 @@ export class PasskeyError extends JanuaError {
 }
 
 /**
+ * Logger interface for error handling
+ */
+export interface ErrorLogger {
+  error: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  info: (...args: unknown[]) => void;
+}
+
+/**
  * Error handler utility functions
  */
 export class ErrorHandler {
-  private logger?: {
-    error: (...args: any[]) => void;
-    warn: (...args: any[]) => void;
-    info: (...args: any[]) => void;
-  };
+  private logger?: ErrorLogger;
 
-  constructor(logger?: {
-    error: (...args: any[]) => void;
-    warn: (...args: any[]) => void;
-    info: (...args: any[]) => void;
-  }) {
+  constructor(logger?: ErrorLogger) {
     this.logger = logger;
   }
 
   /**
    * Handle errors and log appropriately
    */
-  handleError(error: any): void {
+  handleError(error: unknown): void {
     if (!this.logger) return;
 
     if (error instanceof AuthenticationError) {
@@ -318,14 +319,15 @@ export class ErrorHandler {
   /**
    * Check if error is a specific type
    */
-  static isType<T extends JanuaError>(error: any, errorClass: new (...args: any[]) => T): error is T {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static isType<T extends JanuaError>(error: unknown, errorClass: new (...args: any[]) => T): error is T {
     return error instanceof errorClass;
   }
 
   /**
    * Check if error is retryable
    */
-  static isRetryable(error: any): boolean {
+  static isRetryable(error: unknown): boolean {
     if (error instanceof NetworkError) return true;
     if (error instanceof ServerError && error.statusCode && error.statusCode >= 500) return true;
     if (error instanceof RateLimitError) return true;
@@ -335,11 +337,11 @@ export class ErrorHandler {
   /**
    * Get retry delay for retryable errors
    */
-  static getRetryDelay(error: any, attempt: number, baseDelay = 1000): number {
+  static getRetryDelay(error: unknown, attempt: number, baseDelay = 1000): number {
     if (error instanceof RateLimitError && error.retryAfter) {
       return error.retryAfter * 1000; // Convert to milliseconds
     }
-    
+
     // Exponential backoff with jitter
     const delay = baseDelay * Math.pow(2, attempt);
     const jitter = Math.random() * 0.1 * delay;
@@ -349,7 +351,7 @@ export class ErrorHandler {
   /**
    * Extract user-friendly message from error
    */
-  static getUserMessage(error: any): string {
+  static getUserMessage(error: unknown): string {
     if (error instanceof ValidationError) {
       return error.message;
     }
@@ -374,7 +376,7 @@ export class ErrorHandler {
     if (error instanceof JanuaError) {
       return error.message;
     }
-    
+
     return 'An unexpected error occurred. Please try again.';
   }
 }
@@ -382,26 +384,26 @@ export class ErrorHandler {
 /**
  * Type guards for error checking
  */
-export const isAuthenticationError = (error: any): error is AuthenticationError =>
+export const isAuthenticationError = (error: unknown): error is AuthenticationError =>
   ErrorHandler.isType(error, AuthenticationError);
 
-export const isValidationError = (error: any): error is ValidationError =>
+export const isValidationError = (error: unknown): error is ValidationError =>
   ErrorHandler.isType(error, ValidationError);
 
-export const isPermissionError = (error: any): error is PermissionError =>
+export const isPermissionError = (error: unknown): error is PermissionError =>
   ErrorHandler.isType(error, PermissionError);
 
-export const isNotFoundError = (error: any): error is NotFoundError =>
+export const isNotFoundError = (error: unknown): error is NotFoundError =>
   ErrorHandler.isType(error, NotFoundError);
 
-export const isRateLimitError = (error: any): error is RateLimitError =>
+export const isRateLimitError = (error: unknown): error is RateLimitError =>
   ErrorHandler.isType(error, RateLimitError);
 
-export const isNetworkError = (error: any): error is NetworkError =>
+export const isNetworkError = (error: unknown): error is NetworkError =>
   ErrorHandler.isType(error, NetworkError);
 
-export const isServerError = (error: any): error is ServerError =>
+export const isServerError = (error: unknown): error is ServerError =>
   ErrorHandler.isType(error, ServerError);
 
-export const isJanuaError = (error: any): error is JanuaError =>
+export const isJanuaError = (error: unknown): error is JanuaError =>
   ErrorHandler.isType(error, JanuaError);

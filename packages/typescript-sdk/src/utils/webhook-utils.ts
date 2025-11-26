@@ -16,7 +16,7 @@ export class WebhookUtils {
     const randomPart = Math.random().toString(36).substring(2, 11);
     return `whk_${timestamp}_${randomPart}`;
   }
-  
+
   /**
    * Generate HMAC signature for payload
    */
@@ -37,35 +37,35 @@ export class WebhookUtils {
         // Fall through to browser implementation
       }
     }
-    
+
     // In browser environment - simplified version
     if (typeof window !== 'undefined') {
       // Note: This is a simplified version for browser
       const payloadStr = typeof payload === 'string' ? payload : payload.toString();
       return this.browserHmac(payloadStr, secret);
     }
-    
+
     throw new Error('No suitable crypto implementation available');
   }
-  
+
   /**
    * Calculate webhook signature with timestamp
    */
   static calculateSignature(timestamp: string, payload: string, secret: string): string {
     const message = `${timestamp}.${payload}`;
-    
+
     // In browser environment
     if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
       // Use Web Crypto API for browser
       const encoder = new TextEncoder();
       const data = encoder.encode(message);
       const key = encoder.encode(secret);
-      
+
       // Note: This is synchronous for now, but in a real implementation
       // you'd want to make this async and use crypto.subtle.sign
       return this.browserHmac(message, secret);
     }
-    
+
     // In Node.js environment
     if (typeof require !== 'undefined') {
       const crypto = require('crypto');
@@ -74,10 +74,10 @@ export class WebhookUtils {
         .update(message)
         .digest('hex');
     }
-    
+
     throw new Error('No suitable crypto implementation available');
   }
-  
+
   /**
    * Browser HMAC implementation
    * Note: This is a simplified version. In production, you'd use crypto.subtle
@@ -94,7 +94,7 @@ export class WebhookUtils {
     }
     return Math.abs(hash).toString(16).padStart(64, '0');
   }
-  
+
   /**
    * Verify webhook signature
    */
@@ -108,18 +108,18 @@ export class WebhookUtils {
     // Check timestamp to prevent replay attacks
     const currentTime = Math.floor(Date.now() / 1000);
     const webhookTime = parseInt(timestamp, 10);
-    
+
     if (Math.abs(currentTime - webhookTime) > tolerance) {
       return false; // Timestamp too old or in the future
     }
-    
+
     // Calculate expected signature
     const expectedSignature = this.calculateSignature(timestamp, payload, secret);
-    
+
     // Constant-time comparison to prevent timing attacks
     return this.constantTimeCompare(signature, expectedSignature);
   }
-  
+
   /**
    * Constant-time string comparison
    */
@@ -127,22 +127,22 @@ export class WebhookUtils {
     if (a.length !== b.length) {
       return false;
     }
-    
+
     let result = 0;
     for (let i = 0; i < a.length; i++) {
       result |= a.charCodeAt(i) ^ b.charCodeAt(i);
     }
-    
+
     return result === 0;
   }
-  
+
   /**
    * Timing-safe string comparison
    */
   static timingSafeEqual(a: string, b: string): boolean {
     return this.constantTimeCompare(a, b);
   }
-  
+
   /**
    * Verify webhook signature (simplified version for payload + signature + secret)
    */
@@ -155,7 +155,7 @@ export class WebhookUtils {
     const expectedSignature = this.generateSignature(payload, secret, algorithm);
     return this.constantTimeCompare(signature, expectedSignature);
   }
-  
+
   /**
    * Verify timestamp is within acceptable range
    */
@@ -167,7 +167,7 @@ export class WebhookUtils {
     const currentTime = Math.floor(Date.now() / 1000);
     return Math.abs(currentTime - timestampNum) <= maxAge;
   }
-  
+
   /**
    * Parse webhook headers
    */
@@ -184,7 +184,7 @@ export class WebhookUtils {
       webhookId: headers['x-webhook-id'] || headers['X-Webhook-Id']
     };
   }
-  
+
   /**
    * Parse webhook headers
    */
@@ -195,11 +195,11 @@ export class WebhookUtils {
     webhookId?: string;
   } {
     const getHeader = (key: string): string | undefined => {
-      const value = headers[key] || headers[key.toLowerCase()] || 
+      const value = headers[key] || headers[key.toLowerCase()] ||
                    headers[key.replace(/-/g, '_').toUpperCase()];
       return Array.isArray(value) ? value[0] : value;
     };
-    
+
     return {
       signature: getHeader('X-Webhook-Signature'),
       timestamp: getHeader('X-Webhook-Timestamp'),
@@ -207,7 +207,7 @@ export class WebhookUtils {
       webhookId: getHeader('X-Webhook-Id')
     };
   }
-  
+
   /**
    * Construct webhook payload for signature verification
    */
@@ -216,7 +216,7 @@ export class WebhookUtils {
     const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
     return `${timestampStr}.${bodyStr}`;
   }
-  
+
   /**
    * Verify webhook authenticity
    */
@@ -233,41 +233,41 @@ export class WebhookUtils {
     error?: string;
   } {
     const parsed = this.parseHeaders(headers);
-    
+
     if (!parsed.signature) {
       return { valid: false, error: 'Missing signature header' };
     }
-    
+
     if (!parsed.timestamp) {
       return { valid: false, error: 'Missing timestamp header' };
     }
-    
+
     // Verify timestamp
     if (!this.verifyTimestamp(parsed.timestamp, options?.maxAge)) {
       return { valid: false, error: 'Webhook timestamp too old' };
     }
-    
+
     // Construct and verify payload
     const payload = this.constructPayload(parsed.timestamp, body);
     const expectedSignature = this.generateSignature(
-      payload, 
-      secret, 
+      payload,
+      secret,
       options?.algorithm
     );
-    
+
     if (!this.constantTimeCompare(parsed.signature, expectedSignature)) {
       return { valid: false, error: 'Invalid signature' };
     }
-    
+
     return { valid: true };
   }
-  
+
   /**
    * Create test webhook payload
    */
   static createTestPayload(
     eventType: string,
-    data: any,
+    data: unknown,
     options?: {
       timestamp?: number;
       webhookId?: string;
@@ -278,26 +278,26 @@ export class WebhookUtils {
   } {
     const timestamp = options?.timestamp || Math.floor(Date.now() / 1000);
     const id = options?.webhookId || this.generateWebhookId();
-    
+
     const bodyObj = {
       id,
       type: eventType,
       created_at: new Date(timestamp * 1000).toISOString(),
       data
     };
-    
+
     const headers = {
       'x-webhook-id': id,
       'x-webhook-event': eventType,
       'x-webhook-timestamp': timestamp.toString()
     };
-    
-    return { 
+
+    return {
       headers,
       body: JSON.stringify(bodyObj)
     };
   }
-  
+
   /**
    * Generate webhook headers
    */
@@ -309,21 +309,21 @@ export class WebhookUtils {
   ): Record<string, string> {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const signature = this.calculateSignature(timestamp, payload, secret);
-    
+
     const headers: Record<string, string> = {
       'X-Webhook-Signature': signature,
       'X-Webhook-Timestamp': timestamp,
       'Content-Type': 'application/json'
     };
-    
+
     if (eventType) {
       headers['X-Webhook-Event'] = eventType;
     }
-    
+
     if (webhookId) {
       headers['X-Webhook-Id'] = webhookId;
     }
-    
+
     return headers;
   }
 }

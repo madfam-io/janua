@@ -203,8 +203,8 @@ export class ValidationUtils {
   /**
    * Validate object against schema
    */
-  static validateObject<T>(
-    obj: any,
+  static validateObject<T extends object>(
+    obj: T,
     requiredFields: (keyof T)[]
   ): { isValid: boolean; missingFields: string[] } {
     const missingFields = requiredFields.filter(field => !(field in obj));

@@ -29,32 +29,49 @@ export class Base64Url {
 /**
  * JWT parsing and validation utilities
  */
+/** JWT payload structure */
+export interface JwtPayload {
+  exp?: number;
+  iat?: number;
+  sub?: string;
+  iss?: string;
+  aud?: string | string[];
+  [key: string]: unknown;
+}
+
+/** JWT header structure */
+export interface JwtHeader {
+  alg: string;
+  typ?: string;
+  [key: string]: unknown;
+}
+
 export class JwtUtils {
-  static parseToken(token: string): { header: any; payload: any; signature: string } {
+  static parseToken(token: string): { header: JwtHeader; payload: JwtPayload; signature: string } {
     const parts = token.split('.');
     if (parts.length !== 3) {
       throw new TokenError('Invalid JWT format');
     }
 
     try {
-      const header = JSON.parse(Base64Url.decode(parts[0]));
-      const payload = JSON.parse(Base64Url.decode(parts[1]));
-      const signature = parts[2];
-      
+      const header = JSON.parse(Base64Url.decode(parts[0])) as JwtHeader;
+      const payload = JSON.parse(Base64Url.decode(parts[1])) as JwtPayload;
+      const signature = parts[2] as string;
+
       return { header, payload, signature };
     } catch (error) {
       throw new TokenError('Failed to parse JWT payload');
     }
   }
 
-  static isExpired(payload: any): boolean {
+  static isExpired(payload: JwtPayload | null | undefined): boolean {
     if (!payload || !payload.exp) {
       return false; // No expiration claim
     }
     return Date.now() >= payload.exp * 1000;
   }
 
-  static getTimeToExpiry(payload: any): number {
+  static getTimeToExpiry(payload: JwtPayload | null | undefined): number {
     if (!payload || !payload.exp) {
       return Infinity; // No expiration
     }
@@ -223,32 +240,32 @@ export class TokenManager {
     if (this.storage instanceof LocalTokenStorage || this.storage instanceof SessionTokenStorage) {
       const accessToken = (this.storage as any).storage.getItem(this.ACCESS_TOKEN_KEY);
       const refreshToken = (this.storage as any).storage.getItem(this.REFRESH_TOKEN_KEY);
-      
+
       if (!accessToken) {
         return null;
       }
-      
+
       return {
         access_token: accessToken,
         refresh_token: refreshToken || undefined
       };
     }
-    
+
     // For MemoryTokenStorage
     if (this.storage instanceof MemoryTokenStorage) {
       const accessToken = (this.storage as any).storage.get(this.ACCESS_TOKEN_KEY);
       const refreshToken = (this.storage as any).storage.get(this.REFRESH_TOKEN_KEY);
-      
+
       if (!accessToken) {
         return null;
       }
-      
+
       return {
         access_token: accessToken,
         refresh_token: refreshToken || undefined
       };
     }
-    
+
     return null;
   }
 

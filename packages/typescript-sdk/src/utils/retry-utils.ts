@@ -7,8 +7,8 @@ export interface RetryOptions {
   initialDelay?: number;
   maxDelay?: number;
   backoffMultiplier?: number;
-  shouldRetry?: (error: any) => boolean;
-  onRetry?: (attempt: number, error: any) => void;
+  shouldRetry?: (error: unknown) => boolean;
+  onRetry?: (attempt: number, error: unknown) => void;
 }
 
 export class RetryUtils {
@@ -32,7 +32,7 @@ export class RetryUtils {
     options: RetryOptions = {}
   ): Promise<T> {
     const opts = { ...this.DEFAULT_OPTIONS, ...options };
-    let lastError: any;
+    let lastError: unknown;
 
     for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
       try {
@@ -87,25 +87,27 @@ export class RetryUtils {
   /**
    * Check if error is retryable
    */
-  static isRetryableError(error: any): boolean {
+  static isRetryableError(error: unknown): boolean {
     // Handle null/undefined errors
-    if (!error) {
+    if (!error || typeof error !== 'object') {
       return false;
     }
 
+    const err = error as { code?: string; status?: number; message?: string };
+
     // Network errors
-    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+    if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
       return true;
     }
 
     // HTTP status codes that are retryable
-    if (error.status) {
+    if (err.status) {
       // Retry on 429 (rate limit), 502 (bad gateway), 503 (service unavailable), 504 (gateway timeout)
-      return [429, 502, 503, 504].includes(error.status);
+      return [429, 502, 503, 504].includes(err.status);
     }
 
     // Retry on specific error messages
-    if (error.message) {
+    if (err.message) {
       const retryableMessages = [
         'network error',
         'timeout',
@@ -113,7 +115,7 @@ export class RetryUtils {
         'ENOTFOUND'
       ];
       return retryableMessages.some(msg =>
-        error.message.toLowerCase().includes(msg.toLowerCase())
+        err.message!.toLowerCase().includes(msg.toLowerCase())
       );
     }
 
@@ -123,7 +125,7 @@ export class RetryUtils {
   /**
    * Create a retry-enabled function
    */
-  static createRetryable<T extends (...args: any[]) => Promise<any>>(
+  static createRetryable<T extends (...args: unknown[]) => Promise<unknown>>(
     fn: T,
     options: RetryOptions = {}
   ): T {
