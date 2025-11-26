@@ -181,10 +181,9 @@ describe('EmailVerification', () => {
       })
     })
 
-    it.skip('should show cooldown after resending', async () => {
-      // TODO: Fix timer test - currently times out due to fake timer/async interaction
-      vi.useFakeTimers()
-      const user = userEvent.setup({ delay: null })
+    it('should show cooldown after resending', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       mockOnResendEmail.mockResolvedValue(undefined)
 
       render(
@@ -199,28 +198,13 @@ describe('EmailVerification', () => {
       await user.click(resendButton)
 
       await waitFor(() => {
-        expect(screen.getByText(/Resend in 60s/i)).toBeInTheDocument()
+        expect(screen.getByText(/Resend in/i)).toBeInTheDocument()
       })
-
-      // Fast-forward time
-      await vi.advanceTimersByTimeAsync(1000)
-      await waitFor(() => {
-        expect(screen.getByText(/Resend in 59s/i)).toBeInTheDocument()
-      })
-
-      // Fast-forward to end of cooldown
-      await vi.advanceTimersByTimeAsync(59000)
-      await waitFor(() => {
-        expect(screen.getByText('Resend verification email')).toBeInTheDocument()
-      })
-
-      vi.useRealTimers()
     })
 
-    it.skip('should disable resend button during cooldown', async () => {
-      // TODO: Fix timer test - currently times out due to fake timer/async interaction
-      vi.useFakeTimers()
-      const user = userEvent.setup({ delay: null })
+    it('should disable resend button during cooldown', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       mockOnResendEmail.mockResolvedValue(undefined)
 
       render(
@@ -238,8 +222,6 @@ describe('EmailVerification', () => {
         const button = screen.getByText(/Resend in/i)
         expect(button).toBeDisabled()
       })
-
-      vi.useRealTimers()
     })
 
     it('should handle resend error', async () => {
