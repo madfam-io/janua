@@ -1,14 +1,14 @@
 // Jest setup file for Janua marketing app
-import '@testing-library/jest-dom';
+import "@testing-library/jest-dom";
 
 // Mock Next.js router
-jest.mock('next/router', () => ({
+jest.mock("next/router", () => ({
   useRouter() {
     return {
-      route: '/',
-      pathname: '/',
+      route: "/",
+      pathname: "/",
       query: {},
-      asPath: '/',
+      asPath: "/",
       push: jest.fn(),
       replace: jest.fn(),
       reload: jest.fn(),
@@ -25,14 +25,14 @@ jest.mock('next/router', () => ({
 }));
 
 // Mock Next.js Link component
-jest.mock('next/link', () => {
+jest.mock("next/link", () => {
   return ({ children, href }) => {
     return <a href={href}>{children}</a>;
   };
 });
 
 // Mock Next.js Image component
-jest.mock('next/image', () => ({
+jest.mock("next/image", () => ({
   __esModule: true,
   default: (props) => {
     return <img {...props} />;
@@ -42,24 +42,26 @@ jest.mock('next/image', () => ({
 // Mock environment variables
 process.env = {
   ...process.env,
-  NEXT_PUBLIC_API_URL: 'https://api.janua.dev',
-  NEXT_PUBLIC_APP_URL: 'https://app.janua.dev',
+  NEXT_PUBLIC_API_URL: "https://api.janua.dev",
+  NEXT_PUBLIC_APP_URL: "https://app.janua.dev",
 };
 
-// Mock window.matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: jest.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: jest.fn(), // deprecated
-    removeListener: jest.fn(), // deprecated
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
-  })),
-});
+// Mock window.matchMedia (only in browser environment)
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: jest.fn().mockImplementation((query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(), // deprecated
+      removeListener: jest.fn(), // deprecated
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    })),
+  });
+}
 
 // Mock IntersectionObserver
 global.IntersectionObserver = class IntersectionObserver {

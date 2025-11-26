@@ -58,7 +58,7 @@ describe('Users - Session Operations', () => {
     });
 
     it('should list sessions with parameters', async () => {
-      const params = { active: true };
+      const params = { active_only: true };
       const mockResponse = {
         sessions: [],
         total: 0
@@ -71,6 +71,7 @@ describe('Users - Session Operations', () => {
       expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/sessions/', {
         params
       });
+      expect(result.data).toEqual(mockResponse.sessions);
     });
   });
 
@@ -218,6 +219,7 @@ describe('Users - Session Operations', () => {
       expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/sessions/activity/recent', {
         params: { limit }
       });
+      expect(result).toEqual(mockResponse);
     });
 
     it('should throw error for invalid limit', async () => {

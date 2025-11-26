@@ -4,6 +4,7 @@
 
 import { Users } from '../../users';
 import { ValidationError } from '../../errors';
+import { UserStatus } from '../../types';
 import type { HttpClient } from '../../http-client';
 
 describe('Users - Basic Operations', () => {
@@ -174,7 +175,7 @@ describe('Users - Basic Operations', () => {
       const params = {
         page: 2,
         per_page: 50,
-        status: 'active' as const,
+        status: UserStatus.ACTIVE,
         search: 'john'
       };
 
@@ -326,6 +327,7 @@ describe('Users - Basic Operations', () => {
       expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/users/search', {
         params: { q: query, ...filters }
       });
+      expect(result.data).toEqual(mockResponse.users);
     });
   });
 

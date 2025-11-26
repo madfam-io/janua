@@ -48,7 +48,11 @@ export class UrlUtils {
     const cleanQuery = queryString.startsWith('?') ? queryString.slice(1) : queryString;
 
     cleanQuery.split('&').forEach(param => {
-      const [key, value] = param.split('=').map(decodeURIComponent);
+      const parts = param.split('=').map(decodeURIComponent);
+      const key = parts[0];
+      const value = parts[1] ?? '';
+
+      if (!key) return;
 
       if (key in params) {
         // Convert to array if multiple values

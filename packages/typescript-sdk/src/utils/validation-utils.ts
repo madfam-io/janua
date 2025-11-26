@@ -205,7 +205,7 @@ export class ValidationUtils {
    */
   static validateObject<T extends object>(
     obj: T,
-    requiredFields: (keyof T)[]
+    requiredFields: readonly (keyof T)[]
   ): { isValid: boolean; missingFields: string[] } {
     const missingFields = requiredFields.filter(field => !(field in obj));
     return {

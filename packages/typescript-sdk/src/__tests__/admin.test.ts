@@ -3,7 +3,8 @@
  */
 
 import { Admin } from '../admin';
-import { ValidationError, PermissionError } from '../errors';
+import { ValidationError } from '../errors';
+import { UserStatus } from '../types';
 import type { HttpClient } from '../http-client';
 
 describe('Admin', () => {
@@ -114,7 +115,7 @@ describe('Admin', () => {
       const params = {
         page: 2,
         per_page: 50,
-        status: 'active' as const,
+        status: UserStatus.ACTIVE,
         search: 'john@'
       };
 
@@ -134,19 +135,15 @@ describe('Admin', () => {
 
   describe('updateUser', () => {
     it('should update user', async () => {
-      const mockUser = {
-        id: '550e8400-e29b-41d4-a716-446655440000',
-        email: 'updated@example.com',
-        status: 'active'
-      };
+      const mockResponse = { message: 'User updated successfully' };
 
-      mockHttpClient.patch.mockResolvedValue({ data: mockUser });
+      mockHttpClient.patch.mockResolvedValue({ data: mockResponse });
 
-      const updateData = { email: 'updated@example.com' };
+      const updateData = { status: UserStatus.ACTIVE, is_admin: false };
       const result = await admin.updateUser('550e8400-e29b-41d4-a716-446655440000', updateData);
 
       expect(mockHttpClient.patch).toHaveBeenCalledWith('/api/v1/admin/users/550e8400-e29b-41d4-a716-446655440000', updateData);
-      expect(result).toEqual(mockUser);
+      expect(result).toEqual(mockResponse);
     });
 
     it('should throw error for invalid user ID', async () => {

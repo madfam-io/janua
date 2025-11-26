@@ -125,7 +125,8 @@ export class RetryUtils {
   /**
    * Create a retry-enabled function
    */
-  static createRetryable<T extends (...args: unknown[]) => Promise<unknown>>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static createRetryable<T extends (...args: any[]) => Promise<any>>(
     fn: T,
     options: RetryOptions = {}
   ): T {

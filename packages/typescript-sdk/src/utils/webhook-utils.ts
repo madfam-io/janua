@@ -2,8 +2,6 @@
  * Webhook utility functions
  */
 
-import * as crypto from 'crypto';
-
 /**
  * Webhook utility functions for signature generation and verification
  */
@@ -57,10 +55,6 @@ export class WebhookUtils {
     // In browser environment
     if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
       // Use Web Crypto API for browser
-      const encoder = new TextEncoder();
-      const data = encoder.encode(message);
-      const key = encoder.encode(secret);
-
       // Note: This is synchronous for now, but in a real implementation
       // you'd want to make this async and use crypto.subtle.sign
       return this.browserHmac(message, secret);
@@ -146,7 +140,7 @@ export class WebhookUtils {
   /**
    * Verify webhook signature (simplified version for payload + signature + secret)
    */
-  static verifySignature(
+  static verifyPayloadSignature(
     payload: string | Buffer,
     signature: string,
     secret: string,

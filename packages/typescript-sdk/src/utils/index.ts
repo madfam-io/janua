@@ -6,12 +6,13 @@
 export {
   Base64Url,
   JwtUtils,
-  TokenStorage,
   LocalTokenStorage,
   SessionTokenStorage,
   MemoryTokenStorage,
   TokenManager
 } from './token-utils';
+
+export type { TokenStorage } from './token-utils';
 
 // Validation utilities
 export { ValidationUtils } from './validation-utils';

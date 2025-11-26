@@ -3,7 +3,20 @@
  */
 
 import type { TokenStorage } from './token-utils';
-import { LocalTokenStorage, SessionTokenStorage, MemoryTokenStorage } from './token-utils';
+import { LocalTokenStorage, MemoryTokenStorage } from './token-utils';
+
+// Type declarations for environment-specific globals
+declare const self: { importScripts?: unknown } | undefined;
+
+interface ElectronProcess {
+  type?: string;
+}
+
+declare global {
+  interface Window {
+    process?: ElectronProcess;
+  }
+}
 
 export class EnvUtils {
   /**

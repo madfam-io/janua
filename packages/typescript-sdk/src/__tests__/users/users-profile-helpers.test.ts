@@ -356,11 +356,11 @@ describe('Users - Profile Helper Functions', () => {
         custom_field: 'custom_value'
       } as any;
 
-      const result = users.formatUser(user);
+      const result = users.formatUser(user) as typeof user & { displayName: string; initials: string; profileComplete: boolean; completionPercentage: number; missingFields: string[] };
 
       expect(result.id).toBe('1');
       expect(result.email).toBe('test@example.com');
-      expect(result.custom_field).toBe('custom_value');
+      expect((result as Record<string, unknown>).custom_field).toBe('custom_value');
     });
   });
 

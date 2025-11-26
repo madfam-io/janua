@@ -54,8 +54,8 @@ export class JwtUtils {
     }
 
     try {
-      const header = JSON.parse(Base64Url.decode(parts[0])) as JwtHeader;
-      const payload = JSON.parse(Base64Url.decode(parts[1])) as JwtPayload;
+      const header = JSON.parse(Base64Url.decode(parts[0] as string)) as JwtHeader;
+      const payload = JSON.parse(Base64Url.decode(parts[1] as string)) as JwtPayload;
       const signature = parts[2] as string;
 
       return { header, payload, signature };

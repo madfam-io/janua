@@ -50,16 +50,16 @@ const mockHttpClient = {
 describe('JanuaClient', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Reset global fetch mock
     (global.fetch as jest.Mock).mockClear();
-    
+
     // Mock token manager
     require('../utils').TokenManager.mockImplementation(() => mockTokenManager);
-    
+
     // Mock HTTP client
     require('../http-client').createHttpClient.mockReturnValue(mockHttpClient);
-    
+
     // Mock modules
     require('../auth').Auth.mockImplementation(() => mockAuth);
   });
@@ -69,7 +69,7 @@ describe('JanuaClient', () => {
       const client = new JanuaClient({
         baseURL: 'https://api.example.com'
       });
-      
+
       expect(client).toBeInstanceOf(JanuaClient);
       expect(client.auth).toBeDefined();
       expect(client.users).toBeDefined();
@@ -82,7 +82,7 @@ describe('JanuaClient', () => {
       expect(() => {
         new JanuaClient({});
       }).toThrow(ConfigurationError);
-      
+
       expect(() => {
         new JanuaClient({});
       }).toThrow('baseURL is required');
@@ -94,7 +94,7 @@ describe('JanuaClient', () => {
           baseURL: 'invalid-url'
         });
       }).toThrow(ConfigurationError);
-      
+
       expect(() => {
         new JanuaClient({
           baseURL: 'invalid-url'
@@ -106,7 +106,7 @@ describe('JanuaClient', () => {
       const client = new JanuaClient({
         baseURL: 'https://api.example.com'
       });
-      
+
       const config = client.getConfig();
       expect(config.timeout).toBe(30000);
       expect(config.retryAttempts).toBe(3);
@@ -122,7 +122,7 @@ describe('JanuaClient', () => {
         debug: true,
         retryAttempts: 1
       });
-      
+
       const config = client.getConfig();
       expect(config.baseURL).toBe('https://api.example.com');
       expect(config.timeout).toBe(10000);
@@ -138,7 +138,7 @@ describe('JanuaClient', () => {
           timeout: 0
         });
       }).toThrow(ConfigurationError);
-      
+
       expect(() => {
         new JanuaClient({
           baseURL: 'https://api.example.com',
@@ -154,7 +154,7 @@ describe('JanuaClient', () => {
           retryAttempts: -1
         });
       }).toThrow(ConfigurationError);
-      
+
       expect(() => {
         new JanuaClient({
           baseURL: 'https://api.example.com',
@@ -170,7 +170,7 @@ describe('JanuaClient', () => {
           retryDelay: 0
         });
       }).toThrow(ConfigurationError);
-      
+
       expect(() => {
         new JanuaClient({
           baseURL: 'https://api.example.com',
@@ -185,7 +185,7 @@ describe('JanuaClient', () => {
       const client = createClient({
         baseURL: 'https://api.example.com'
       });
-      
+
       expect(client).toBeInstanceOf(JanuaClient);
     });
 
@@ -208,7 +208,7 @@ describe('JanuaClient', () => {
     describe('isAuthenticated', () => {
       it('should return true when user is authenticated', async () => {
         mockTokenManager.hasValidTokens.mockResolvedValue(true);
-        
+
         const result = await client.isAuthenticated();
         expect(result).toBe(true);
         expect(mockTokenManager.hasValidTokens).toHaveBeenCalled();
@@ -216,7 +216,7 @@ describe('JanuaClient', () => {
 
       it('should return false when user is not authenticated', async () => {
         mockTokenManager.hasValidTokens.mockResolvedValue(false);
-        
+
         const result = await client.isAuthenticated();
         expect(result).toBe(false);
       });
@@ -226,7 +226,7 @@ describe('JanuaClient', () => {
       it('should return access token when available', async () => {
         const token = 'access-token-123';
         mockTokenManager.getAccessToken.mockResolvedValue(token);
-        
+
         const result = await client.getAccessToken();
         expect(result).toBe(token);
         expect(mockTokenManager.getAccessToken).toHaveBeenCalled();
@@ -234,7 +234,7 @@ describe('JanuaClient', () => {
 
       it('should return null when no token available', async () => {
         mockTokenManager.getAccessToken.mockResolvedValue(null);
-        
+
         const result = await client.getAccessToken();
         expect(result).toBeNull();
       });
@@ -244,7 +244,7 @@ describe('JanuaClient', () => {
       it('should return refresh token when available', async () => {
         const token = 'refresh-token-123';
         mockTokenManager.getRefreshToken.mockResolvedValue(token);
-        
+
         const result = await client.getRefreshToken();
         expect(result).toBe(token);
         expect(mockTokenManager.getRefreshToken).toHaveBeenCalled();
@@ -252,7 +252,7 @@ describe('JanuaClient', () => {
 
       it('should return null when no token available', async () => {
         mockTokenManager.getRefreshToken.mockResolvedValue(null);
-        
+
         const result = await client.getRefreshToken();
         expect(result).toBeNull();
       });
@@ -266,17 +266,17 @@ describe('JanuaClient', () => {
           token_type: 'bearer' as const,
           expires_in: 3600
         };
-        
+
         const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1000000);
-        
+
         await client.setTokens(tokens);
-        
+
         expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
           access_token: 'access-123',
           refresh_token: 'refresh-123',
           expires_at: 1000000 + (3600 * 1000)
         });
-        
+
         nowSpy.mockRestore();
       });
     });
@@ -284,11 +284,11 @@ describe('JanuaClient', () => {
     describe('signOut', () => {
       it('should sign out from server and clear local tokens', async () => {
         mockAuth.signOut.mockResolvedValue({});
-        
+
         const emitSpy = jest.spyOn(client, 'emit');
-        
+
         await client.signOut();
-        
+
         expect(mockAuth.signOut).toHaveBeenCalled();
         expect(mockTokenManager.clearTokens).toHaveBeenCalled();
         expect(emitSpy).toHaveBeenCalledWith('auth:signedOut', {});
@@ -296,11 +296,11 @@ describe('JanuaClient', () => {
 
       it('should clear local tokens even if server sign out fails', async () => {
         mockAuth.signOut.mockRejectedValue(new Error('Server error'));
-        
+
         const emitSpy = jest.spyOn(client, 'emit');
-        
+
         await client.signOut();
-        
+
         expect(mockAuth.signOut).toHaveBeenCalled();
         expect(mockTokenManager.clearTokens).toHaveBeenCalled();
         expect(emitSpy).toHaveBeenCalledWith('auth:signedOut', {});
@@ -312,18 +312,18 @@ describe('JanuaClient', () => {
         const user = userFixtures.verified;
         mockTokenManager.hasValidTokens.mockResolvedValue(true);
         mockAuth.getCurrentUser.mockResolvedValue(user);
-        
+
         const result = await client.getCurrentUser();
-        
+
         expect(result).toEqual(user);
         expect(mockAuth.getCurrentUser).toHaveBeenCalled();
       });
 
       it('should return null when not authenticated', async () => {
         mockTokenManager.hasValidTokens.mockResolvedValue(false);
-        
+
         const result = await client.getCurrentUser();
-        
+
         expect(result).toBeNull();
         expect(mockAuth.getCurrentUser).not.toHaveBeenCalled();
       });
@@ -331,9 +331,9 @@ describe('JanuaClient', () => {
       it('should return null when API call fails', async () => {
         mockTokenManager.hasValidTokens.mockResolvedValue(true);
         mockAuth.getCurrentUser.mockRejectedValue(new Error('API error'));
-        
+
         const result = await client.getCurrentUser();
-        
+
         expect(result).toBeNull();
       });
     });
@@ -356,7 +356,7 @@ describe('JanuaClient', () => {
           timeout: 15000,
           debug: true
         });
-        
+
         const config = client.getConfig();
         expect(config.timeout).toBe(15000);
         expect(config.debug).toBe(true);
@@ -375,7 +375,7 @@ describe('JanuaClient', () => {
     describe('getConfig', () => {
       it('should return current configuration', () => {
         const config = client.getConfig();
-        
+
         expect(config.baseURL).toBe('https://api.example.com');
         expect(config.debug).toBe(false);
         expect(config.timeout).toBe(30000);
@@ -384,7 +384,7 @@ describe('JanuaClient', () => {
       it('should return a copy of configuration', () => {
         const config1 = client.getConfig();
         const config2 = client.getConfig();
-        
+
         expect(config1).not.toBe(config2); // different objects
         expect(config1).toEqual(config2); // same values
       });
@@ -419,9 +419,9 @@ describe('JanuaClient', () => {
           data: { providers: [] },
           status: 200
         });
-        
+
         const result = await client.testConnection();
-        
+
         expect(result.success).toBe(true);
         expect(result.latency).toBeGreaterThan(0);
         expect(result.error).toBeUndefined();
@@ -429,9 +429,9 @@ describe('JanuaClient', () => {
 
       it('should return failure when connection fails', async () => {
         mockHttpClient.get.mockRejectedValue(new Error('Network error'));
-        
+
         const result = await client.testConnection();
-        
+
         expect(result.success).toBe(false);
         expect(result.latency).toBeGreaterThan(0);
         expect(result.error).toBe('Network error');
@@ -448,7 +448,7 @@ describe('JanuaClient', () => {
     describe('getEnvironmentInfo', () => {
       it('should return environment information', () => {
         const info = client.getEnvironmentInfo();
-        
+
         expect(info.sdk_version).toBe('1.0.0');
         expect(info.base_url).toBe('https://api.example.com');
         expect(info.environment).toBeDefined();
@@ -459,9 +459,9 @@ describe('JanuaClient', () => {
     describe('destroy', () => {
       it('should clean up resources', () => {
         const removeAllListenersSpy = jest.spyOn(client, 'removeAllListeners');
-        
+
         client.destroy();
-        
+
         expect(removeAllListenersSpy).toHaveBeenCalled();
       });
     });
@@ -478,29 +478,30 @@ describe('JanuaClient', () => {
 
     it('should support typed event listeners', () => {
       const handler = jest.fn();
-      
+
       const unsubscribe = client.on('auth:signedIn', handler);
-      
+
       expect(typeof unsubscribe).toBe('function');
     });
 
     it('should support one-time event listeners', () => {
       const handler = jest.fn();
-      
+
       const unsubscribe = client.once('token:refreshed', handler);
-      
+
       expect(typeof unsubscribe).toBe('function');
     });
 
-    it('should support removing all listeners', () => {
+    it('should support removing specific listeners', () => {
       const handler1 = jest.fn();
       const handler2 = jest.fn();
-      
+
       client.on('auth:signedIn', handler1);
       client.on('auth:signedOut', handler2);
-      
-      client.off();
-      
+
+      client.off('auth:signedIn', handler1);
+      client.off('auth:signedOut', handler2);
+
       // Verify listeners are removed (this is implementation dependent)
     });
   });
@@ -515,11 +516,12 @@ describe('JanuaClient', () => {
     });
 
     it('should set up auto refresh when enabled', () => {
-      const client = new JanuaClient({
+      // Create client with autoRefreshTokens enabled
+      void new JanuaClient({
         baseURL: 'https://api.example.com',
         autoRefreshTokens: true
       });
-      
+
       // Mock token data that expires in 4 minutes (should trigger refresh)
       const futureTime = Date.now() + (4 * 60 * 1000);
       mockTokenManager.getTokenData.mockResolvedValue({
@@ -527,22 +529,23 @@ describe('JanuaClient', () => {
         refresh_token: 'refresh',
         expires_at: futureTime
       });
-      
+
       // Fast forward time to trigger refresh check
       jest.advanceTimersByTime(60 * 1000);
-      
+
       // Verify interval was set (implementation dependent)
     });
 
     it('should not set up auto refresh when disabled', () => {
-      const client = new JanuaClient({
+      // Create client with autoRefreshTokens disabled
+      void new JanuaClient({
         baseURL: 'https://api.example.com',
         autoRefreshTokens: false
       });
-      
+
       // Fast forward time
       jest.advanceTimersByTime(60 * 1000);
-      
+
       // Verify no refresh attempts were made
       expect(mockAuth.refreshToken).not.toHaveBeenCalled();
     });

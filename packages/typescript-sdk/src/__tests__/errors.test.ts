@@ -33,7 +33,7 @@ describe('Error Classes', () => {
   describe('JanuaError', () => {
     it('should create base error with message', () => {
       const error = new JanuaError('Test error');
-      
+
       expect(error.name).toBe('JanuaError');
       expect(error.message).toBe('Test error');
       expect(error.code).toBe('JANUA_ERROR');
@@ -44,7 +44,7 @@ describe('Error Classes', () => {
     it('should create error with all parameters', () => {
       const details = { field: 'value' };
       const error = new JanuaError('Test error', 'CUSTOM_CODE', 400, details);
-      
+
       expect(error.name).toBe('JanuaError');
       expect(error.message).toBe('Test error');
       expect(error.code).toBe('CUSTOM_CODE');
@@ -56,7 +56,7 @@ describe('Error Classes', () => {
       const details = { field: 'value' };
       const error = new JanuaError('Test error', 'CUSTOM_CODE', 400, details);
       const json = error.toJSON();
-      
+
       expect(json.name).toBe('JanuaError');
       expect(json.message).toBe('Test error');
       expect(json.code).toBe('CUSTOM_CODE');
@@ -72,9 +72,9 @@ describe('Error Classes', () => {
         details: { email: 'Invalid email format' },
         status_code: 400
       };
-      
+
       const error = JanuaError.fromApiError(apiError);
-      
+
       // Since status_code is 400, it should return ValidationError
       expect(error).toBeInstanceOf(ValidationError);
       expect(error.name).toBe('ValidationError');
@@ -94,7 +94,7 @@ describe('Error Classes', () => {
   describe('AuthenticationError', () => {
     it('should create authentication error', () => {
       const error = new AuthenticationError('Invalid credentials');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error).toBeInstanceOf(AuthenticationError);
       expect(error.name).toBe('AuthenticationError');
@@ -104,7 +104,7 @@ describe('Error Classes', () => {
 
     it('should create with custom code and status', () => {
       const error = new AuthenticationError('Token expired', 'TOKEN_EXPIRED', 401);
-      
+
       expect(error.code).toBe('TOKEN_EXPIRED');
       expect(error.statusCode).toBe(401);
     });
@@ -117,7 +117,7 @@ describe('Error Classes', () => {
         { field: 'password', message: 'Too short' }
       ];
       const error = new ValidationError('Validation failed', violations);
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('ValidationError');
       expect(error.message).toBe('Validation failed');
@@ -127,15 +127,15 @@ describe('Error Classes', () => {
 
     it('should create without violations', () => {
       const error = new ValidationError('Invalid input');
-      
-      expect(error.violations).toEqual([]);
+
+      expect(error.violations).toBeUndefined();
     });
   });
 
   describe('PermissionError', () => {
     it('should create permission error', () => {
       const error = new PermissionError('Access denied');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('PermissionError');
       expect(error.code).toBe('PERMISSION_ERROR');
@@ -146,7 +146,7 @@ describe('Error Classes', () => {
   describe('NotFoundError', () => {
     it('should create not found error', () => {
       const error = new NotFoundError('Resource not found');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('NotFoundError');
       expect(error.code).toBe('NOT_FOUND');
@@ -157,7 +157,7 @@ describe('Error Classes', () => {
   describe('ConflictError', () => {
     it('should create conflict error', () => {
       const error = new ConflictError('Email already exists');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('ConflictError');
       expect(error.code).toBe('CONFLICT');
@@ -174,7 +174,7 @@ describe('Error Classes', () => {
         retry_after: 3600
       };
       const error = new RateLimitError('Rate limit exceeded', rateLimitInfo);
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('RateLimitError');
       expect(error.code).toBe('RATE_LIMIT_EXCEEDED');
@@ -184,7 +184,7 @@ describe('Error Classes', () => {
 
     it('should create without rate limit info', () => {
       const error = new RateLimitError('Too many requests');
-      
+
       expect(error.rateLimitInfo).toBeUndefined();
     });
   });
@@ -192,7 +192,7 @@ describe('Error Classes', () => {
   describe('ServerError', () => {
     it('should create server error', () => {
       const error = new ServerError('Internal server error');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('ServerError');
       expect(error.code).toBe('SERVER_ERROR');
@@ -203,7 +203,7 @@ describe('Error Classes', () => {
   describe('NetworkError', () => {
     it('should create network error', () => {
       const error = new NetworkError('Connection timeout');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('NetworkError');
       expect(error.code).toBe('NETWORK_ERROR');
@@ -212,7 +212,7 @@ describe('Error Classes', () => {
     it('should create with underlying error', () => {
       const cause = new Error('Connection failed');
       const error = new NetworkError('Network failure', cause);
-      
+
       expect(error.cause).toBe(cause);
     });
   });
@@ -220,7 +220,7 @@ describe('Error Classes', () => {
   describe('TokenError', () => {
     it('should create token error', () => {
       const error = new TokenError('Invalid token format');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('TokenError');
       expect(error.code).toBe('TOKEN_ERROR');
@@ -230,7 +230,7 @@ describe('Error Classes', () => {
   describe('ConfigurationError', () => {
     it('should create configuration error', () => {
       const error = new ConfigurationError('Missing API key');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('ConfigurationError');
       expect(error.code).toBe('CONFIGURATION_ERROR');
@@ -240,7 +240,7 @@ describe('Error Classes', () => {
   describe('MFAError', () => {
     it('should create MFA error', () => {
       const error = new MFAError('Invalid MFA code');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('MFAError');
       expect(error.code).toBe('MFA_ERROR');
@@ -250,7 +250,7 @@ describe('Error Classes', () => {
   describe('WebhookError', () => {
     it('should create webhook error', () => {
       const error = new WebhookError('Webhook delivery failed');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('WebhookError');
       expect(error.code).toBe('WEBHOOK_ERROR');
@@ -260,7 +260,7 @@ describe('Error Classes', () => {
   describe('OAuthError', () => {
     it('should create OAuth error', () => {
       const error = new OAuthError('OAuth provider error');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('OAuthError');
       expect(error.code).toBe('OAUTH_ERROR');
@@ -270,7 +270,7 @@ describe('Error Classes', () => {
   describe('PasskeyError', () => {
     it('should create passkey error', () => {
       const error = new PasskeyError('Passkey registration failed');
-      
+
       expect(error).toBeInstanceOf(JanuaError);
       expect(error.name).toBe('PasskeyError');
       expect(error.code).toBe('PASSKEY_ERROR');
@@ -284,7 +284,7 @@ describe('Error Type Guards', () => {
       const januaError = new JanuaError('Test');
       const authError = new AuthenticationError('Test');
       const regularError = new Error('Test');
-      
+
       expect(isJanuaError(januaError)).toBe(true);
       expect(isJanuaError(authError)).toBe(true);
       expect(isJanuaError(regularError)).toBe(false);
@@ -298,7 +298,7 @@ describe('Error Type Guards', () => {
       const authError = new AuthenticationError('Test');
       const validationError = new ValidationError('Test');
       const regularError = new Error('Test');
-      
+
       expect(isAuthenticationError(authError)).toBe(true);
       expect(isAuthenticationError(validationError)).toBe(false);
       expect(isAuthenticationError(regularError)).toBe(false);
@@ -309,7 +309,7 @@ describe('Error Type Guards', () => {
     it('should identify ValidationError instances', () => {
       const validationError = new ValidationError('Test');
       const authError = new AuthenticationError('Test');
-      
+
       expect(isValidationError(validationError)).toBe(true);
       expect(isValidationError(authError)).toBe(false);
     });
@@ -319,7 +319,7 @@ describe('Error Type Guards', () => {
     it('should identify PermissionError instances', () => {
       const permissionError = new PermissionError('Test');
       const authError = new AuthenticationError('Test');
-      
+
       expect(isPermissionError(permissionError)).toBe(true);
       expect(isPermissionError(authError)).toBe(false);
     });
@@ -329,7 +329,7 @@ describe('Error Type Guards', () => {
     it('should identify NotFoundError instances', () => {
       const notFoundError = new NotFoundError('Test');
       const authError = new AuthenticationError('Test');
-      
+
       expect(isNotFoundError(notFoundError)).toBe(true);
       expect(isNotFoundError(authError)).toBe(false);
     });
@@ -339,7 +339,7 @@ describe('Error Type Guards', () => {
     it('should identify RateLimitError instances', () => {
       const rateLimitError = new RateLimitError('Test');
       const authError = new AuthenticationError('Test');
-      
+
       expect(isRateLimitError(rateLimitError)).toBe(true);
       expect(isRateLimitError(authError)).toBe(false);
     });
@@ -349,7 +349,7 @@ describe('Error Type Guards', () => {
     it('should identify NetworkError instances', () => {
       const networkError = new NetworkError('Test');
       const authError = new AuthenticationError('Test');
-      
+
       expect(isNetworkError(networkError)).toBe(true);
       expect(isNetworkError(authError)).toBe(false);
     });
@@ -359,7 +359,7 @@ describe('Error Type Guards', () => {
     it('should identify ServerError instances', () => {
       const serverError = new ServerError('Test');
       const authError = new AuthenticationError('Test');
-      
+
       expect(isServerError(serverError)).toBe(true);
       expect(isServerError(authError)).toBe(false);
     });
@@ -389,33 +389,33 @@ describe('ErrorHandler', () => {
   it('should handle errors and log appropriately', () => {
     const handler = new ErrorHandler(mockLogger);
     const error = new AuthenticationError('Auth failed');
-    
+
     handler.handleError(error);
-    
+
     expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', error);
   });
 
   it('should categorize errors correctly', () => {
     const handler = new ErrorHandler(mockLogger);
-    
+
     // Test different error types get appropriate log levels
     const authError = new AuthenticationError('Auth failed');
     const validationError = new ValidationError('Validation failed');
     const serverError = new ServerError('Server failed');
-    
+
     handler.handleError(authError);
     handler.handleError(validationError);
     handler.handleError(serverError);
-    
+
     expect(mockLogger.error).toHaveBeenCalledTimes(3);
   });
 
   it('should handle non-Janua errors', () => {
     const handler = new ErrorHandler(mockLogger);
     const error = new Error('Regular error');
-    
+
     handler.handleError(error);
-    
+
     expect(mockLogger.error).toHaveBeenCalledWith('Unknown error:', error);
   });
 });

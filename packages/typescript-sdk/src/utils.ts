@@ -8,7 +8,6 @@ export {
   // Token utilities
   Base64Url,
   JwtUtils,
-  TokenStorage,
   LocalTokenStorage,
   SessionTokenStorage,
   MemoryTokenStorage,
@@ -39,4 +38,4 @@ export {
 } from './utils/index';
 
 // Re-export type aliases for backward compatibility
-export type { TokenStorage as ITokenStorage } from './utils/index';
+export type { TokenStorage, TokenStorage as ITokenStorage } from './utils/index';

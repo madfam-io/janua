@@ -6,9 +6,51 @@ import { Auth } from '../auth';
 import { HttpClient } from '../http-client';
 import { TokenManager } from '../utils';
 import { AuthenticationError, ValidationError } from '../errors';
-import { authMocks } from '../../../../tests/mocks/api';
-import { userFixtures, tokenFixtures } from '../../../../tests/fixtures/data';
+import { OAuthProvider, UserStatus } from '../types';
 import type { SignUpParams, SignInParams, MFAParams, OAuthParams } from '../types';
+
+// Inline fixtures to replace missing imports
+const userFixtures = {
+  validUser: {
+    id: '550e8400-e29b-41d4-a716-446655440000',
+    email: 'test@example.com',
+    email_verified: true,
+    first_name: 'Test',
+    last_name: 'User',
+    status: UserStatus.ACTIVE,
+    mfa_enabled: false,
+    is_admin: false,
+    phone_verified: false,
+    created_at: '2023-01-01T00:00:00Z',
+    updated_at: '2023-01-01T00:00:00Z',
+    user_metadata: {}
+  },
+  verifiedUser: {
+    id: '550e8400-e29b-41d4-a716-446655440001',
+    email: 'verified@example.com',
+    email_verified: true,
+    first_name: 'Verified',
+    last_name: 'User',
+    status: UserStatus.ACTIVE,
+    mfa_enabled: false,
+    is_admin: false,
+    phone_verified: true,
+    created_at: '2023-01-01T00:00:00Z',
+    updated_at: '2023-01-01T00:00:00Z',
+    user_metadata: {}
+  }
+};
+
+const tokenFixtures = {
+  validTokens: {
+    access_token: 'valid_access_token',
+    refresh_token: 'valid_refresh_token',
+    token_type: 'bearer' as const,
+    expires_in: 3600
+  },
+  validAccessToken: 'valid_access_token',
+  validRefreshToken: 'valid_refresh_token'
+};
 
 describe('Auth', () => {
   let auth: Auth;
@@ -247,20 +289,20 @@ describe('Auth', () => {
   describe('verifyEmail', () => {
     it('should verify email successfully', async () => {
       const token = 'verification-token-123';
-      
-      mockHttpClient.post.mockResolvedValue({ 
-        data: { 
+
+      mockHttpClient.post.mockResolvedValue({
+        data: {
           success: true,
-          message: 'Email verified successfully' 
-        } 
+          message: 'Email verified successfully'
+        }
       });
 
       const result = await auth.verifyEmail(token);
 
       expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/email/verify', { token }, { skipAuth: true });
-      expect(result).toEqual({ 
+      expect(result).toEqual({
         success: true,
-        message: 'Email verified successfully' 
+        message: 'Email verified successfully'
       });
     });
   });
@@ -268,20 +310,20 @@ describe('Auth', () => {
   describe('requestPasswordReset', () => {
     it('should request password reset successfully', async () => {
       const email = 'test@example.com';
-      
-      mockHttpClient.post.mockResolvedValue({ 
-        data: { 
+
+      mockHttpClient.post.mockResolvedValue({
+        data: {
           success: true,
-          message: 'Password reset email sent' 
-        } 
+          message: 'Password reset email sent'
+        }
       });
 
       const result = await auth.requestPasswordReset(email);
 
       expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/password/reset-request', { email }, { skipAuth: true });
-      expect(result).toEqual({ 
+      expect(result).toEqual({
         success: true,
-        message: 'Password reset email sent' 
+        message: 'Password reset email sent'
       });
     });
   });
@@ -290,12 +332,12 @@ describe('Auth', () => {
     it('should reset password successfully', async () => {
       const token = 'reset-token-123';
       const newPassword = 'NewPassword123!@#';
-      
-      mockHttpClient.post.mockResolvedValue({ 
-        data: { 
+
+      mockHttpClient.post.mockResolvedValue({
+        data: {
           success: true,
-          message: 'Password reset successfully' 
-        } 
+          message: 'Password reset successfully'
+        }
       });
 
       const result = await auth.resetPassword(token, newPassword);
@@ -306,9 +348,9 @@ describe('Auth', () => {
       }, {
         skipAuth: true
       });
-      expect(result).toEqual({ 
+      expect(result).toEqual({
         success: true,
-        message: 'Password reset successfully' 
+        message: 'Password reset successfully'
       });
     });
   });
@@ -317,23 +359,23 @@ describe('Auth', () => {
     it('should change password successfully', async () => {
       const currentPassword = 'CurrentPassword123!';
       const newPassword = 'NewPassword123!@#';
-      
-      mockHttpClient.put.mockResolvedValue({ 
-        data: { 
+
+      mockHttpClient.put.mockResolvedValue({
+        data: {
           success: true,
-          message: 'Password changed successfully' 
-        } 
+          message: 'Password changed successfully'
+        }
       });
 
       const result = await auth.changePassword(currentPassword, newPassword);
 
-      expect(mockHttpClient.put).toHaveBeenCalledWith('/api/v1/auth/password/change', { 
+      expect(mockHttpClient.put).toHaveBeenCalledWith('/api/v1/auth/password/change', {
         current_password: currentPassword,
-        new_password: newPassword 
+        new_password: newPassword
       });
-      expect(result).toEqual({ 
+      expect(result).toEqual({
         success: true,
-        message: 'Password changed successfully' 
+        message: 'Password changed successfully'
       });
     });
   });
@@ -377,19 +419,19 @@ describe('Auth', () => {
     describe('enableMFA', () => {
       it('should enable MFA successfully', async () => {
         const method = 'totp';
-        
-        mockHttpClient.post.mockResolvedValue({ 
-          data: { 
+
+        mockHttpClient.post.mockResolvedValue({
+          data: {
             secret: 'MFASECRET123',
             qr_code: 'data:image/png;base64,...',
             backup_codes: ['code1', 'code2', 'code3']
-          } 
+          }
         });
 
         const result = await auth.enableMFA(method);
 
         expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/mfa/enable', { method });
-        expect(result).toEqual({ 
+        expect(result).toEqual({
           secret: 'MFASECRET123',
           qr_code: 'data:image/png;base64,...',
           backup_codes: ['code1', 'code2', 'code3']
@@ -400,20 +442,20 @@ describe('Auth', () => {
     describe('disableMFA', () => {
       it('should disable MFA successfully', async () => {
         const password = 'CurrentPassword123!';
-        
-        mockHttpClient.post.mockResolvedValue({ 
-          data: { 
+
+        mockHttpClient.post.mockResolvedValue({
+          data: {
             success: true,
-            message: 'MFA disabled successfully' 
-          } 
+            message: 'MFA disabled successfully'
+          }
         });
 
         const result = await auth.disableMFA(password);
 
         expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/mfa/disable', { password });
-        expect(result).toEqual({ 
+        expect(result).toEqual({
           success: true,
-          message: 'MFA disabled successfully' 
+          message: 'MFA disabled successfully'
         });
       });
     });
@@ -427,10 +469,10 @@ describe('Auth', () => {
           redirect_uri: 'http://localhost:3000/auth/callback'
         };
 
-        mockHttpClient.get.mockResolvedValue({ 
-          data: { 
+        mockHttpClient.get.mockResolvedValue({
+          data: {
             authorization_url: 'https://accounts.google.com/oauth/authorize?...'
-          } 
+          }
         });
 
         const result = await auth.signInWithOAuth(oauthParams);
@@ -438,7 +480,7 @@ describe('Auth', () => {
         expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/auth/oauth/authorize', {
           params: oauthParams
         });
-        expect(result).toEqual({ 
+        expect(result).toEqual({
           authorization_url: 'https://accounts.google.com/oauth/authorize?...'
         });
       });
@@ -489,10 +531,10 @@ describe('Auth', () => {
           { name: 'microsoft', enabled: false }
         ];
 
-        mockHttpClient.get.mockResolvedValue({ 
-          data: { 
+        mockHttpClient.get.mockResolvedValue({
+          data: {
             providers: mockProviders
-          } 
+          }
         });
 
         const result = await auth.getOAuthProviders();
@@ -507,7 +549,7 @@ describe('Auth', () => {
 
   describe('getCurrentUser', () => {
     it('should get current user successfully', async () => {
-      mockHttpClient.get.mockResolvedValue({ 
+      mockHttpClient.get.mockResolvedValue({
         data: userFixtures.verifiedUser
       });
 
@@ -703,7 +745,7 @@ describe('Auth', () => {
   describe('Extended OAuth operations', () => {
     describe('initiateOAuth', () => {
       it('should initiate OAuth flow successfully', async () => {
-        const provider = 'google';
+        const provider = OAuthProvider.GOOGLE;
         const options = {
           redirect_uri: 'https://app.example.com/callback',
           scopes: ['email', 'profile']
@@ -733,7 +775,7 @@ describe('Auth', () => {
 
     describe('handleOAuthCallbackWithProvider', () => {
       it('should handle OAuth callback with provider successfully', async () => {
-        const provider = 'google';
+        const provider = OAuthProvider.GOOGLE;
         const code = 'oauth_code_123';
         const state = 'state_123';
         const mockResponse = {
@@ -767,7 +809,7 @@ describe('Auth', () => {
 
     describe('linkOAuthAccount', () => {
       it('should link OAuth account successfully', async () => {
-        const provider = 'github';
+        const provider = OAuthProvider.GITHUB;
         const options = { redirect_uri: 'https://app.example.com/link-callback' };
         const mockResponse = {
           authorization_url: 'https://github.com/login/oauth/authorize?client_id=123&redirect_uri=...',
@@ -793,7 +835,7 @@ describe('Auth', () => {
 
     describe('unlinkOAuthAccount', () => {
       it('should unlink OAuth account successfully', async () => {
-        const provider = 'github';
+        const provider = OAuthProvider.GITHUB;
         const mockResponse = {
           message: 'OAuth account unlinked successfully'
         };
@@ -899,7 +941,7 @@ describe('Auth', () => {
 
     describe('getPasskeyRegistrationOptions', () => {
       it('should get passkey registration options successfully', async () => {
-        const options = { user_verification: 'required' };
+        const options = { authenticator_attachment: 'platform' as const };
         const mockResponse = {
           challenge: 'registration_challenge_123',
           rp: { name: 'My App', id: 'app.example.com' },
@@ -923,6 +965,7 @@ describe('Auth', () => {
         const credential = {
           id: 'credential_id_123',
           rawId: 'raw_credential_id',
+          type: 'public-key' as const,
           response: {
             clientDataJSON: 'client_data',
             attestationObject: 'attestation_object'
@@ -985,6 +1028,7 @@ describe('Auth', () => {
         const credential = {
           id: 'credential_id_123',
           rawId: 'raw_credential_id',
+          type: 'public-key' as const,
           response: {
             clientDataJSON: 'client_data',
             authenticatorData: 'authenticator_data',
