@@ -1,6 +1,6 @@
 {
   "name": "@janua/feature-flags",
-  "version": "1.0.0-beta",
+  "version": "0.1.0",
   "description": "Feature flag system for Janua platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@janua/edge-verify",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Cloudflare Worker for JWT verification at the edge",
   "main": "src/index.ts",

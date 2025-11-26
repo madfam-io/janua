@@ -1,6 +1,6 @@
 {
   "name": "@janua/test-app",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Test application for Janua journey validation",
   "private": true,
   "main": "dist/app.js",

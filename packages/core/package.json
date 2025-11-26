@@ -1,6 +1,6 @@
 {
   "name": "@janua/core",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Core services and utilities for Janua platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,6 +1,6 @@
 {
   "name": "janua-react-native-example",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Example app demonstrating Janua React Native SDK features",
   "main": "index.js",
   "scripts": {
