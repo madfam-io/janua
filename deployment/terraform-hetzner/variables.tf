@@ -40,7 +40,7 @@ variable "environment" {
 variable "domain" {
   description = "Root domain for Janua services"
   type        = string
-  default     = "madfam.io"
+  default     = "janua.dev"
 }
 
 variable "location" {

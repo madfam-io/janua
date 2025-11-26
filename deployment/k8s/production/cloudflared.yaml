@@ -48,26 +48,26 @@ data:
     # Ingress rules
     ingress:
       # Main Janua API
-      - hostname: auth.madfam.io
+      - hostname: auth.janua.dev
         service: http://janua-api.janua.svc.cluster.local:8000
         originRequest:
           connectTimeout: 30s
           noTLSVerify: true
 
       # Admin dashboard
-      - hostname: auth-admin.madfam.io
+      - hostname: admin.janua.dev
         service: http://janua-api.janua.svc.cluster.local:8000
         originRequest:
           connectTimeout: 30s
           noTLSVerify: true
 
       # Health endpoint (direct)
-      - hostname: auth.madfam.io
+      - hostname: auth.janua.dev
         path: /health
         service: http://janua-api.janua.svc.cluster.local:8000
 
       # OIDC well-known endpoints
-      - hostname: auth.madfam.io
+      - hostname: auth.janua.dev
         path: /.well-known/*
         service: http://janua-api.janua.svc.cluster.local:8000
 
@@ -283,4 +283,4 @@ spec:
         - protocol: TCP
           port: 443
         - protocol: TCP
-          port: 7844  # Cloudflare Tunnel port
+          port: 7844 # Cloudflare Tunnel port

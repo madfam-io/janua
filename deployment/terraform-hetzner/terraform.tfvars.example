@@ -28,7 +28,7 @@ cloudflare_account_id = "your-cloudflare-account-id"
 # =============================================================================
 
 environment = "production"
-domain      = "madfam.io"
+domain      = "janua.dev"
 location    = "nbg1" # Nuremberg, Germany
 
 # =============================================================================
