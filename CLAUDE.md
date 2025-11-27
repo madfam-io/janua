@@ -1,0 +1,340 @@
+# Janua - CLAUDE.md
+
+> **Self-Hosted Authentication for Developers Who Own Their Infrastructure**
+
+## Overview
+
+**Status**: 🟡 Private Alpha (Specification Phase)  
+**Purpose**: Open-source OAuth2/OIDC identity platform  
+**License**: AGPL v3  
+**Domain**: [janua.dev](https://janua.dev)
+
+Janua is a self-hosted authentication platform built with FastAPI and modern web technologies. Think Auth0 or Clerk, but you run it on your own infrastructure. **All features are free and open source.**
+
+---
+
+## Quick Start
+
+```bash
+# Clone and setup
+cd janua
+
+# Start backend infrastructure
+cd apps/api
+docker-compose up -d postgres redis
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 4100
+
+# Start demo app (separate terminal)
+cd apps/demo
+npm install
+npm run dev
+
+# Open http://localhost:4101
+```
+
+---
+
+## Project Structure
+
+```
+janua/
+├── apps/
+│   ├── api/              # FastAPI backend (Python 3.11+)
+│   ├── admin/            # Admin dashboard
+│   ├── dashboard/        # User management UI
+│   ├── demo/             # Demo application
+│   ├── docs/             # Documentation site
+│   ├── edge-verify/      # Edge token verification
+│   ├── landing/          # Marketing landing page
+│   └── marketing/        # Marketing site
+├── packages/
+│   ├── core/             # Shared TypeScript utilities
+│   ├── database/         # Prisma schema and migrations
+│   ├── ui/               # Shared React components
+│   ├── config/           # Shared configuration
+│   ├── jwt-utils/        # JWT utilities
+│   ├── monitoring/       # Observability utilities
+│   ├── feature-flags/    # Feature flag system
+│   └── mock-api/         # Testing mock API
+├── packages/ (SDKs)
+│   ├── nextjs-sdk/       # Next.js App Router SDK
+│   ├── react-sdk/        # React hooks and components
+│   ├── vue-sdk/          # Vue 3 composables
+│   ├── typescript-sdk/   # Type-safe API client
+│   ├── python-sdk/       # Python integration
+│   ├── go-sdk/           # Go service integration
+│   ├── flutter-sdk/      # Mobile Flutter SDK
+│   └── react-native-sdk/ # React Native SDK
+├── scripts/
+│   └── migration/        # Auth0 migration tools
+└── docs/                 # 204 markdown documentation files
+```
+
+---
+
+## Development Commands
+
+### Backend (FastAPI)
+```bash
+cd apps/api
+
+# Setup
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Database
+docker-compose up -d postgres redis
+alembic upgrade head
+
+# Run server
+uvicorn app.main:app --reload --port 4100
+
+# Run tests
+pytest
+pytest --cov=app tests/
+```
+
+### Frontend Apps
+```bash
+# Any frontend app
+cd apps/<app-name>
+pnpm install
+pnpm dev
+
+# Build for production
+pnpm build
+```
+
+### SDK Development
+```bash
+cd packages/<sdk-name>
+pnpm install
+pnpm build
+pnpm test
+```
+
+### Monorepo Commands (from root)
+```bash
+pnpm install          # Install all dependencies
+pnpm build            # Build all packages
+pnpm dev              # Run all in dev mode
+pnpm test             # Run all tests
+pnpm lint             # Lint all packages
+```
+
+---
+
+## Port Allocation
+
+| Service | Port | Description |
+|---------|------|-------------|
+| API | 4100 | FastAPI backend |
+| Dashboard | 4101 | User management UI |
+| Admin | 4102 | Admin dashboard |
+| Docs | 4103 | Documentation site |
+| Demo | 4104 | Demo application |
+
+---
+
+## Features
+
+### ✅ Working
+- Email/password authentication
+- OAuth (Google, GitHub, Microsoft, etc.)
+- SAML 2.0 SSO
+- TOTP/SMS multi-factor authentication
+- WebAuthn/Passkeys (FIDO2)
+- Multi-tenancy with organizations and RBAC
+- REST API (202 endpoints)
+- SDKs: React, Vue, Next.js, Python, Go, Flutter
+
+### ⚠️ In Progress
+- Documentation completeness
+- Scale testing
+- Edge case handling
+- UI component polish
+
+### ❌ Not Available
+- Managed hosting (self-host only)
+- Enterprise support contracts
+- SOC 2 compliance reports
+
+---
+
+## API Reference
+
+**Base URL**: `http://localhost:4100`  
+**OpenAPI Docs**: `http://localhost:4100/docs`
+
+### Key Endpoints
+```
+POST   /api/v1/auth/login          # Email/password login
+POST   /api/v1/auth/register       # User registration
+POST   /api/v1/auth/token/refresh  # Refresh JWT
+GET    /api/v1/auth/me             # Current user
+POST   /api/v1/auth/mfa/setup      # Setup MFA
+POST   /api/v1/auth/passkey/register # Register passkey
+
+GET    /api/v1/users               # List users (admin)
+GET    /api/v1/organizations       # List organizations
+POST   /api/v1/organizations       # Create organization
+```
+
+---
+
+## Environment Variables
+
+```bash
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/janua
+REDIS_URL=redis://localhost:6379
+
+# JWT
+JWT_SECRET=your-secret-key
+JWT_ALGORITHM=RS256
+JWT_PRIVATE_KEY_PATH=./keys/private.pem
+JWT_PUBLIC_KEY_PATH=./keys/public.pem
+
+# OAuth Providers
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+
+# Email
+SMTP_HOST=localhost
+SMTP_PORT=1025
+SMTP_FROM=noreply@janua.dev
+```
+
+---
+
+## SDK Installation
+
+### NPM Registry Configuration
+```bash
+# Add to .npmrc
+@janua:registry=https://npm.madfam.io
+//npm.madfam.io/:_authToken=${NPM_MADFAM_TOKEN}
+```
+
+### React/Next.js
+```bash
+npm install @janua/react-sdk
+# or
+npm install @janua/nextjs-sdk
+```
+
+### Python
+```bash
+pip install janua-sdk
+```
+
+### Go
+```bash
+go get github.com/madfam-io/janua/packages/go-sdk
+```
+
+---
+
+## Auth0 Migration
+
+Migrating from Auth0? Use our migration tool:
+
+```bash
+cd scripts/migration
+pip install -r requirements.txt
+python auth0_migrate.py --config config.json
+```
+
+**Savings**: $24,000-58,000/year vs Auth0 enterprise pricing.
+
+See `scripts/migration/README.md` for full guide.
+
+---
+
+## Testing
+
+```bash
+# Backend tests
+cd apps/api
+pytest                           # All tests
+pytest tests/unit/               # Unit tests only
+pytest tests/integration/        # Integration tests
+pytest --cov=app --cov-report=html  # Coverage report
+
+# Frontend tests
+cd apps/dashboard
+pnpm test
+pnpm test:e2e                    # Playwright E2E
+```
+
+---
+
+## Key Documentation
+
+| Document | Path |
+|----------|------|
+| API Reference | `apps/api/docs/` |
+| SDK Guides | `packages/*/README.md` |
+| Migration Guide | `scripts/migration/README.md` |
+| Architecture | `docs/architecture/` |
+| Deployment | `docs/deployment/` |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Client Apps                       │
+│  (React, Vue, Next.js, Mobile, Backend Services)    │
+└─────────────────────┬───────────────────────────────┘
+                      │ SDKs
+┌─────────────────────▼───────────────────────────────┐
+│                  Janua API                           │
+│         FastAPI + SQLAlchemy + Redis                 │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │
+│  │  Auth   │ │  Users  │ │  Orgs   │ │   MFA   │   │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘   │
+└─────────────────────┬───────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────┐
+│              PostgreSQL + Redis                      │
+│         (Sessions, Users, Organizations)             │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## Deployment
+
+### Docker Compose (Recommended)
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### Kubernetes
+```bash
+kubectl apply -f k8s/
+```
+
+### Enclii (MADFAM Infrastructure)
+```bash
+enclii deploy --service janua
+```
+
+---
+
+## Related Resources
+
+- **Website**: [janua.dev](https://janua.dev)
+- **GitHub**: [madfam-io/janua](https://github.com/madfam-io/janua)
+- **Docs**: 204 markdown files in `docs/`
+- **License**: AGPL v3
+
+---
+
+*Janua - The Gatekeeper | One key for the whole city*

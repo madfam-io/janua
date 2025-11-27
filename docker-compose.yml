@@ -1,0 +1,81 @@
+version: "3.8"
+
+services:
+  # Janua API Service
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=development
+      - PORT=8000
+      - DATABASE_URL=postgresql://janua:janua_dev@postgres:5432/janua_dev
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+      - COOKIE_SECRET=dev-cookie-secret-change-in-production
+      - LOG_LEVEL=debug
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - janua-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=janua
+      - POSTGRES_PASSWORD=janua_dev
+      - POSTGRES_DB=janua_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U janua -d janua_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - janua-network
+
+  # Redis for sessions and caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - janua-network
+
+  # MailHog for email testing
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - janua-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  janua-network:
+    driver: bridge
