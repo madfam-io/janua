@@ -156,6 +156,10 @@ class OAuthProvider(str, enum.Enum):
     GITHUB = "github"
     MICROSOFT = "microsoft"
     APPLE = "apple"
+    DISCORD = "discord"
+    TWITTER = "twitter"
+    LINKEDIN = "linkedin"
+    SLACK = "slack"
 
 
 class OAuthAccount(Base):

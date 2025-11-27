@@ -162,6 +162,74 @@ class Settings(BaseSettings):
     ENABLE_MFA: bool = Field(default=True)
     ENABLE_ORGANIZATIONS: bool = Field(default=True)
 
+    # OAuth Providers - Google
+    OAUTH_GOOGLE_CLIENT_ID: Optional[str] = Field(
+        default=None, description="Google OAuth Client ID"
+    )
+    OAUTH_GOOGLE_CLIENT_SECRET: Optional[str] = Field(
+        default=None, description="Google OAuth Client Secret"
+    )
+
+    # OAuth Providers - GitHub
+    OAUTH_GITHUB_CLIENT_ID: Optional[str] = Field(
+        default=None, description="GitHub OAuth Client ID"
+    )
+    OAUTH_GITHUB_CLIENT_SECRET: Optional[str] = Field(
+        default=None, description="GitHub OAuth Client Secret"
+    )
+
+    # OAuth Providers - Microsoft
+    OAUTH_MICROSOFT_CLIENT_ID: Optional[str] = Field(
+        default=None, description="Microsoft OAuth Client ID"
+    )
+    OAUTH_MICROSOFT_CLIENT_SECRET: Optional[str] = Field(
+        default=None, description="Microsoft OAuth Client Secret"
+    )
+    OAUTH_MICROSOFT_TENANT_ID: Optional[str] = Field(
+        default="common",
+        description="Microsoft Tenant ID (common, organizations, consumers, or specific tenant)",
+    )
+
+    # OAuth Providers - Apple
+    OAUTH_APPLE_CLIENT_ID: Optional[str] = Field(
+        default=None, description="Apple Services ID (e.g., com.madfam.janua)"
+    )
+    OAUTH_APPLE_TEAM_ID: Optional[str] = Field(default=None, description="Apple Developer Team ID")
+    OAUTH_APPLE_KEY_ID: Optional[str] = Field(default=None, description="Apple Sign-In Key ID")
+    OAUTH_APPLE_PRIVATE_KEY: Optional[str] = Field(
+        default=None, description="Apple Sign-In Private Key (PEM format)"
+    )
+
+    # OAuth Providers - Discord
+    OAUTH_DISCORD_CLIENT_ID: Optional[str] = Field(
+        default=None, description="Discord OAuth Client ID"
+    )
+    OAUTH_DISCORD_CLIENT_SECRET: Optional[str] = Field(
+        default=None, description="Discord OAuth Client Secret"
+    )
+
+    # OAuth Providers - Twitter/X
+    OAUTH_TWITTER_CLIENT_ID: Optional[str] = Field(
+        default=None, description="Twitter/X OAuth 2.0 Client ID"
+    )
+    OAUTH_TWITTER_CLIENT_SECRET: Optional[str] = Field(
+        default=None, description="Twitter/X OAuth 2.0 Client Secret"
+    )
+
+    # OAuth Providers - LinkedIn
+    OAUTH_LINKEDIN_CLIENT_ID: Optional[str] = Field(
+        default=None, description="LinkedIn OAuth Client ID"
+    )
+    OAUTH_LINKEDIN_CLIENT_SECRET: Optional[str] = Field(
+        default=None, description="LinkedIn OAuth Client Secret"
+    )
+
+    # OAuth Providers - Slack
+    OAUTH_SLACK_CLIENT_ID: Optional[str] = Field(default=None, description="Slack OAuth Client ID")
+    OAUTH_SLACK_CLIENT_SECRET: Optional[str] = Field(
+        default=None, description="Slack OAuth Client Secret"
+    )
+
     # Limits
     MAX_ORGANIZATIONS_PER_IDENTITY: int = Field(default=10)
     MAX_SESSIONS_PER_IDENTITY: int = Field(default=5)
