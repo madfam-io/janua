@@ -128,13 +128,21 @@ pnpm lint             # Lint all packages
 
 ## Port Allocation
 
-| Service | Port | Description |
-|---------|------|-------------|
-| API | 4100 | FastAPI backend |
-| Dashboard | 4101 | User management UI |
-| Admin | 4102 | Admin dashboard |
-| Docs | 4103 | Documentation site |
-| Demo | 4104 | Demo application |
+Per [MADFAM Ecosystem Standard](https://github.com/madfam-io/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Janua uses the 4100-4199 block.
+
+| Service | Port | Container | Public Domain |
+|---------|------|-----------|---------------|
+| API | 4100 | janua-api | api.janua.dev |
+| Dashboard | 4101 | janua-dashboard | app.janua.dev |
+| Admin | 4102 | janua-admin | admin.janua.dev |
+| Docs | 4103 | janua-docs | docs.janua.dev |
+| Website | 4104 | janua-website | janua.dev |
+| Demo | 4105 | janua-demo | demo.janua.dev |
+| Email Worker | 4110 | janua-worker-email | - |
+| WebSocket | 4120 | janua-ws | - |
+| Metrics | 4190 | janua-metrics | - |
+
+**Note**: Production currently uses legacy ports (8000, 8010, 3001). Migration to standard ports is tracked in the stabilization roadmap.
 
 ---
 

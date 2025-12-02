@@ -27,14 +27,16 @@ Production infrastructure documentation for Janua on bare metal (Hetzner).
 │               Hetzner Bare Metal (enclii-core)                   │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐               │
 │  │ janua-api   │ │janua-dashb. │ │janua-website│               │
-│  │  :8000      │ │   :8010     │ │   :3001     │               │
+│  │  :4100      │ │   :4101     │ │   :4104     │               │
 │  └─────────────┘ └─────────────┘ └─────────────┘               │
-│  ┌─────────────┐ ┌─────────────┐                                │
-│  │  postgres   │ │    redis    │                                │
-│  │   :5432     │ │    :6379    │                                │
-│  └─────────────┘ └─────────────┘                                │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐               │
+│  │ janua-docs  │ │  postgres   │ │    redis    │               │
+│  │  :4103      │ │   :5432     │ │    :6379    │               │
+│  └─────────────┘ └─────────────┘ └─────────────┘               │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> **Port Standard**: Janua uses ports 4100-4199 per the [MADFAM Ecosystem Port Allocation](https://github.com/madfam-io/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md).
 
 ---
 
@@ -71,10 +73,11 @@ The tunnel routes traffic to local Docker containers:
 
 | Domain | Target | Service |
 |--------|--------|---------|
-| janua.dev | localhost:3001 | Website |
-| www.janua.dev | localhost:3001 | Website |
-| api.janua.dev | localhost:8000 | Hono API |
-| app.janua.dev | localhost:8010 | Dashboard |
+| janua.dev | localhost:4104 | Website |
+| www.janua.dev | localhost:4104 | Website |
+| api.janua.dev | localhost:4100 | FastAPI Backend |
+| app.janua.dev | localhost:4101 | Dashboard |
+| docs.janua.dev | localhost:4103 | Documentation |
 
 ### DNS Configuration
 
@@ -128,16 +131,16 @@ git pull origin main
 ### Rebuild Containers
 
 ```bash
-# API (Python/Hono)
+# API (FastAPI)
 docker build -f Dockerfile.api -t janua/api:latest .
 docker stop janua-api && docker rm janua-api
-docker run -d --name janua-api --network janua-network -p 8000:8000 \
+docker run -d --name janua-api --network janua-network -p 4100:8000 \
   --env-file .env.production janua/api:latest
 
 # Website (Next.js)
 docker build -f Dockerfile.website -t janua/website:latest .
 docker stop janua-website && docker rm janua-website
-docker run -d --name janua-website --network janua-network -p 3001:3000 \
+docker run -d --name janua-website --network janua-network -p 4104:3000 \
   -e NODE_ENV=production \
   -e NEXT_PUBLIC_API_URL=https://api.janua.dev \
   -e NEXT_PUBLIC_APP_URL=https://app.janua.dev \
@@ -146,11 +149,18 @@ docker run -d --name janua-website --network janua-network -p 3001:3000 \
 # Dashboard (Next.js)
 docker build -f Dockerfile.dashboard -t janua/dashboard:latest .
 docker stop janua-dashboard && docker rm janua-dashboard
-docker run -d --name janua-dashboard --network janua-network -p 8010:3000 \
+docker run -d --name janua-dashboard --network janua-network -p 4101:3000 \
   -e NODE_ENV=production \
   -e NEXT_PUBLIC_API_URL=https://api.janua.dev \
   -e INTERNAL_API_URL=http://janua-api:8000 \
   janua/dashboard:latest
+
+# Docs (Next.js)
+docker build -f Dockerfile.docs -t janua/docs:latest .
+docker stop janua-docs && docker rm janua-docs
+docker run -d --name janua-docs --network janua-network -p 4103:3000 \
+  -e NODE_ENV=production \
+  janua/docs:latest
 ```
 
 ### Using Docker Compose
@@ -167,19 +177,23 @@ docker-compose -f docker-compose.production.yml up -d
 ### Health Checks
 
 ```bash
-# API health
-curl http://localhost:8000/health
+# API health (port 4100)
+curl http://localhost:4100/health
 
-# Website health
-curl http://localhost:3001/health
+# Dashboard health (port 4101)
+curl http://localhost:4101/health
 
-# Dashboard health
-curl http://localhost:8010/health
+# Docs health (port 4103)
+curl http://localhost:4103/health
+
+# Website health (port 4104)
+curl http://localhost:4104/health
 
 # External (through Cloudflare)
 curl https://api.janua.dev/health
-curl https://janua.dev
 curl https://app.janua.dev
+curl https://docs.janua.dev
+curl https://janua.dev
 ```
 
 ### Resource Usage
@@ -205,7 +219,10 @@ free -h
 docker logs janua-api --tail 100
 
 # Check if port is in use
-netstat -tlnp | grep 8000
+netstat -tlnp | grep 4100  # API
+netstat -tlnp | grep 4101  # Dashboard
+netstat -tlnp | grep 4103  # Docs
+netstat -tlnp | grep 4104  # Website
 
 # Check Docker network
 docker network inspect janua-network
@@ -217,10 +234,24 @@ docker network inspect janua-network
 # Check tunnel status
 systemctl status cloudflared
 
-# Check tunnel config
+# Check tunnel config (ensure ports match MADFAM standard)
 cat /etc/cloudflared/config.yml
 
-# Restart tunnel
+# Expected ingress configuration:
+# ingress:
+#   - hostname: api.janua.dev
+#     service: http://localhost:4100
+#   - hostname: app.janua.dev
+#     service: http://localhost:4101
+#   - hostname: docs.janua.dev
+#     service: http://localhost:4103
+#   - hostname: janua.dev
+#     service: http://localhost:4104
+#   - hostname: www.janua.dev
+#     service: http://localhost:4104
+#   - service: http_status:404
+
+# Restart tunnel after config changes
 systemctl restart cloudflared
 ```
 

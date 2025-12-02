@@ -19,7 +19,7 @@ services:
       # Internal API - Service-to-service communication for MADFAM apps
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     ports:
-      - "8000:8000"
+      - "4100:8000"  # MADFAM standard: 4100 = Janua API
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -151,7 +151,7 @@ services:
           cpus: "0.5"
           memory: 256M
 
-  # Dashboard Frontend
+  # Dashboard Frontend (app.janua.dev)
   janua-dashboard:
     image: janua/dashboard:latest
     container_name: janua-dashboard
@@ -160,7 +160,7 @@ services:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://api.janua.dev
     ports:
-      - "3000:3000"
+      - "4101:3000"  # MADFAM standard: 4101 = Janua Dashboard
     healthcheck:
       test:
         [
@@ -187,7 +187,7 @@ services:
       - NEXT_PUBLIC_API_URL=https://api.janua.dev
       - NEXT_PUBLIC_APP_URL=https://app.janua.dev
     ports:
-      - "3002:3000"
+      - "4104:3000"  # MADFAM standard: 4104 = Janua Website
     healthcheck:
       test:
         [
@@ -204,7 +204,7 @@ services:
     networks:
       - janua-network
 
-  # Documentation Site
+  # Documentation Site (docs.janua.dev)
   janua-docs:
     image: janua/docs:latest
     container_name: janua-docs
@@ -212,7 +212,7 @@ services:
     environment:
       - NODE_ENV=production
     ports:
-      - "3001:3000"
+      - "4103:3000"  # MADFAM standard: 4103 = Janua Docs
     healthcheck:
       test:
         [
