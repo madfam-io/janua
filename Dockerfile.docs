@@ -1,0 +1,65 @@
+# Janua Docs - Multi-stage Dockerfile for Next.js with MDX
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache libc6-compat
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+# Copy workspace config and all package.json files first
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+
+# Copy ALL apps package.json files (needed for workspace resolution)
+COPY apps/admin/package.json ./apps/admin/
+COPY apps/dashboard/package.json ./apps/dashboard/
+COPY apps/docs/package.json ./apps/docs/
+COPY apps/edge-verify/package.json ./apps/edge-verify/
+COPY apps/website/package.json ./apps/website/
+
+# Copy all packages (needed for workspace)
+COPY packages/ ./packages/
+
+# Copy docs source code BEFORE install
+COPY apps/docs/ ./apps/docs/
+
+# Override .npmrc to use public registry (workspace packages are local)
+RUN echo "registry=https://registry.npmjs.org/" > .npmrc
+
+# Install dependencies - force workspace linking for @janua/* packages
+RUN pnpm config set link-workspace-packages true && \
+    pnpm install --no-frozen-lockfile --shamefully-hoist
+
+# Build workspace packages first (docs depends on @janua/ui)
+RUN pnpm --filter @janua/ui build || true
+
+# Build docs
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter @janua/docs build
+
+# Production stage
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/apps/docs/.next/standalone ./
+COPY --from=builder /app/apps/docs/.next/static ./apps/docs/.next/static
+# Public directory - create empty if not exists
+RUN mkdir -p ./apps/docs/public
+# Copy content directory for MDX if exists
+COPY --from=builder /app/apps/docs/content ./apps/docs/content 2>/dev/null || true
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "apps/docs/server.js"]
