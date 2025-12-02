@@ -94,7 +94,7 @@ Enterprise-grade architecture design with proper separation of concerns, distinc
 - **Location**: `/apps/api`
 - **URL**: `https://api.janua.dev` (internal: `localhost:8000`)
 - **Purpose**: Main authentication and identity API
-- **Tech Stack**: FastAPI (Python), PostgreSQL, Redis, SuperTokens core
+- **Tech Stack**: FastAPI (Python), PostgreSQL, Redis, custom Janua auth core
 - **Features**:
   - Authentication flows (sign-in, sign-up, sign-out)
   - Token issuance and validation

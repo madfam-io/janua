@@ -1,7 +1,7 @@
 # Janua — SOFTWARE\_SPEC.md
 
 **Company:** Janua (janua.dev) by **Aureo Labs** (aureolabs.dev), a **MADFAM** company (madfam.io)
-**Doc status:** Draft v1.1 (Updated for single-domain + Vercel/Railway/Cloudflare)
+**Doc status:** Draft v1.2 (Updated for Enclii/Hetzner + Cloudflare Tunnel architecture)
 **Owners:** Platform Eng @ Aureo Labs
 **Audience:** Engineering, Security, Product, GTM
 **Review cadence:** Monthly until GA
@@ -55,7 +55,7 @@
 
 ### 2.1 Component map
 
-* **Auth API (Janua Core)** — FastAPI service (Python) with optional **SuperTokens** core for sessions/email-password & **OPA** for policy; Redis for sessions/ratelimits; Postgres for identity data; Celery/RQ workers for webhooks/email.
+* **Auth API (Janua Core)** — FastAPI service (Python) with custom session management, email-password auth & **OPA** for policy; Redis for sessions/ratelimits; Postgres for identity data; Celery/RQ workers for webhooks/email.
 * **Edge adapters (Janua Edge)** — Vercel Middleware + Cloudflare Workers libraries for token verification using cached JWKS.
 * **Admin UI (Janua Admin)** — Next.js app (Vercel) with RBAC-gated ops and audit explorer.
 * **SDKs (Janua SDKs)** — `@janua/nextjs`, `@janua/react-sdk`, `@janua/edge`, `@janua/node`, `@janua/core`.
@@ -64,22 +64,24 @@
 
 ### 2.2 Deployment topology (v1)
 
-* **Railway** — Janua Core services (API at `/api`), **Postgres** (primary), **Redis** (caches/ratelimits), background workers.
-* **Vercel** — Hosts the **single Next.js site** on `https://janua.dev` (marketing/docs/admin UI), plus **Edge Middleware** for our own properties and reference apps.
+* **Enclii/Hetzner** — Self-hosted on Hetzner bare metal (95.217.198.239) via MADFAM's Enclii DevOps solution. Docker containers for API, frontends, **Postgres** (primary), **Redis** (caches/ratelimits), background workers.
+* **Cloudflare Tunnel** — Secure ingress for all janua.dev subdomains (api, app, admin, docs).
 * **Cloudflare** — Fronts `janua.dev` for WAF/CDN; **R2** for audit/exports; **Turnstile** on risky flows; caches **JWKS** globally.
 * **Email** — SES or SendGrid with warmed IPs; domain: `mail.janua.dev` (DNS managed via Cloudflare).
 
 ```
-Browser/Client → Cloudflare (WAF/CDN/Turnstile) → Vercel (Next.js: /, /docs, /admin) → Railway (Core API mounted at /api)
-                                          ↘ Edge verify (Vercel/Cloudflare) ← JWKS cached at Cloudflare from /.well-known
+Browser/Client → Cloudflare Tunnel → Hetzner/Docker (janua-api:4100, janua-dashboard:4101, etc.)
+                                  ↘ Edge verify (Cloudflare Workers) ← JWKS cached at Cloudflare from /.well-known
 ```
 
-### 2.3 Single-domain routing plan
+### 2.3 Subdomain routing plan
 
-* **Public site/docs**: `https://janua.dev/` and `https://janua.dev/docs` (Next.js on Vercel).
-* **Admin**: `https://janua.dev/admin` (Next.js pages gated by RBAC).
-* **API**: `https://janua.dev/api/v1/...` (proxied via Vercel to Railway Core).
-* **Discovery**: `https://janua.dev/.well-known/jwks.json` and `/openid-configuration` (Cloudflare-cached).
+* **Public site**: `https://janua.dev/` (janua-website on port 4104)
+* **Dashboard**: `https://app.janua.dev/` (janua-dashboard on port 4101)
+* **Admin**: `https://admin.janua.dev/` (janua-admin on port 4102)
+* **Docs**: `https://docs.janua.dev/` (janua-docs on port 4103)
+* **API**: `https://api.janua.dev/api/v1/...` (janua-api on port 4100)
+* **Discovery**: `https://api.janua.dev/.well-known/jwks.json` and `/openid-configuration` (Cloudflare-cached).
 
 ### 2.4 Protocols & standards
 

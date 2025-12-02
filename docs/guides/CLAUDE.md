@@ -26,8 +26,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **PostgreSQL + Redis**: Self-hosted databases in Docker containers
 
 **Core Components**:
-- **Auth API (Janua Core)**: FastAPI + SuperTokens core + OPA for policy
-- **Edge Adapters**: Vercel Middleware + Cloudflare Workers for token verification
+- **Auth API (Janua Core)**: FastAPI with custom auth implementation + OPA for policy
+- **Edge Adapters**: Cloudflare Workers for token verification
 - **Admin UI**: Next.js app with RBAC-gated operations
 - **SDKs**: `@janua/nextjs`, `@janua/react-sdk`, `@janua/edge`, `@janua/node`, `@janua/core`
 
