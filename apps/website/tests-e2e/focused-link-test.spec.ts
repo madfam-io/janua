@@ -24,7 +24,7 @@ test.describe('Focused Link and Interactive Element Testing', () => {
   test.beforeEach(async ({ page }) => {
     // Set desktop viewport size to ensure navigation is visible
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('http://localhost:3003');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
   });
 
@@ -75,7 +75,7 @@ test.describe('Focused Link and Interactive Element Testing', () => {
       await page.waitForLoadState('networkidle');
 
       const currentUrl = page.url();
-      if (currentUrl === 'http://localhost:3003/' || currentUrl.endsWith('localhost:3003')) {
+      if (currentUrl.endsWith('/') || currentUrl.endsWith('localhost:3000')) {
         addResult({
           element: 'Janua Logo/Home Link',
           location: 'Header Navigation',
@@ -142,7 +142,7 @@ test.describe('Focused Link and Interactive Element Testing', () => {
       }
 
       // Go back home
-      await page.goto('http://localhost:3003');
+      await page.goto('/');
       await page.waitForLoadState('networkidle');
     } catch (error) {
       addResult({

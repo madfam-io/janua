@@ -24,7 +24,7 @@ test.describe('100% Functionality Test', () => {
   test.beforeEach(async ({ page }) => {
     // Set desktop viewport size to ensure navigation is visible
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('http://localhost:3003');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     // Additional wait to ensure all components are rendered
     await page.waitForTimeout(1000);
