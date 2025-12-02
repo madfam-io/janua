@@ -328,6 +328,91 @@ docker cp janua-redis:/data/dump.rdb ./redis_backup_$(date +%Y%m%d).rdb
 
 ---
 
+## Enclii Integration
+
+### Service Discovery Endpoints
+
+For Enclii orchestration, Janua exposes the following endpoints:
+
+| Endpoint | URL | Purpose |
+|----------|-----|---------|
+| API Health | `http://janua-api:8000/health` | Container health check |
+| API Docs | `http://janua-api:8000/docs` | OpenAPI specification |
+| Dashboard | `http://janua-dashboard:3001/` | User management UI |
+| Website | `http://janua-website:3000/` | Public marketing site |
+
+### Internal Network Configuration
+
+```yaml
+# Enclii service definition
+services:
+  janua:
+    api:
+      container: janua-api
+      internal_port: 8000
+      external_port: 4100
+      health_check: /health
+      network: janua-network
+
+    dashboard:
+      container: janua-dashboard
+      internal_port: 3001
+      external_port: 4101
+      network: janua-network
+
+    website:
+      container: janua-website
+      internal_port: 3000
+      external_port: 4104
+      network: janua-network
+
+# Shared infrastructure
+dependencies:
+  postgres:
+    container: postgres-shared
+    port: 5432
+    database: janua
+
+  redis:
+    container: redis-shared
+    port: 6379
+    db: 0
+```
+
+### Environment Variables for Enclii
+
+```bash
+# Required for Janua API in Enclii deployment
+ENVIRONMENT=production
+DATABASE_URL=postgresql://janua:${DB_PASSWORD}@postgres-shared:5432/janua
+REDIS_URL=redis://:${REDIS_PASSWORD}@redis-shared:6379/0
+JWT_SECRET_KEY=${JANUA_JWT_SECRET}
+SECRET_KEY=${JANUA_SECRET_KEY}
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=${RESEND_API_KEY}
+INTERNAL_API_KEY=${INTERNAL_API_KEY}
+
+# Required for Dashboard/Website
+NEXT_PUBLIC_API_URL=https://api.janua.dev
+NEXT_PUBLIC_APP_URL=https://app.janua.dev
+INTERNAL_API_URL=http://janua-api:8000
+```
+
+### Health Check Integration
+
+Enclii can monitor Janua services using:
+
+```bash
+# API health (returns JSON with status, version, environment)
+curl -f http://janua-api:8000/health
+
+# Dashboard/Website health (HTTP 200 = healthy)
+curl -f http://janua-dashboard:3001/
+curl -f http://janua-website:3000/
+```
+
+---
+
 ## Contact
 
 For infrastructure issues, contact the DevOps team or check the `#infrastructure` channel.
