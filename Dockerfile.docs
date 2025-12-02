@@ -51,8 +51,8 @@ COPY --from=builder /app/apps/docs/.next/standalone ./
 COPY --from=builder /app/apps/docs/.next/static ./apps/docs/.next/static
 # Public directory - create empty if not exists
 RUN mkdir -p ./apps/docs/public
-# Copy content directory for MDX if exists
-COPY --from=builder /app/apps/docs/content ./apps/docs/content 2>/dev/null || true
+# Copy content directory for MDX
+COPY --from=builder /app/apps/docs/content ./apps/docs/content
 
 USER nextjs
 
