@@ -76,5 +76,8 @@ class JSON(TypeDecorator):
 
     def process_result_value(self, value, dialect):
         if value is not None:
-            value = json.loads(value)
+            # PostgreSQL JSONB returns dict directly, only parse if string (SQLite)
+            if isinstance(value, str):
+                value = json.loads(value)
+            # else: value is already a dict/list from JSONB, return as-is
         return value
