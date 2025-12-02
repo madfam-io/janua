@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight, Book, Code2, Zap, Shield, Globe, Layers } from 'lucide-react'
-import { Button } from '@janua/ui'
+import { Button } from '@/components/ui/button'
 
 export default function DocsHomePage() {
   return (

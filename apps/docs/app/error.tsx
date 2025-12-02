@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react'
 import { FileQuestion, RefreshCw, Search, Home } from 'lucide-react'
-import { Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@janua/ui'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function Error({
   error,
@@ -13,12 +14,14 @@ export default function Error({
 }) {
   useEffect(() => {
     // Log the error to an error reporting service
-    if (typeof window !== 'undefined' && window.Sentry) {
-      window.Sentry.captureException(error, {
+    const win = window as typeof window & { Sentry?: { captureException: (e: Error, opts?: Record<string, unknown>) => void } }
+    if (typeof window !== 'undefined' && win.Sentry) {
+      win.Sentry.captureException(error, {
         tags: { app: 'docs' }
       })
     } else {
       // Error logged to Sentry in production
+      console.error('[docs] Error:', error)
     }
   }, [error])
 

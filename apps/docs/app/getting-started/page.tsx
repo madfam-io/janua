@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight, Download, Zap, Shield, Code, Check } from 'lucide-react'
-import { Button } from '@janua/ui'
+import { Button } from '@/components/ui/button'
 
 export default function GettingStartedPage() {
   return (
