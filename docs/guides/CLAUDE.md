@@ -21,9 +21,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Architecture & Stack
 
 **Infrastructure Stack**:
-- **Vercel**: Next.js app hosting (marketing, docs, admin UI at janua.dev)
-- **Railway**: Core API services (FastAPI/Python), Postgres, Redis, workers
-- **Cloudflare**: WAF/CDN, R2 for audit storage, Turnstile for bot protection, JWKS caching
+- **Enclii/Hetzner**: Self-hosted on bare metal (95.217.198.239) with Docker containers
+- **Cloudflare Tunnel**: Secure ingress for all janua.dev subdomains
+- **PostgreSQL + Redis**: Self-hosted databases in Docker containers
 
 **Core Components**:
 - **Auth API (Janua Core)**: FastAPI + SuperTokens core + OPA for policy
@@ -36,15 +36,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Redis**: Session cache, rate limiting, JTI blacklist
 - **R2**: Long-term audit logs and exports
 
-### Domain Routing (Single Domain Strategy)
+### Domain Routing (Subdomain Strategy via Cloudflare Tunnel)
 
-All services operate on `janua.dev`:
-- `/` - Public site and documentation (Next.js on Vercel)
-- `/docs` - Documentation
-- `/admin` - Admin dashboard (RBAC-gated)
-- `/api/v1/...` - Core API (proxied to Railway)
-- `/.well-known/jwks.json` - JWKS endpoint (CDN-cached)
-- `/.well-known/openid-configuration` - OIDC metadata
+Services operate on janua.dev subdomains (MADFAM port allocation 4100-4199):
+- `janua.dev` (4104) - Marketing website
+- `app.janua.dev` (4101) - User dashboard
+- `admin.janua.dev` (4102) - Admin console
+- `docs.janua.dev` (4103) - Documentation
+- `api.janua.dev` (4100) - Core API (FastAPI)
+- `api.janua.dev/.well-known/jwks.json` - JWKS endpoint
+- `api.janua.dev/.well-known/openid-configuration` - OIDC metadata
 
 ### Development Commands
 

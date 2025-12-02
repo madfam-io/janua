@@ -359,19 +359,19 @@ For complete security documentation, see [Security Guide](docs/security/README.m
 
 ## 🚀 Deployment
 
-### Railway (Recommended)
+### Enclii/Hetzner (Production)
+
+Janua uses self-hosted infrastructure via MADFAM's Enclii DevOps solution on Hetzner bare metal.
 
 ```bash
-# Install Railway CLI
-npm install -g @railway/cli
+# Deploy via Enclii
+enclii deploy --service janua-api
 
-# Deploy to Railway
-railway login
-railway init
-railway up
+# Or manually via Docker
+ssh root@95.217.198.239 'cd /opt/solarpunk/janua && docker-compose -f deployment/production/docker-compose.production.yml up -d janua-api'
 ```
 
-### Docker
+### Docker (Local/Staging)
 
 ```bash
 # Build image

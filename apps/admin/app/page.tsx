@@ -296,19 +296,19 @@ function InfrastructureSection() {
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4">Railway (Backend)</h3>
+          <h3 className="text-lg font-semibold mb-4">Enclii/Hetzner (Backend)</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-600">API Server</span>
-              <span className="text-yellow-600">● Not Deployed</span>
+              <span className="text-gray-600">API Server (4100)</span>
+              <span className="text-green-600">● Deployed</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">PostgreSQL</span>
-              <span className="text-yellow-600">● Not Configured</span>
+              <span className="text-green-600">● Running</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Redis</span>
-              <span className="text-yellow-600">● Not Configured</span>
+              <span className="text-green-600">● Running</span>
             </div>
           </div>
         </div>

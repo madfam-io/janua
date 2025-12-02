@@ -98,15 +98,17 @@ build-prod:
 	NODE_ENV=production npm run build
 	cd apps/api && pip install -r requirements.txt --target ./dist
 
-# Deploy to staging
+# Deploy to staging (via Enclii on Hetzner)
 deploy-staging:
 	@echo "Deploying to staging..."
-	railway up --environment staging
+	@echo "Run: enclii deploy --environment staging"
+	@echo "Or manually: docker-compose -f deployment/staging/docker-compose.yml up -d"
 
-# Deploy to production
+# Deploy to production (via Enclii on Hetzner)
 deploy-prod:
 	@echo "Deploying to production..."
-	@echo "Run: railway up --environment production"
+	@echo "Run: enclii deploy --environment production"
+	@echo "Or manually: ssh root@95.217.198.239 'cd /opt/solarpunk/janua && docker-compose -f deployment/production/docker-compose.production.yml up -d'"
 
 # Run security scan
 security-scan:

@@ -84,3 +84,36 @@ janua-dashboard:
 - `apps/api/scripts/deploy.sh` - Replaced Vercel webhook with Docker/Enclii deployment
 - `apps/api/scripts/deploy-vercel.sh` - **DELETED**
 - `apps/website/deploy.sh` - Replaced Vercel with Docker/Enclii deployment
+
+## Additional Cleanup (Session 3 - Dec 2, 2025)
+
+Removed remaining Railway references discovered during port compliance audit:
+
+### Files Deleted
+- `/opt/solarpunk/janua/nginx-proxy.conf` (on production server, referenced railway.app)
+- `config/nixpacks.toml` (Railway's build system)
+- `apps/api/nixpacks.toml`
+- `apps/dashboard/nixpacks.toml`
+- `apps/website/nixpacks.toml`
+
+### Files Updated
+- `Makefile` - Replaced `railway up` commands with Enclii/Docker deployment
+- `docs/guides/CLAUDE.md` - Updated infrastructure stack and domain routing sections
+- `apps/admin/app/page.tsx` - Changed "Railway (Backend)" panel to "Enclii/Hetzner (Backend)" with correct status
+- `apps/api/README.md` - Replaced Railway deployment section with Enclii/Hetzner
+
+### Remaining Railway References
+Many documentation files still contain Railway references (compliance docs, internal reports, guides).
+These are lower priority as they don't affect runtime behavior. A comprehensive documentation
+cleanup should be scheduled to update all remaining references in:
+- `docs/technical/SOFTWARE_SPEC.md`
+- `docs/architecture/` files
+- `docs/internal/reports/` files
+- Various troubleshooting and guide docs
+
+### Port Compliance Verified
+Production deployment correctly follows MADFAM Foundry port allocation:
+- janua-api: Host port 4100 → Container 8000 ✅
+- janua-dashboard: Host port 4101 → Container 3000 ✅
+- janua-docs: Host port 4103 → Container 3000 ✅
+- janua-website: Host port 4104 → Container 3000 ✅
