@@ -1,0 +1,73 @@
+# Multi-stage Next.js Dockerfile for Janua Admin
+# Enclii-compliant: Port 4102
+
+# ============================================
+# STAGE 1: Dependencies
+# ============================================
+FROM node:18-alpine AS deps
+
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Copy package files
+COPY apps/admin/package.json apps/admin/package-lock.json* ./
+
+# Install dependencies
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+# ============================================
+# STAGE 2: Builder
+# ============================================
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy dependencies
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy UI package for transpilation
+COPY packages/ui ./packages/ui
+
+# Copy admin app source
+COPY apps/admin ./
+
+# Enable Next.js standalone output
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the application
+RUN npm run build
+
+# ============================================
+# STAGE 3: Runner
+# ============================================
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy standalone output
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+# Environment variables
+ENV INTERNAL_API_URL="" \
+    NEXT_PUBLIC_API_URL="" \
+    NEXT_PUBLIC_APP_URL=""
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD node -e "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" || exit 1
+
+CMD ["node", "server.js"]

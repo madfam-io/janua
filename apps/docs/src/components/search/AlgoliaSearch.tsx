@@ -197,7 +197,6 @@ export function AlgoliaSearch({
             </div>
 
             <div className="max-h-[60vh] overflow-y-auto p-4">
-              {/* @ts-expect-error - hitsPerPage is valid in react-instantsearch */}
               <Configure hitsPerPage={20} />
               <SearchStateIndicator />
               <Hits hitComponent={Hit} classNames={{ list: 'space-y-1' }} />
@@ -242,8 +241,7 @@ export function InlineAlgoliaSearch({
         {isSearching && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-background border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
             <div className="p-2">
-              {/* @ts-expect-error - hitsPerPage is valid in react-instantsearch */}
-            <Configure hitsPerPage={10} />
+              <Configure hitsPerPage={10} />
               <SearchStateIndicator />
               <Hits hitComponent={Hit} classNames={{ list: 'space-y-1' }} />
               <NoResults />

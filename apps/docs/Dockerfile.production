@@ -1,0 +1,75 @@
+# Multi-stage Next.js Dockerfile for Janua Docs
+# Enclii-compliant: Port 4103
+
+# ============================================
+# STAGE 1: Dependencies
+# ============================================
+FROM node:18-alpine AS deps
+
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Copy package files from monorepo context
+COPY apps/docs/package.json apps/docs/package-lock.json* ./
+COPY packages/ui/package.json ./packages-ui-package.json
+
+# Install dependencies
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+# ============================================
+# STAGE 2: Builder
+# ============================================
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy dependencies
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy UI package for transpilation
+COPY packages/ui ./packages/ui
+
+# Copy docs app source
+COPY apps/docs ./
+
+# Copy content directory
+COPY apps/docs/content ./content
+
+# Enable Next.js standalone output
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the application
+RUN npm run build
+
+# ============================================
+# STAGE 3: Runner
+# ============================================
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy standalone output
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Copy content for MDX if needed at runtime
+COPY --from=builder --chown=nextjs:nodejs /app/content ./content 2>/dev/null || true
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD node -e "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" || exit 1
+
+CMD ["node", "server.js"]
