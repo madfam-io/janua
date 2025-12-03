@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Forward the request to the Janua API (v1 versioned endpoint)
-    const apiUrl = `${API_BASE_URL}/api/v1/dashboard/stats`
+    // Forward the request to the Janua Admin API (v1 versioned endpoint)
+    const apiUrl = `${API_BASE_URL}/api/v1/admin/stats`
 
     const apiResponse = await fetch(apiUrl, {
       method: 'GET',
