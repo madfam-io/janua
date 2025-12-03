@@ -179,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Initialize authentication on mount
+   * Skip API calls on public pages (login, etc.) to avoid console errors
    */
   useEffect(() => {
     // Prevent double initialization in React Strict Mode
@@ -189,6 +190,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true)
 
       try {
+        // Skip auth initialization on public pages
+        const isPublicPage = typeof window !== 'undefined' &&
+          (window.location.pathname === '/login' ||
+           window.location.pathname.startsWith('/api/'))
+
+        if (isPublicPage) {
+          // On login page, just check for existing tokens without API calls
+          const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN)
+          if (accessToken && isValidTokenStructure(accessToken)) {
+            // User has valid token on login page - they might want to go to dashboard
+            // But don't make API calls, let them navigate naturally
+            const cachedUser = localStorage.getItem(STORAGE_KEYS.USER)
+            if (cachedUser) {
+              try {
+                setUser(JSON.parse(cachedUser))
+              } catch {
+                // Invalid cached user, ignore
+              }
+            }
+          }
+          setIsLoading(false)
+          return
+        }
+
         const hasValidTokens = await validateAndRefreshTokens()
 
         if (hasValidTokens) {
