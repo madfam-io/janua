@@ -163,14 +163,13 @@ async def get_admin_stats(
 
     result = await db.execute(
         select(func.count(UserSession.id)).where(
-            UserSession.revoked == False, UserSession.expires_at > datetime.utcnow()
+            UserSession.revoked_at == None, UserSession.expires_at > datetime.utcnow()
         )
     )
     active_sessions = result.scalar()
 
-    # Security statistics
-    result = await db.execute(select(func.count(User.id)).where(User.mfa_enabled == True))
-    mfa_enabled_users = result.scalar()
+    # Security statistics - MFA not yet implemented in schema
+    mfa_enabled_users = 0  # TODO: Add mfa_enabled column to users table
 
     result = await db.execute(select(func.count(OAuthAccount.id)))
     oauth_accounts = result.scalar()
