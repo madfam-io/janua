@@ -475,7 +475,7 @@ export function RealSDKExamples() {
                 Try in CodeSandbox
               </Button>
               <Button variant="outline" asChild>
-                <a href={`https://github.com/madfam-io/${currentExample.language}-sdk`} target="_blank" rel="noopener">
+                <a href="https://docs.janua.dev/sdks" target="_blank" rel="noopener">
                   View Full Documentation
                 </a>
               </Button>
