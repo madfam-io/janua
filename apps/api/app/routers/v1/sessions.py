@@ -101,14 +101,14 @@ async def list_sessions(
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
-        payload = AuthService.decode_token(token, token_type="access")
+        payload = await AuthService.verify_token(token, token_type="access")
         if payload:
             current_jti = payload.get("jti")
     
     # Get all active sessions
     result = await db.execute(select(UserSession).where(
         UserSession.user_id == current_user.id,
-        UserSession.revoked == False,
+        UserSession.revoked_at == None,
         UserSession.expires_at > datetime.utcnow()
     ).order_by(UserSession.last_activity_at.desc()))
     sessions = result.scalars().all()
@@ -169,10 +169,10 @@ async def get_session(
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
-        payload = AuthService.decode_token(token, token_type="access")
+        payload = await AuthService.verify_token(token, token_type="access")
         if payload:
             current_jti = payload.get("jti")
-    
+
     device_info = parse_user_agent(session.user_agent)
     
     return SessionResponse(
@@ -236,14 +236,14 @@ async def revoke_all_sessions(
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
-        payload = AuthService.decode_token(token, token_type="access")
+        payload = await AuthService.verify_token(token, token_type="access")
         if payload:
             current_jti = payload.get("jti")
-    
+
     # Revoke all sessions except current
     result = await db.execute(select(UserSession).where(
         UserSession.user_id == current_user.id,
-        UserSession.revoked == False,
+        UserSession.revoked_at == None,
         UserSession.access_token_jti != current_jti
     ))
     sessions = result.scalars().all()
@@ -276,7 +276,7 @@ async def refresh_session(
     result = await db.execute(select(UserSession).where(
         UserSession.id == session_uuid,
         UserSession.user_id == current_user.id,
-        UserSession.revoked == False
+        UserSession.revoked_at == None
     ))
     session = result.scalar_one_or_none()
     
@@ -334,7 +334,7 @@ async def get_security_alerts(
     # Check for sessions from new locations
     result = await db.execute(select(UserSession).where(
         UserSession.user_id == current_user.id,
-        UserSession.revoked == False
+        UserSession.revoked_at == None
     ))
     sessions = result.scalars().all()
     
