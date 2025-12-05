@@ -13,6 +13,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 
 # Copy ALL apps package.json files (needed for workspace resolution)
+# Note: apps/api is Python, no package.json
 COPY apps/admin/package.json ./apps/admin/
 COPY apps/dashboard/package.json ./apps/dashboard/
 COPY apps/docs/package.json ./apps/docs/
@@ -32,13 +33,18 @@ RUN echo "registry=https://registry.npmjs.org/" > .npmrc
 RUN pnpm config set link-workspace-packages true && \
     pnpm install --no-frozen-lockfile --shamefully-hoist
 
-# Build workspace packages first (website depends on typescript-sdk, ui, react-sdk)
+# Build workspace packages first
+RUN pnpm --filter @janua/feature-flags build || true
 RUN pnpm --filter @janua/typescript-sdk build || true
+RUN pnpm --filter @janua/react-sdk build || true
 RUN pnpm --filter @janua/ui build || true
 
-# Build website
+# Build website with production API URL baked in
+# NEXT_PUBLIC_* vars must be set at BUILD time for client-side code
+ARG NEXT_PUBLIC_API_URL=https://api.janua.dev
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter @janua/website build
+RUN pnpm --filter website build
 
 # Production stage
 FROM node:20-alpine AS runner
@@ -50,8 +56,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 COPY --from=builder /app/apps/website/.next/standalone ./
 COPY --from=builder /app/apps/website/.next/static ./apps/website/.next/static
-# Public directory is optional - create empty if not exists
-RUN mkdir -p ./apps/website/public
+COPY --from=builder /app/apps/website/public ./apps/website/public
 
 USER nextjs
 
