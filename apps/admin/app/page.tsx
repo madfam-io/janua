@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Users,
   Building2,
@@ -10,21 +10,117 @@ import {
   Settings,
   AlertTriangle,
   BarChart3,
-  CreditCard
+  CreditCard,
+  RefreshCw,
+  LogIn,
+  Loader2
 } from 'lucide-react'
+import { adminAPI, type AdminStats, type SystemHealth, type AdminUser, type AdminOrganization, type ActivityLog } from '@/lib/admin-api'
+import { useAuth } from '@/lib/auth'
 
 export default function AdminPage() {
+  const { user, isAuthenticated, isLoading: authLoading, login, logout } = useAuth()
   const [activeSection, setActiveSection] = useState('overview')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
 
   const sections = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'tenants', label: 'Tenants', icon: Building2 },
     { id: 'users', label: 'All Users', icon: Users },
     { id: 'infrastructure', label: 'Infrastructure', icon: Server },
-    { id: 'billing', label: 'Billing', icon: CreditCard },
+    { id: 'activity', label: 'Activity', icon: Activity },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError('')
+    setIsLoggingIn(true)
+    try {
+      await login(loginEmail, loginPassword)
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Login failed')
+    } finally {
+      setIsLoggingIn(false)
+    }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg border border-gray-200 w-full max-w-md">
+          <div className="flex items-center justify-center mb-6">
+            <div className="p-3 bg-red-100 rounded-lg">
+              <Shield className="h-8 w-8 text-red-600" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">Janua Superadmin</h1>
+          <p className="text-sm text-gray-500 text-center mb-6">Internal Platform Management</p>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {loginError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {loginError}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="admin@janua.dev"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="********"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isLoggingIn ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogIn className="h-4 w-4" />
+              )}
+              Sign In
+            </button>
+          </form>
+
+          <p className="mt-4 text-xs text-gray-500 text-center">
+            Admin access requires @janua.dev email and superadmin role
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -46,8 +142,14 @@ export default function AdminPage() {
                 INTERNAL ONLY
               </span>
               <div className="text-sm text-gray-600">
-                admin@janua.dev
+                {user?.email}
               </div>
+              <button
+                onClick={logout}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                Sign Out
+              </button>
             </div>
           </div>
         </div>
@@ -83,7 +185,7 @@ export default function AdminPage() {
           {activeSection === 'tenants' && <TenantsSection />}
           {activeSection === 'users' && <UsersSection />}
           {activeSection === 'infrastructure' && <InfrastructureSection />}
-          {activeSection === 'billing' && <BillingSection />}
+          {activeSection === 'activity' && <ActivitySection />}
           {activeSection === 'security' && <SecuritySection />}
           {activeSection === 'settings' && <SettingsSection />}
         </main>
@@ -93,36 +195,88 @@ export default function AdminPage() {
 }
 
 function OverviewSection() {
-  const stats = [
-    { label: 'Total Tenants', value: '234', change: '+12%', icon: Building2 },
-    { label: 'Total Users', value: '45,678', change: '+18%', icon: Users },
-    { label: 'API Calls (24h)', value: '2.3M', change: '+5%', icon: Activity },
-    { label: 'Revenue (MRR)', value: '$127,450', change: '+22%', icon: CreditCard },
-  ]
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [health, setHealth] = useState<SystemHealth | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const alerts = [
-    { type: 'critical', message: 'High memory usage on api-server-3', time: '5 min ago' },
-    { type: 'warning', message: 'Tenant "acme-corp" approaching rate limit', time: '12 min ago' },
-    { type: 'info', message: 'Scheduled maintenance window in 2 hours', time: '1 hour ago' },
-  ]
+  const fetchData = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [statsData, healthData] = await Promise.all([
+        adminAPI.getStats(),
+        adminAPI.getHealth()
+      ])
+      setStats(statsData)
+      setHealth(healthData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+        <p className="text-red-700">{error}</p>
+        <button
+          onClick={fetchData}
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  const statItems = stats ? [
+    { label: 'Total Users', value: stats.total_users.toLocaleString(), change: `${stats.users_last_24h} new (24h)`, icon: Users },
+    { label: 'Active Users', value: stats.active_users.toLocaleString(), change: `${Math.round((stats.active_users / stats.total_users) * 100)}% of total`, icon: Users },
+    { label: 'Organizations', value: stats.total_organizations.toLocaleString(), change: '', icon: Building2 },
+    { label: 'Active Sessions', value: stats.active_sessions.toLocaleString(), change: `${stats.sessions_last_24h} new (24h)`, icon: Activity },
+    { label: 'MFA Enabled', value: stats.mfa_enabled_users.toLocaleString(), change: `${Math.round((stats.mfa_enabled_users / stats.total_users) * 100)}% of users`, icon: Shield },
+    { label: 'Passkeys', value: stats.passkeys_registered.toLocaleString(), change: '', icon: CreditCard },
+  ] : []
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Platform Overview</h2>
-      
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-900">Platform Overview</h2>
+        <button
+          onClick={fetchData}
+          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </button>
+      </div>
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => {
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {statItems.map((stat) => {
           const Icon = stat.icon
           return (
             <div key={stat.label} className="bg-white p-6 rounded-lg border border-gray-200">
               <div className="flex items-center justify-between mb-2">
                 <Icon className="h-5 w-5 text-gray-400" />
-                <span className={`text-sm font-medium ${
-                  stat.change.startsWith('+') ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {stat.change}
-                </span>
+                {stat.change && (
+                  <span className="text-sm text-gray-500">{stat.change}</span>
+                )}
               </div>
               <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
               <div className="text-sm text-gray-500">{stat.label}</div>
@@ -131,61 +285,45 @@ function OverviewSection() {
         })}
       </div>
 
-      {/* System Alerts */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">System Alerts</h3>
-        </div>
-        <div className="p-6 space-y-3">
-          {alerts.map((alert, index) => (
-            <div key={index} className="flex items-start space-x-3">
-              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${
-                alert.type === 'critical' ? 'text-red-500' :
-                alert.type === 'warning' ? 'text-yellow-500' : 'text-blue-500'
-              }`} />
-              <div className="flex-1">
-                <p className="text-sm text-gray-900">{alert.message}</p>
-                <p className="text-xs text-gray-500">{alert.time}</p>
-              </div>
+      {/* System Health */}
+      {health && (
+        <div className="bg-white rounded-lg border border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">System Health</h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <ServiceStatus name="Database" status={health.database} />
+              <ServiceStatus name="Cache (Redis)" status={health.cache} />
+              <ServiceStatus name="Storage" status={health.storage} />
+              <ServiceStatus name="Email" status={health.email} />
+              <ServiceStatus name="Environment" status={health.environment} />
+              <ServiceStatus name="Version" status={health.version} />
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Infrastructure Status */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Infrastructure Status</h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <ServiceStatus name="API Servers" status="healthy" uptime="99.99%" />
-            <ServiceStatus name="Database Cluster" status="healthy" uptime="99.95%" />
-            <ServiceStatus name="Redis Cache" status="healthy" uptime="100%" />
-            <ServiceStatus name="Edge Workers" status="healthy" uptime="99.98%" />
-            <ServiceStatus name="Storage (R2)" status="healthy" uptime="100%" />
-            <ServiceStatus name="CDN" status="degraded" uptime="99.90%" />
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-500">
+                Uptime: {Math.floor(health.uptime / 3600)}h {Math.floor((health.uptime % 3600) / 60)}m
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
 
-function ServiceStatus({ name, status, uptime }: { name: string; status: string; uptime: string }) {
-  const statusColors = {
-    healthy: 'bg-green-100 text-green-800',
-    degraded: 'bg-yellow-100 text-yellow-800',
-    down: 'bg-red-100 text-red-800',
-  }
+function ServiceStatus({ name, status }: { name: string; status: string }) {
+  const isHealthy = status === 'healthy' || status === 'connected' || status === 'production'
+  const statusColor = isHealthy
+    ? 'bg-green-100 text-green-800'
+    : status === 'degraded'
+    ? 'bg-yellow-100 text-yellow-800'
+    : 'bg-gray-100 text-gray-800'
 
   return (
     <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-      <div>
-        <div className="text-sm font-medium text-gray-900">{name}</div>
-        <div className="text-xs text-gray-500">Uptime: {uptime}</div>
-      </div>
-      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[status as keyof typeof statusColors]}`}>
+      <div className="text-sm font-medium text-gray-900">{name}</div>
+      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColor}`}>
         {status}
       </span>
     </div>
@@ -193,65 +331,80 @@ function ServiceStatus({ name, status, uptime }: { name: string; status: string;
 }
 
 function TenantsSection() {
-  const tenants = [
-    { id: 'tenant_123', name: 'Acme Corporation', plan: 'Enterprise', users: 523, status: 'active', mrr: '$5,000' },
-    { id: 'tenant_456', name: 'Startup Inc', plan: 'Pro', users: 45, status: 'active', mrr: '$69' },
-    { id: 'tenant_789', name: 'Tech Solutions', plan: 'Scale', users: 156, status: 'active', mrr: '$299' },
-    { id: 'tenant_012', name: 'Digital Agency', plan: 'Community', users: 8, status: 'suspended', mrr: '$0' },
-  ]
+  const [orgs, setOrgs] = useState<AdminOrganization[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchOrgs = async () => {
+      try {
+        const data = await adminAPI.getOrganizations()
+        setOrgs(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch organizations')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchOrgs()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <p className="text-red-700">{error}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Tenant Management</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          Create Tenant
-        </button>
+        <span className="text-sm text-gray-500">{orgs.length} organizations</span>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200">
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Organization</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Users</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">MRR</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Members</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
             </tr>
           </thead>
           <tbody>
-            {tenants.map((tenant) => (
-              <tr key={tenant.id} className="border-b border-gray-200 hover:bg-gray-50">
+            {orgs.map((org) => (
+              <tr key={org.id} className="border-b border-gray-200 hover:bg-gray-50">
                 <td className="px-6 py-4">
                   <div>
-                    <div className="text-sm font-medium text-gray-900">{tenant.name}</div>
-                    <div className="text-xs text-gray-500">{tenant.id}</div>
+                    <div className="text-sm font-medium text-gray-900">{org.name}</div>
+                    <div className="text-xs text-gray-500">{org.slug}</div>
                   </div>
                 </td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    tenant.plan === 'Enterprise' ? 'bg-purple-100 text-purple-800' :
-                    tenant.plan === 'Scale' ? 'bg-blue-100 text-blue-800' :
-                    tenant.plan === 'Pro' ? 'bg-green-100 text-green-800' :
+                    org.billing_plan === 'enterprise' ? 'bg-purple-100 text-purple-800' :
+                    org.billing_plan === 'pro' ? 'bg-blue-100 text-blue-800' :
                     'bg-gray-100 text-gray-800'
                   }`}>
-                    {tenant.plan}
+                    {org.billing_plan}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-900">{tenant.users}</td>
-                <td className="px-6 py-4 text-sm font-medium text-gray-900">{tenant.mrr}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    tenant.status === 'active' ? 'bg-green-100 text-green-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {tenant.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <button className="text-sm text-blue-600 hover:text-blue-800">Manage</button>
+                <td className="px-6 py-4 text-sm text-gray-900">{org.members_count}</td>
+                <td className="px-6 py-4 text-sm text-gray-500">{org.owner_email}</td>
+                <td className="px-6 py-4 text-sm text-gray-500">
+                  {new Date(org.created_at).toLocaleDateString()}
                 </td>
               </tr>
             ))}
@@ -263,79 +416,234 @@ function TenantsSection() {
 }
 
 function UsersSection() {
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const data = await adminAPI.getUsers()
+        setUsers(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch users')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchUsers()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <p className="text-red-700">{error}</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
-      <div className="bg-white p-6 rounded-lg border border-gray-200">
-        <p className="text-gray-600">Global user management across all tenants</p>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
+        <span className="text-sm text-gray-500">{users.length} users</span>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">MFA</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Orgs</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sessions</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Sign In</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id} className="border-b border-gray-200 hover:bg-gray-50">
+                <td className="px-6 py-4">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {user.first_name} {user.last_name}
+                      {user.is_admin && (
+                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded">Admin</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500">{user.email}</div>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    user.status === 'active' ? 'bg-green-100 text-green-800' :
+                    user.status === 'suspended' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {user.status}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  {user.mfa_enabled ? (
+                    <span className="text-green-600">Enabled</span>
+                  ) : (
+                    <span className="text-gray-400">Disabled</span>
+                  )}
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-900">{user.organizations_count}</td>
+                <td className="px-6 py-4 text-sm text-gray-900">{user.sessions_count}</td>
+                <td className="px-6 py-4 text-sm text-gray-500">
+                  {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'Never'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function ActivitySection() {
+  const [logs, setLogs] = useState<ActivityLog[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const data = await adminAPI.getActivityLogs()
+        setLogs(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch activity logs')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchLogs()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <p className="text-red-700">{error}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">Activity Logs</h2>
+
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="divide-y divide-gray-200">
+          {logs.map((log) => (
+            <div key={log.id} className="p-4 hover:bg-gray-50">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{log.action}</p>
+                  <p className="text-xs text-gray-500">{log.user_email}</p>
+                </div>
+                <span className="text-xs text-gray-400">
+                  {new Date(log.created_at).toLocaleString()}
+                </span>
+              </div>
+              {log.ip_address && (
+                <p className="mt-1 text-xs text-gray-400">IP: {log.ip_address}</p>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
 function InfrastructureSection() {
+  const [health, setHealth] = useState<SystemHealth | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const data = await adminAPI.getHealth()
+        setHealth(data)
+      } catch (err) {
+        console.error('Failed to fetch health:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchHealth()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Infrastructure</h2>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4">Vercel (Frontend)</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Marketing Site</span>
-              <span className="text-green-600">● Deployed</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Dashboard</span>
-              <span className="text-green-600">● Deployed</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Admin Portal</span>
-              <span className="text-yellow-600">● Pending</span>
-            </div>
+          <h3 className="text-lg font-semibold mb-4">Backend Services</h3>
+          <div className="space-y-3">
+            {health && (
+              <>
+                <ServiceStatus name="API Server" status={health.status} />
+                <ServiceStatus name="Database" status={health.database} />
+                <ServiceStatus name="Redis Cache" status={health.cache} />
+                <ServiceStatus name="Storage" status={health.storage} />
+                <ServiceStatus name="Email" status={health.email} />
+              </>
+            )}
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4">Enclii/Hetzner (Backend)</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">API Server (4100)</span>
-              <span className="text-green-600">● Deployed</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">PostgreSQL</span>
-              <span className="text-green-600">● Running</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Redis</span>
-              <span className="text-green-600">● Running</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
-function BillingSection() {
-  return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Billing & Revenue</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <div className="text-sm text-gray-600 mb-2">Monthly Recurring Revenue</div>
-          <div className="text-3xl font-bold text-gray-900">$127,450</div>
-          <div className="text-sm text-green-600">+22% from last month</div>
-        </div>
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <div className="text-sm text-gray-600 mb-2">Annual Run Rate</div>
-          <div className="text-3xl font-bold text-gray-900">$1.53M</div>
-          <div className="text-sm text-green-600">+18% YoY</div>
-        </div>
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <div className="text-sm text-gray-600 mb-2">Paying Customers</div>
-          <div className="text-3xl font-bold text-gray-900">189</div>
-          <div className="text-sm text-green-600">+15 this month</div>
+          <h3 className="text-lg font-semibold mb-4">Deployment Info</h3>
+          <div className="space-y-2 text-sm">
+            {health && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Environment</span>
+                  <span className="font-medium">{health.environment}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Version</span>
+                  <span className="font-medium">{health.version}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Uptime</span>
+                  <span className="font-medium">
+                    {Math.floor(health.uptime / 3600)}h {Math.floor((health.uptime % 3600) / 60)}m
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -343,25 +651,42 @@ function BillingSection() {
 }
 
 function SecuritySection() {
+  const [revoking, setRevoking] = useState(false)
+
+  const handleRevokeAllSessions = async () => {
+    if (!confirm('Are you sure you want to revoke ALL user sessions? This will log out everyone.')) {
+      return
+    }
+    setRevoking(true)
+    try {
+      await adminAPI.revokeAllSessions()
+      alert('All sessions revoked successfully')
+    } catch (err) {
+      alert('Failed to revoke sessions')
+    } finally {
+      setRevoking(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Security & Compliance</h2>
+
       <div className="bg-white p-6 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-semibold mb-4">Recent Security Events</h3>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
-            <div>
-              <div className="text-sm font-medium">Failed login attempts spike</div>
-              <div className="text-xs text-gray-500">IP: 192.168.1.1 • 2 hours ago</div>
-            </div>
-            <button className="text-sm text-blue-600">Investigate</button>
-          </div>
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
-            <div>
-              <div className="text-sm font-medium">New API key created</div>
-              <div className="text-xs text-gray-500">Tenant: acme-corp • 5 hours ago</div>
-            </div>
-            <button className="text-sm text-blue-600">Review</button>
+        <h3 className="text-lg font-semibold mb-4">Emergency Actions</h3>
+        <div className="space-y-4">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <h4 className="font-medium text-red-900">Revoke All Sessions</h4>
+            <p className="text-sm text-red-700 mt-1">
+              This will immediately log out all users from the platform.
+            </p>
+            <button
+              onClick={handleRevokeAllSessions}
+              disabled={revoking}
+              className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {revoking ? 'Revoking...' : 'Revoke All Sessions'}
+            </button>
           </div>
         </div>
       </div>
@@ -370,23 +695,43 @@ function SecuritySection() {
 }
 
 function SettingsSection() {
+  const [maintenanceMode, setMaintenanceMode] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const handleMaintenanceToggle = async () => {
+    setSaving(true)
+    try {
+      await adminAPI.setMaintenanceMode(!maintenanceMode)
+      setMaintenanceMode(!maintenanceMode)
+    } catch (err) {
+      alert('Failed to update maintenance mode')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Platform Settings</h2>
+
       <div className="bg-white p-6 rounded-lg border border-gray-200">
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Platform Mode</label>
-            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option>Production</option>
-              <option>Staging</option>
-              <option>Maintenance</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Rate Limiting</label>
-            <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-lg" defaultValue="1000" />
-            <p className="text-xs text-gray-500 mt-1">Requests per minute per tenant</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Maintenance Mode</h4>
+              <p className="text-sm text-gray-500">Temporarily disable access to the platform</p>
+            </div>
+            <button
+              onClick={handleMaintenanceToggle}
+              disabled={saving}
+              className={`px-4 py-2 rounded-lg ${
+                maintenanceMode
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              } disabled:opacity-50`}
+            >
+              {saving ? 'Saving...' : maintenanceMode ? 'Disable' : 'Enable'}
+            </button>
           </div>
         </div>
       </div>
