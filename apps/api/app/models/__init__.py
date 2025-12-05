@@ -254,16 +254,9 @@ class OrganizationCustomRole(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-# Association table for many-to-many relationship
-from sqlalchemy import Table
-
-organization_members = Table(
-    "organization_members_association",
-    Base.metadata,
-    Column("organization_id", UUID(as_uuid=True), ForeignKey("organizations.id")),
-    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id")),
-    Column("created_at", DateTime, default=datetime.utcnow),
-)
+# Association table reference - uses OrganizationMember model's table
+# Access via OrganizationMember.__table__ if needed as a Table object
+organization_members = OrganizationMember.__table__
 
 
 class Policy(Base):
@@ -316,21 +309,17 @@ class Invitation(Base):
 
 
 class AuditLog(Base):
+    """Audit log model matching the existing production database schema."""
     __tablename__ = "audit_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    tenant_id = Column(UUID(as_uuid=True), index=True)  # Multi-tenancy support
-    event_type = Column(String(255), nullable=False)  # Renamed from action for auth service
-    event_data = Column(Text)  # JSON string of event data
-    resource_type = Column(String(255))
-    resource_id = Column(String(255))
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    ip_address = Column(String(50))
-    user_agent = Column(Text)
+    action = Column(String(100), nullable=False)  # Matches DB column
+    resource_type = Column(String(100))
+    resource_id = Column(UUID(as_uuid=True))
     details = Column(JSONB, default={})
-    previous_hash = Column(String(255))  # For audit chain integrity
-    current_hash = Column(String(255))  # Current entry hash (renamed from hash)
+    ip_address = Column(String(50))  # DB uses inet type but String works
+    user_agent = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
