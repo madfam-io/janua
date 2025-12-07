@@ -38,7 +38,7 @@ Welcome to the Janua API development team! This guide will help you get up and r
 #### 1. Clone Repository
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/janua.git
+git clone https://github.com/madfam-io/janua.git
 cd janua/apps/api
 
 # Create development branch
@@ -756,7 +756,7 @@ docker-run:		## Run Docker container
 
 ### Team Communication
 - **Slack**: #janua-dev channel
-- **GitHub Discussions**: [Project Discussions](https://github.com/your-org/janua/discussions)
+- **GitHub Discussions**: [Project Discussions](https://github.com/madfam-io/janua/discussions)
 - **Team Meetings**: Daily standups at 9 AM EST
 
 ### Getting Unstuck

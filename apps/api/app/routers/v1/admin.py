@@ -331,7 +331,7 @@ async def list_all_users(
 
         sessions_result = await db.execute(
             select(func.count(UserSession.id)).where(
-                UserSession.user_id == user.id, UserSession.revoked == False
+                UserSession.user_id == user.id, UserSession.revoked_at == None
             )
         )
         sessions_count = sessions_result.scalar()

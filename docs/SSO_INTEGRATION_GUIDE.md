@@ -830,8 +830,8 @@ if (process.env.NODE_ENV === 'development') {
 
 ## Support
 
-- 📚 [Janua Repository](https://github.com/madfam/janua)
-- 🐛 [Report Issues](https://github.com/madfam/janua/issues)
+- 📚 [Janua Repository](https://github.com/madfam-io/janua)
+- 🐛 [Report Issues](https://github.com/madfam-io/janua/issues)
 - 💬 Internal: #auth-support Slack channel
 
 ---

@@ -5,7 +5,7 @@ A comprehensive authentication platform providing SSO, RBAC, multi-tenancy,
 and enterprise security features for modern applications.
 """
 
-__version__ = "0.1.0-beta.1"
+__version__ = "0.1.0"
 __author__ = "Janua Team"
 __email__ = "team@janua.dev"
 __license__ = "AGPL-3.0"

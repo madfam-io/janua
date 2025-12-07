@@ -278,7 +278,7 @@ print(response.status_code)  # Expected: 200, Actual: 500
 ## ✨ Feature Requests
 
 ### Before Requesting
-1. **Check Roadmap**: Review our [project roadmap](https://github.com/your-org/janua/projects)
+1. **Check Roadmap**: Review our [project roadmap](https://github.com/madfam-io/janua/projects)
 2. **Search Issues**: Look for similar feature requests
 3. **Consider Scope**: Ensure feature aligns with project goals
 4. **Gather Feedback**: Discuss with community first
@@ -472,7 +472,7 @@ We use labels to categorize and prioritize issues:
 
 ### Community Resources
 - **[Code of Conduct](CODE_OF_CONDUCT.md)** - Community guidelines
-- **[GitHub Discussions](https://github.com/your-org/janua/discussions)** - Community Q&A
+- **[GitHub Discussions](https://github.com/madfam-io/janua/discussions)** - Community Q&A
 - **[Discord](https://discord.gg/janua-dev)** - Real-time chat
 - **[Stack Overflow](https://stackoverflow.com/questions/tagged/janua-api)** - Q&A platform
 
@@ -522,6 +522,6 @@ Thank you for contributing to Janua! Your contributions help make authentication
 
 <div align="center">
 
-**[⬅️ Back to Documentation](README.md)** • **[🚀 Development Guide](development/README.md)** • **[🐛 Report Bug](https://github.com/your-org/janua/issues/new?template=bug-report.md)**
+**[⬅️ Back to Documentation](README.md)** • **[🚀 Development Guide](development/README.md)** • **[🐛 Report Bug](https://github.com/madfam-io/janua/issues/new?template=bug-report.md)**
 
 </div>

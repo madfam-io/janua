@@ -19,6 +19,8 @@ import { RecentActivity } from '@/components/dashboard/recent-activity'
 import { IdentityList } from '@/components/identities/identity-list'
 import { SessionList } from '@/components/sessions/session-list'
 import { OrganizationList } from '@/components/organizations/organization-list'
+import { WebhookList } from '@/components/webhooks/webhook-list'
+import { AuditList } from '@/components/audit/audit-list'
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('overview')
@@ -236,9 +238,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">
-                  Webhook management coming soon...
-                </p>
+                <WebhookList />
               </CardContent>
             </Card>
           </TabsContent>
@@ -252,9 +252,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">
-                  Audit log viewer coming soon...
-                </p>
+                <AuditList />
               </CardContent>
             </Card>
           </TabsContent>

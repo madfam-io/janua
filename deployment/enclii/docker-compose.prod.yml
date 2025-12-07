@@ -1,0 +1,320 @@
+# Janua Production Docker Compose - Optimized for Enclii
+# MADFAM Port Allocation: 4100-4199 (Janua block)
+#
+# Services:
+#   - janua-api:       4100 (FastAPI backend)
+#   - janua-dashboard: 4101 (User dashboard - app.janua.dev)
+#   - janua-admin:     4102 (Admin panel - admin.janua.dev)
+#   - janua-docs:      4103 (Documentation - docs.janua.dev)
+#   - janua-website:   4104 (Marketing site - janua.dev)
+#
+# Enclii Integration:
+#   - All services expose ports on host network for Cloudflare tunnel routing
+#   - Health checks use wget (available in alpine) on internal port 3000
+#   - Resource limits set for predictable scheduling
+#   - Logging configured for centralized collection
+
+version: "3.8"
+
+services:
+  # =============================================================================
+  # Core Application Services
+  # =============================================================================
+
+  # API Service (FastAPI Backend)
+  janua-api:
+    image: janua/api:latest
+    container_name: janua-api
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - ENVIRONMENT=production
+      - PORT=4100
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - SENTRY_DSN=${SENTRY_DSN}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4100/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+        tag: "janua-api"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+    labels:
+      - "enclii.service=janua-api"
+      - "enclii.port=4100"
+      - "enclii.domain=api.janua.dev"
+      - "enclii.healthcheck=/health"
+
+  # Dashboard Frontend (app.janua.dev)
+  janua-dashboard:
+    image: janua/dashboard:latest
+    container_name: janua-dashboard
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - NODE_ENV=production
+      - PORT=4101
+      - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_API_URL=https://api.janua.dev
+      - NEXT_PUBLIC_APP_URL=https://app.janua.dev
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4101/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "janua-dashboard"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    labels:
+      - "enclii.service=janua-dashboard"
+      - "enclii.port=4101"
+      - "enclii.domain=app.janua.dev"
+
+  # Admin Panel (admin.janua.dev)
+  janua-admin:
+    image: janua/admin:latest
+    container_name: janua-admin
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - NODE_ENV=production
+      - PORT=4102
+      - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_API_URL=https://api.janua.dev
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4102/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "janua-admin"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    labels:
+      - "enclii.service=janua-admin"
+      - "enclii.port=4102"
+      - "enclii.domain=admin.janua.dev"
+
+  # Documentation Site (docs.janua.dev)
+  janua-docs:
+    image: janua/docs:latest
+    container_name: janua-docs
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - NODE_ENV=production
+      - PORT=4103
+      - HOSTNAME=0.0.0.0
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4103/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "janua-docs"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    labels:
+      - "enclii.service=janua-docs"
+      - "enclii.port=4103"
+      - "enclii.domain=docs.janua.dev"
+
+  # Public Website (janua.dev)
+  janua-website:
+    image: janua/website:latest
+    container_name: janua-website
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - NODE_ENV=production
+      - PORT=4104
+      - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_API_URL=https://api.janua.dev
+      - NEXT_PUBLIC_APP_URL=https://app.janua.dev
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4104/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "janua-website"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    labels:
+      - "enclii.service=janua-website"
+      - "enclii.port=4104"
+      - "enclii.domain=janua.dev"
+
+  # =============================================================================
+  # Data Services (Optional - can be external)
+  # =============================================================================
+
+  # PostgreSQL Database
+  # Note: For Enclii production, consider using managed database service
+  postgres:
+    image: postgres:15-alpine
+    container_name: janua-postgres
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-janua}
+      POSTGRES_USER: ${POSTGRES_USER:-janua}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGPORT: 5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-janua} -d ${POSTGRES_DB:-janua}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1.5G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    labels:
+      - "enclii.service=janua-postgres"
+      - "enclii.port=5432"
+      - "enclii.internal=true"
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: janua-redis
+    restart: unless-stopped
+    network_mode: host
+    command: redis-server --port 6379 --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    labels:
+      - "enclii.service=janua-redis"
+      - "enclii.port=6379"
+      - "enclii.internal=true"
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# =============================================================================
+# Enclii Deployment Notes
+# =============================================================================
+#
+# This compose file is optimized for Enclii with:
+#
+# 1. Host Network Mode:
+#    - All services bind directly to host ports (4100-4104)
+#    - Compatible with Cloudflare tunnel routing
+#    - No internal Docker networking complexity
+#
+# 2. Health Checks:
+#    - Use wget (available in alpine-based images)
+#    - Check the actual service port, not internal 3000
+#    - 60s start period for Next.js cold starts
+#
+# 3. Resource Limits:
+#    - CPU and memory limits for predictable scheduling
+#    - Reservations ensure minimum resources available
+#
+# 4. Logging:
+#    - JSON file driver with rotation
+#    - Tags for log aggregation (Loki, etc.)
+#
+# 5. Labels:
+#    - enclii.service: Service identifier
+#    - enclii.port: Exposed port number
+#    - enclii.domain: Public domain (for tunnel routing)
+#    - enclii.internal: Mark internal-only services
+#
+# Deployment Command:
+#   docker-compose -f docker-compose.prod.yml up -d
+#
+# Update Single Service:
+#   docker-compose -f docker-compose.prod.yml up -d --no-deps janua-api
+#
+# View Logs:
+#   docker-compose -f docker-compose.prod.yml logs -f janua-api

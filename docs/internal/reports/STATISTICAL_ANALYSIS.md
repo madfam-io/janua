@@ -1,7 +1,7 @@
 # Janua Codebase Statistical Analysis
 
 **Analysis Date:** September 12, 2025  
-**Repository:** https://github.com/aureolabs/janua  
+**Repository:** https://github.com/madfam-io/janua  
 **Analysis Scope:** Complete codebase excluding node_modules, .git, and .serena directories
 
 ## Executive Summary

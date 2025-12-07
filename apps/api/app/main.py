@@ -434,6 +434,13 @@ allowed_hosts = [
     # Docker internal hostnames for container-to-container communication
     "janua-api",
     "janua-api:8000",
+    # Production domains (madfam.io infrastructure)
+    "auth.madfam.io",
+    "*.madfam.io",
+    # Kubernetes internal networking (pod IPs, service names)
+    "janua-api.janua.svc.cluster.local",
+    "janua-api.janua.svc.cluster.local:8000",
+    "*",  # Allow all hosts for k8s health checks with pod IPs
 ]
 # Add test host for integration tests
 if settings.ENVIRONMENT == "test":

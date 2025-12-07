@@ -140,12 +140,12 @@ We welcome documentation contributions! See our [Documentation Contributing Guid
 ## 🆘 Getting Help
 
 ### Documentation Issues
-- **Missing Content**: [Request Documentation](https://github.com/your-org/janua/issues/new?template=documentation.md)
-- **Unclear Sections**: [Suggest Improvements](https://github.com/your-org/janua/issues/new?template=documentation-improvement.md)
-- **Technical Errors**: [Report Issues](https://github.com/your-org/janua/issues/new?template=bug-report.md)
+- **Missing Content**: [Request Documentation](https://github.com/madfam-io/janua/issues/new?template=documentation.md)
+- **Unclear Sections**: [Suggest Improvements](https://github.com/madfam-io/janua/issues/new?template=documentation-improvement.md)
+- **Technical Errors**: [Report Issues](https://github.com/madfam-io/janua/issues/new?template=bug-report.md)
 
 ### Community Support
-- **GitHub Discussions**: [Community Q&A](https://github.com/your-org/janua/discussions)
+- **GitHub Discussions**: [Community Q&A](https://github.com/madfam-io/janua/discussions)
 - **Discord**: [Developer Community](https://discord.gg/janua-dev)
 - **Stack Overflow**: [janua-api tag](https://stackoverflow.com/questions/tagged/janua-api)
 

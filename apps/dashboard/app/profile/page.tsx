@@ -9,19 +9,26 @@ import { Avatar, AvatarFallback, AvatarImage } from '@janua/ui'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@janua/ui'
 import { Badge } from '@janua/ui'
 import { Separator } from '@janua/ui'
-import { 
-  User, 
-  Mail, 
-  Shield, 
-  Key, 
+import {
+  User,
+  Mail,
+  Shield,
+  Key,
   Trash2,
   Edit3,
   Calendar,
   Activity,
   Monitor,
   Smartphone,
-  MapPin
+  MapPin,
+  Loader2,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react'
+import { apiCall } from '../../lib/auth'
+
+// API base URL for production
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.janua.dev'
 
 interface UserProfile {
   id: string
@@ -38,17 +45,28 @@ interface UserProfile {
 interface UserSession {
   id: string
   device_name: string | null
+  device_type: string | null
+  browser: string | null
+  os: string | null
   ip_address: string | null
   user_agent: string | null
   created_at: string
   last_activity_at: string
+  expires_at: string
   is_current: boolean
+  revoked: boolean
+}
+
+interface SessionsResponse {
+  sessions: UserSession[]
+  total: number
 }
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [sessions, setSessions] = useState<UserSession[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [formData, setFormData] = useState({ name: '', avatar_url: '' })
@@ -58,67 +76,90 @@ export default function ProfilePage() {
     confirm_password: ''
   })
 
-  // Mock data for beta demonstration
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setProfile({
-        id: 'user-123',
-        email: 'user@janua.dev',
-        name: 'Beta User',
-        avatar_url: null,
-        email_verified: true,
-        created_at: '2025-09-10T10:00:00Z',
-        updated_at: '2025-09-10T15:30:00Z',
-        last_login_at: '2025-09-10T23:15:00Z',
-        is_active: true
-      })
-
-      setSessions([
-        {
-          id: 'session-1',
-          device_name: 'MacBook Pro',
-          ip_address: '192.168.1.100',
-          user_agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-          created_at: '2025-09-10T10:00:00Z',
-          last_activity_at: '2025-09-10T23:15:00Z',
-          is_current: true
-        },
-        {
-          id: 'session-2',
-          device_name: 'iPhone',
-          ip_address: '192.168.1.101',
-          user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
-          created_at: '2025-09-09T14:20:00Z',
-          last_activity_at: '2025-09-10T18:45:00Z',
-          is_current: false
-        }
-      ])
-
-      setFormData({
-        name: 'Beta User',
-        avatar_url: ''
-      })
-
-      setLoading(false)
-    }, 1000)
+    fetchProfileData()
   }, [])
 
-  const handleUpdateProfile = async () => {
-    setUpdating(true)
-    // Simulate API call
-    setTimeout(() => {
-      if (profile) {
-        setProfile({
-          ...profile,
-          name: formData.name,
-          avatar_url: formData.avatar_url || null,
-          updated_at: new Date().toISOString()
-        })
+  const fetchProfileData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Fetch profile and sessions in parallel
+      const [profileResponse, sessionsResponse] = await Promise.all([
+        apiCall(`${API_BASE_URL}/api/v1/auth/me`),
+        apiCall(`${API_BASE_URL}/api/v1/sessions/`)
+      ])
+
+      if (!profileResponse.ok) {
+        throw new Error('Failed to fetch profile')
       }
+
+      const profileData = await profileResponse.json()
+
+      // Transform API response to match our interface
+      const userProfile: UserProfile = {
+        id: profileData.id || profileData.sub,
+        email: profileData.email,
+        name: profileData.name || profileData.full_name || null,
+        avatar_url: profileData.avatar_url || profileData.picture || null,
+        email_verified: profileData.email_verified ?? true,
+        created_at: profileData.created_at || new Date().toISOString(),
+        updated_at: profileData.updated_at || new Date().toISOString(),
+        last_login_at: profileData.last_login_at || profileData.last_sign_in_at || null,
+        is_active: profileData.is_active ?? true
+      }
+
+      setProfile(userProfile)
+      setFormData({
+        name: userProfile.name || '',
+        avatar_url: userProfile.avatar_url || ''
+      })
+
+      // Handle sessions response
+      if (sessionsResponse.ok) {
+        const sessionsData: SessionsResponse = await sessionsResponse.json()
+        setSessions(sessionsData.sessions || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch profile data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load profile')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUpdateProfile = async () => {
+    if (!profile) return
+
+    setUpdating(true)
+    try {
+      const response = await apiCall(`${API_BASE_URL}/api/v1/auth/me`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: formData.name,
+          avatar_url: formData.avatar_url || null
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile')
+      }
+
+      const updatedData = await response.json()
+      setProfile({
+        ...profile,
+        name: updatedData.name || formData.name,
+        avatar_url: updatedData.avatar_url || formData.avatar_url || null,
+        updated_at: new Date().toISOString()
+      })
       setEditMode(false)
+    } catch (err) {
+      console.error('Failed to update profile:', err)
+      alert(err instanceof Error ? err.message : 'Failed to update profile')
+    } finally {
       setUpdating(false)
-    }, 500)
+    }
   }
 
   const handleChangePassword = async () => {
@@ -126,29 +167,86 @@ export default function ProfilePage() {
       alert('Passwords do not match')
       return
     }
-    
+
     setUpdating(true)
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const response = await apiCall(`${API_BASE_URL}/api/v1/auth/change-password`, {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: passwordData.current_password,
+          new_password: passwordData.new_password
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to change password')
+      }
+
       alert('Password changed successfully')
       setPasswordData({ current_password: '', new_password: '', confirm_password: '' })
+    } catch (err) {
+      console.error('Failed to change password:', err)
+      alert(err instanceof Error ? err.message : 'Failed to change password')
+    } finally {
       setUpdating(false)
-    }, 500)
+    }
   }
 
   const handleRevokeSession = async (sessionId: string) => {
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const response = await apiCall(`${API_BASE_URL}/api/v1/sessions/${sessionId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to revoke session')
+      }
+
       setSessions(sessions.filter(s => s.id !== sessionId))
-    }, 300)
+    } catch (err) {
+      console.error('Failed to revoke session:', err)
+      alert(err instanceof Error ? err.message : 'Failed to revoke session')
+    }
   }
 
-  const getDeviceIcon = (userAgent: string | null) => {
-    if (!userAgent) return <Monitor className="h-4 w-4" />
-    if (userAgent.includes('iPhone') || userAgent.includes('Android')) {
+  const handleRevokeAllSessions = async () => {
+    try {
+      const response = await apiCall(`${API_BASE_URL}/api/v1/sessions/`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to revoke sessions')
+      }
+
+      // Refresh sessions list - should only show current session
+      const sessionsResponse = await apiCall(`${API_BASE_URL}/api/v1/sessions/`)
+      if (sessionsResponse.ok) {
+        const sessionsData: SessionsResponse = await sessionsResponse.json()
+        setSessions(sessionsData.sessions || [])
+      }
+    } catch (err) {
+      console.error('Failed to revoke all sessions:', err)
+      alert(err instanceof Error ? err.message : 'Failed to revoke sessions')
+    }
+  }
+
+  const getDeviceIcon = (session: UserSession) => {
+    const deviceType = session.device_type?.toLowerCase() || ''
+    const userAgent = session.user_agent?.toLowerCase() || ''
+
+    if (deviceType === 'mobile' || userAgent.includes('iphone') || userAgent.includes('android')) {
       return <Smartphone className="h-4 w-4" />
     }
     return <Monitor className="h-4 w-4" />
+  }
+
+  const getDeviceName = (session: UserSession) => {
+    if (session.device_name) return session.device_name
+    if (session.browser && session.os) return `${session.browser} on ${session.os}`
+    if (session.device_type) return session.device_type
+    return 'Unknown Device'
   }
 
   const formatDate = (dateString: string) => {
@@ -165,8 +263,24 @@ export default function ProfilePage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">Loading profile...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Failed to Load Profile</h2>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <Button onClick={fetchProfileData} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Try Again
+          </Button>
         </div>
       </div>
     )
@@ -301,8 +415,8 @@ export default function ProfilePage() {
                       <Button onClick={handleUpdateProfile} disabled={updating}>
                         {updating ? 'Saving...' : 'Save Changes'}
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => {
                           setEditMode(false)
                           setFormData({
@@ -424,51 +538,70 @@ export default function ProfilePage() {
           <TabsContent value="sessions" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Monitor className="h-5 w-5" />
-                  <span>Active Sessions</span>
-                </CardTitle>
-                <CardDescription>
-                  Manage devices that are signed in to your account
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Monitor className="h-5 w-5" />
+                      <span>Active Sessions</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Manage devices that are signed in to your account
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchProfileData}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {sessions.map((session) => (
-                  <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      {getDeviceIcon(session.user_agent)}
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-medium">
-                            {session.device_name || 'Unknown Device'}
-                          </span>
-                          {session.is_current && (
-                            <Badge variant="default" className="text-xs">Current</Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                          <div className="flex items-center space-x-1">
-                            <MapPin className="h-3 w-3" />
-                            <span>{session.ip_address}</span>
+                {sessions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No active sessions found
+                  </div>
+                ) : (
+                  sessions.map((session) => (
+                    <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        {getDeviceIcon(session)}
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium">
+                              {getDeviceName(session)}
+                            </span>
+                            {session.is_current && (
+                              <Badge variant="default" className="text-xs">Current</Badge>
+                            )}
+                            {session.revoked && (
+                              <Badge variant="destructive" className="text-xs">Revoked</Badge>
+                            )}
                           </div>
-                          <div className="flex items-center space-x-1">
-                            <Activity className="h-3 w-3" />
-                            <span>Last active {formatDate(session.last_activity_at)}</span>
+                          <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                            {session.ip_address && (
+                              <div className="flex items-center space-x-1">
+                                <MapPin className="h-3 w-3" />
+                                <span>{session.ip_address}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center space-x-1">
+                              <Activity className="h-3 w-3" />
+                              <span>Last active {formatDate(session.last_activity_at)}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
+                      {!session.is_current && !session.revoked && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRevokeSession(session.id)}
+                        >
+                          Revoke
+                        </Button>
+                      )}
                     </div>
-                    {!session.is_current && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRevokeSession(session.id)}
-                      >
-                        Revoke
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  ))
+                )}
 
                 <Separator />
 
@@ -479,7 +612,7 @@ export default function ProfilePage() {
                       This will sign you out on all devices except this one
                     </p>
                   </div>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={handleRevokeAllSessions}>
                     Sign Out All
                   </Button>
                 </div>
