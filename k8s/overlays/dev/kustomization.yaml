@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: janua
+
+resources:
+  - ../../base
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/3/value
+        value: development
+    target:
+      kind: Deployment
+      name: janua-api
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/5/value
+        value: http://localhost:4100
+    target:
+      kind: Deployment
+      name: janua-api
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/8/value
+        value: "http://localhost:3000,http://localhost:4101,http://localhost:4200,http://localhost:4201"
+    target:
+      kind: Deployment
+      name: janua-api
+
+# Use local images for dev
+images:
+  - name: localhost:5000/janua-api
+    newName: janua-api
+    newTag: latest
+  - name: localhost:5000/janua-dashboard
+    newName: janua-dashboard
+    newTag: latest
+  - name: localhost:5000/janua-admin
+    newName: janua-admin
+    newTag: latest
+  - name: localhost:5000/janua-docs
+    newName: janua-docs
+    newTag: latest
+  - name: localhost:5000/janua-website
+    newName: janua-website
+    newTag: latest

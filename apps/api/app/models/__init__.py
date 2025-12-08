@@ -65,6 +65,19 @@ class User(Base):
     oauth_accounts = relationship("OAuthAccount", back_populates="user", cascade="all, delete-orphan")
     passkeys = relationship("Passkey", back_populates="user", cascade="all, delete-orphan")
 
+    @property
+    def name(self) -> str | None:
+        """Return full name from first_name and last_name, or display_name, or None."""
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        elif self.first_name:
+            return self.first_name
+        elif self.last_name:
+            return self.last_name
+        elif self.display_name:
+            return self.display_name
+        return None
+
 
 class Organization(Base):
     __tablename__ = "organizations"
@@ -240,6 +253,25 @@ class OAuthClient(Base):
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def verify_secret(self, plain_secret: str) -> bool:
+        """
+        Verify a plain-text client secret against the stored hash.
+
+        Args:
+            plain_secret: The plain-text secret to verify
+
+        Returns:
+            True if the secret matches, False otherwise
+        """
+        import bcrypt
+        try:
+            return bcrypt.checkpw(
+                plain_secret.encode('utf-8'),
+                self.client_secret_hash.encode('utf-8')
+            )
+        except Exception:
+            return False
 
 
 class Passkey(Base):

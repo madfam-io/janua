@@ -94,6 +94,9 @@ from app.routers.v1 import (
     oauth_clients as oauth_clients_v1,
 )
 from app.routers.v1 import (
+    oauth_provider as oauth_provider_v1,
+)
+from app.routers.v1 import (
     organization_members as organization_members_v1,
 )
 from app.routers.v1 import (
@@ -556,19 +559,24 @@ async def test_json_endpoint(data: dict):
 # OpenID Connect discovery endpoints
 @app.get("/.well-known/openid-configuration")
 def openid_configuration():
-    base_url = settings.BASE_URL or "https://api.janua.dev"
+    base_url = settings.BASE_URL or "https://auth.madfam.io"
     return {
-        "issuer": settings.BASE_URL or "https://janua.dev",
-        "authorization_endpoint": f"{base_url}/auth/authorize",
-        "token_endpoint": f"{base_url}/auth/token",
-        "userinfo_endpoint": f"{base_url}/auth/userinfo",
+        "issuer": base_url,
+        "authorization_endpoint": f"{base_url}/api/v1/oauth/authorize",
+        "token_endpoint": f"{base_url}/api/v1/oauth/token",
+        "userinfo_endpoint": f"{base_url}/api/v1/oauth/userinfo",
         "jwks_uri": f"{base_url}/.well-known/jwks.json",
-        "response_types_supported": ["code", "id_token", "code id_token"],
+        "introspection_endpoint": f"{base_url}/api/v1/oauth/introspect",
+        "revocation_endpoint": f"{base_url}/api/v1/oauth/revoke",
+        "response_types_supported": ["code"],
+        "response_modes_supported": ["query"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"],
         "scopes_supported": ["openid", "profile", "email"],
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
-        "claims_supported": ["sub", "email", "name", "given_name", "family_name", "picture"],
+        "claims_supported": ["sub", "email", "email_verified", "name", "given_name", "family_name", "picture", "updated_at"],
+        "code_challenge_methods_supported": ["S256", "plain"],
     }
 
 
@@ -595,89 +603,100 @@ async def performance_metrics():
 @app.get("/metrics")
 async def prometheus_metrics():
     """Prometheus metrics endpoint"""
-    import time
-
     from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, generate_latest
     from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily, HistogramMetricFamily
     from starlette.responses import Response
 
+    class JanuaMetricsCollector:
+        """Custom collector that implements the collect() method for prometheus_client"""
+
+        def collect(self):
+            try:
+                import psutil
+
+                # System metrics
+                system_cpu = GaugeMetricFamily(
+                    "janua_system_cpu_percent", "System CPU usage percentage"
+                )
+                system_cpu.add_metric([], psutil.cpu_percent())
+                yield system_cpu
+
+                system_memory = GaugeMetricFamily(
+                    "janua_system_memory_percent", "System memory usage percentage"
+                )
+                system_memory.add_metric([], psutil.virtual_memory().percent)
+                yield system_memory
+
+                system_disk = GaugeMetricFamily(
+                    "janua_system_disk_free_bytes", "System disk free space in bytes"
+                )
+                system_disk.add_metric([], psutil.disk_usage("/").free)
+                yield system_disk
+
+                # Application health
+                app_health = GaugeMetricFamily(
+                    "janua_app_health_status",
+                    "Application health status (1=healthy, 0=unhealthy)",
+                )
+                app_health.add_metric([], 1)
+                yield app_health
+
+                # API metrics (sample data - in production from metrics_collector)
+                http_requests = CounterMetricFamily(
+                    "janua_http_requests_total",
+                    "Total HTTP requests",
+                    labels=["method", "endpoint", "status_code"],
+                )
+                http_requests.add_metric(["GET", "/health", "200"], 100)
+                http_requests.add_metric(["POST", "/api/v1/auth/login", "200"], 50)
+                http_requests.add_metric(["GET", "/metrics", "200"], 25)
+                yield http_requests
+
+                # Response time histogram
+                response_duration = HistogramMetricFamily(
+                    "janua_http_request_duration_seconds",
+                    "HTTP request duration in seconds",
+                    labels=["method", "endpoint"],
+                )
+                response_duration.add_metric(
+                    ["GET", "/health"],
+                    buckets=[
+                        ("0.01", 80),
+                        ("0.05", 95),
+                        ("0.1", 98),
+                        ("0.5", 100),
+                        ("+Inf", 100),
+                    ],
+                    sum_value=2.5,
+                )
+                yield response_duration
+
+                # Database connection pool
+                db_connections = GaugeMetricFamily(
+                    "janua_database_connections_active", "Active database connections"
+                )
+                db_connections.add_metric([], 5)
+                yield db_connections
+
+                # Redis connection status
+                redis_connected = GaugeMetricFamily(
+                    "janua_redis_connected",
+                    "Redis connection status (1=connected, 0=disconnected)",
+                )
+                redis_connected.add_metric([], 1)
+                yield redis_connected
+
+            except Exception:
+                # Fallback metric if system monitoring fails
+                error_metric = GaugeMetricFamily(
+                    "janua_metrics_collection_errors_total",
+                    "Total metrics collection errors",
+                )
+                error_metric.add_metric([], 1)
+                yield error_metric
+
     registry = CollectorRegistry()
-
-    try:
-        # System metrics
-        system_cpu = GaugeMetricFamily("janua_system_cpu_percent", "System CPU usage percentage")
-        system_memory = GaugeMetricFamily(
-            "janua_system_memory_percent", "System memory usage percentage"
-        )
-        system_disk = GaugeMetricFamily(
-            "janua_system_disk_free_bytes", "System disk free space in bytes"
-        )
-
-        # Collect system metrics if monitor is available
-        import psutil
-
-        system_cpu.add_metric([], psutil.cpu_percent())
-        system_memory.add_metric([], psutil.virtual_memory().percent)
-        system_disk.add_metric([], psutil.disk_usage("/").free)
-
-        registry.register(lambda: [system_cpu])
-        registry.register(lambda: [system_memory])
-        registry.register(lambda: [system_disk])
-
-        # Application health
-        app_health = GaugeMetricFamily(
-            "janua_app_health_status", "Application health status (1=healthy, 0=unhealthy)"
-        )
-        app_health.add_metric([], 1)  # Always 1 if this endpoint responds
-        registry.register(lambda: [app_health])
-
-        # API metrics (would be populated from monitoring service in production)
-        http_requests = CounterMetricFamily(
-            "janua_http_requests_total",
-            "Total HTTP requests",
-            labels=["method", "endpoint", "status_code"],
-        )
-        # Add sample data - in production this would come from metrics_collector
-        http_requests.add_metric(["GET", "/health", "200"], 100)
-        http_requests.add_metric(["POST", "/api/v1/auth/login", "200"], 50)
-        http_requests.add_metric(["GET", "/metrics", "200"], 25)
-        registry.register(lambda: [http_requests])
-
-        # Response time histogram
-        response_duration = HistogramMetricFamily(
-            "janua_http_request_duration_seconds",
-            "HTTP request duration in seconds",
-            labels=["method", "endpoint"],
-        )
-        # Sample histogram data
-        response_duration.add_metric(
-            ["GET", "/health"],
-            buckets=[("0.01", 80), ("0.05", 95), ("0.1", 98), ("0.5", 100), ("+Inf", 100)],
-            sum_value=2.5,
-        )
-        registry.register(lambda: [response_duration])
-
-        # Database connection pool
-        db_connections = GaugeMetricFamily(
-            "janua_database_connections_active", "Active database connections"
-        )
-        db_connections.add_metric([], 5)  # Sample data
-        registry.register(lambda: [db_connections])
-
-        # Redis connection status
-        redis_connected = GaugeMetricFamily(
-            "janua_redis_connected", "Redis connection status (1=connected, 0=disconnected)"
-        )
-        redis_connected.add_metric([], 1)  # Sample data
-        registry.register(lambda: [redis_connected])
-
-    except Exception as e:
-        # Fallback metrics if system monitoring fails
-        error_metric = GaugeMetricFamily(
-            "janua_metrics_collection_errors_total", "Total metrics collection errors"
-        )
-        error_metric.add_metric([], 1)
-        registry.register(lambda: [error_metric])
+    registry.register(JanuaMetricsCollector())
 
     return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
@@ -916,6 +935,7 @@ app.include_router(health_v1.router, prefix="/api/v1")
 app.include_router(auth_v1.router, prefix="/api/v1")
 app.include_router(oauth_v1.router, prefix="/api/v1")
 app.include_router(oauth_clients_v1.router, prefix="/api/v1")
+app.include_router(oauth_provider_v1.router, prefix="/api/v1")
 app.include_router(users_v1.router, prefix="/api/v1")
 app.include_router(sessions_v1.router, prefix="/api/v1")
 app.include_router(organizations_v1.router, prefix="/api/v1")

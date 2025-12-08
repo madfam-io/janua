@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janua-docs
+  namespace: janua
+  labels:
+    app: janua-docs
+    app.kubernetes.io/name: janua-docs
+    app.kubernetes.io/component: docs
+    app.kubernetes.io/part-of: janua
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: janua-docs
+  template:
+    metadata:
+      labels:
+        app: janua-docs
+    spec:
+      containers:
+        - name: janua-docs
+          image: localhost:5000/janua-docs:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4103
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "4103"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4103
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4103
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet

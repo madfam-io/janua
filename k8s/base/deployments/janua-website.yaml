@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janua-website
+  namespace: janua
+  labels:
+    app: janua-website
+    app.kubernetes.io/name: janua-website
+    app.kubernetes.io/component: website
+    app.kubernetes.io/part-of: janua
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: janua-website
+  template:
+    metadata:
+      labels:
+        app: janua-website
+    spec:
+      containers:
+        - name: janua-website
+          image: localhost:5000/janua-website:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4104
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "4104"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4104
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4104
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet

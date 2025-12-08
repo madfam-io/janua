@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: janua
+
+resources:
+  - namespace.yaml
+  - deployments/janua-api.yaml
+  - deployments/janua-dashboard.yaml
+  - deployments/janua-admin.yaml
+  - deployments/janua-docs.yaml
+  - deployments/janua-website.yaml
+  - services/janua-api.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: janua
+  app.kubernetes.io/managed-by: kustomize

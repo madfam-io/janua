@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janua-api
+  namespace: janua
+  labels:
+    app: janua-api
+    app.kubernetes.io/name: janua-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: janua
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: janua-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: janua-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4100"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: janua-api
+          image: localhost:5000/janua-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4100
+              name: http
+              protocol: TCP
+          env:
+            # Required - from secrets
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: redis-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: jwt-secret
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: secret-key
+            # Configuration
+            - name: PORT
+              value: "4100"
+            - name: ENVIRONMENT
+              value: production
+            - name: LOG_LEVEL
+              value: info
+            - name: BASE_URL
+              value: https://api.janua.dev
+            # Email
+            - name: EMAIL_PROVIDER
+              value: resend
+            - name: EMAIL_FROM
+              value: noreply@janua.dev
+            # CORS
+            - name: CORS_ORIGINS
+              value: "https://admin.janua.dev,https://app.janua.dev,https://api.enclii.dev,https://app.enclii.dev"
+            # Features
+            - name: ENABLE_DOCS
+              value: "true"
+            - name: ENABLE_SIGNUPS
+              value: "true"
+            - name: ENABLE_OAUTH
+              value: "true"
+            - name: ENABLE_MFA
+              value: "true"
+            - name: ENABLE_MAGIC_LINKS
+              value: "true"
+            - name: ENABLE_ORGANIZATIONS
+              value: "true"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4100
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4100
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 4100
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 5
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janua-admin
+  namespace: janua
+  labels:
+    app: janua-admin
+    app.kubernetes.io/name: janua-admin
+    app.kubernetes.io/component: admin
+    app.kubernetes.io/part-of: janua
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: janua-admin
+  template:
+    metadata:
+      labels:
+        app: janua-admin
+    spec:
+      containers:
+        - name: janua-admin
+          image: localhost:5000/janua-admin:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4102
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "4102"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4102
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4102
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
