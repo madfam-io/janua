@@ -57,9 +57,9 @@ ENV DATABASE_URL="" \
     EMAIL_PROVIDER="" \
     LOG_LEVEL="info"
 
-EXPOSE 8000
+EXPOSE 4100
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:4100/health')" || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "4100", "--workers", "2"]

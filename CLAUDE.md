@@ -142,7 +142,7 @@ Per [MADFAM Ecosystem Standard](https://github.com/madfam-io/solarpunk-foundry/b
 | WebSocket | 4120 | janua-ws | - |
 | Metrics | 4190 | janua-metrics | - |
 
-**Note**: Production currently uses legacy ports (8000, 8010, 3001). Migration to standard ports is tracked in the stabilization roadmap.
+**Note**: Production now uses standard MADFAM ports. API runs on port 4100 via kubectl port-forward service (`janua-port-forward.service`).
 
 ---
 
@@ -173,8 +173,13 @@ Per [MADFAM Ecosystem Standard](https://github.com/madfam-io/solarpunk-foundry/b
 
 ## API Reference
 
-**Base URL**: `http://localhost:4100`  
-**OpenAPI Docs**: `http://localhost:4100/docs`
+**Local Base URL**: `http://localhost:4100`
+**Production Base URL**: `https://api.janua.dev`
+**OpenAPI Docs**: `/docs`
+
+### Production Endpoints
+- `https://api.janua.dev` - Main API
+- `https://auth.madfam.io` - Auth alias (same API)
 
 ### Key Endpoints
 ```
@@ -333,6 +338,28 @@ kubectl apply -f k8s/
 ```bash
 enclii deploy --service janua
 ```
+
+### Production Infrastructure
+**Server**: foundry-core (95.217.198.239) via Cloudflare Tunnel `ssh.madfam.io`
+**K8s Cluster**: K3s single-node
+**Namespace**: janua
+
+**Active Services**:
+| Service | Type | Notes |
+|---------|------|-------|
+| janua-api | Deployment | Port 4100, ClusterIP |
+| janua-dashboard | Deployment | Port 4101 |
+| janua-admin | Deployment | Port 4102 |
+| janua-docs | Deployment | Port 4103 |
+| janua-website | Deployment | Port 4104 |
+
+**Cloudflare Tunnels**:
+- `janua-prod` - Routes api.janua.dev, auth.madfam.io, app.janua.dev, etc.
+- `foundry-prod` - Routes ssh.madfam.io (SSH access)
+
+**SystemD Services**:
+- `janua-port-forward.service` - kubectl port-forward for API
+- `cloudflared-janua.service` - Cloudflare tunnel connector
 
 ---
 

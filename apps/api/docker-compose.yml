@@ -30,13 +30,13 @@ services:
   api:
     build: .
     ports:
-      - "8000:8000"
+      - "4100:4100"
     environment:
       DATABASE_URL: postgresql://janua:janua_dev@postgres:5432/janua_db
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: dev-secret-key-change-in-production
       DEBUG: "true"
-      PORT: "8000"
+      PORT: "4100"
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,7 +44,7 @@ services:
         condition: service_healthy
     volumes:
       - ./app:/app/app
-    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 4100 --reload"
 
 volumes:
   postgres_data:

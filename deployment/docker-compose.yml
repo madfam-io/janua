@@ -15,24 +15,24 @@ services:
       JWT_SECRET_KEY: dev-shared-janua-secret-32chars!!
       DEBUG: "true"
       ENVIRONMENT: development
-      BASE_URL: http://localhost:8001
+      BASE_URL: http://localhost:4100
       CORS_ORIGINS: http://localhost:3000,http://localhost:3001,http://localhost:3004,http://localhost:3005
       EMAIL_PROVIDER: smtp
       SMTP_HOST: localhost
       SMTP_PORT: "1025"
       SMTP_FROM_EMAIL: noreply@janua.local
     ports:
-      - "8001:8000"
+      - "4100:4100"
     volumes:
       - ../apps/api:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 4100 --reload
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4100/health')",
         ]
       interval: 30s
       timeout: 10s

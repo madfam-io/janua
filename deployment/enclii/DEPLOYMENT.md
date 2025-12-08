@@ -13,7 +13,7 @@ This guide covers deploying Janua authentication platform using Enclii, MADFAM's
 
 ```bash
 # 1. Clone and navigate to deployment
-cd /opt/janua
+cd /opt/solarpunk/janua
 git clone https://github.com/madfam-io/janua.git .
 cd deployment/enclii
 

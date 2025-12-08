@@ -19,9 +19,9 @@ services:
       # Internal API - Service-to-service communication for MADFAM apps
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     ports:
-      - "4100:8000"  # MADFAM standard: 4100 = Janua API
+      - "4100:4100"  # MADFAM standard: 4100 = Janua API
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:4100/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -160,7 +160,7 @@ services:
       - NODE_ENV=production
       # INTERNAL_API_URL: Server-side API route calls (runtime, internal network)
       # Uses Docker network hostname for container-to-container communication
-      - INTERNAL_API_URL=http://janua-api:8000
+      - INTERNAL_API_URL=http://janua-api:4100
       # NEXT_PUBLIC_API_URL: Client-side calls (build-time, external URL)
       - NEXT_PUBLIC_API_URL=https://api.janua.dev
       - NEXT_PUBLIC_APP_URL=https://app.janua.dev
