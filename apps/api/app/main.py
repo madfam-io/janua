@@ -230,7 +230,7 @@ system_monitor = SystemMonitor(metrics_collector)
 
 app = FastAPI(
     title="Janua Authentication API",
-    version="1.0.0",
+    version="0.1.0",
     description="""
 # Janua Authentication Platform
 
@@ -434,6 +434,7 @@ allowed_hosts = [
     "janua.dev",
     "*.janua.dev",
     "api.janua.dev",
+    "docs.janua.dev",
     "localhost",
     "localhost:4100",
     "127.0.0.1",
@@ -444,14 +445,12 @@ allowed_hosts = [
     # Production domains (madfam.io infrastructure)
     "auth.madfam.io",
     "*.madfam.io",
-    # Kubernetes internal networking (pod IPs, service names)
+    # Kubernetes internal networking (service names)
     "janua-api.janua.svc.cluster.local",
     "janua-api.janua.svc.cluster.local:4100",
-    # K3s pod network CIDR - allows health checks from kubelet using pod IPs
-    # K3s default: 10.42.0.0/16, this covers the common IP patterns
-    "10.42.*.*",
-    "10.42.*.*:4100",
-    # Note: Wildcard removed for security. K8s health checks use service name or pod IPs.
+    # Note: K8s health probes use Host header matching service name, not pod IPs.
+    # TrustedHostMiddleware doesn't support IP wildcards (10.42.*.*).
+    # If health checks fail, configure probes to use service hostname.
 ]
 # Add test host for integration tests
 if settings.ENVIRONMENT == "test":
@@ -868,8 +867,8 @@ def api_status():
         beta_endpoints = ["/beta/signup", "/beta/signin"]
 
     return {
-        "status": "Janua API v1.0.0 operational",
-        "version": "1.0.0",
+        "status": "Janua API v0.1.0 operational",
+        "version": "0.1.0",
         "authentication": "JWT with refresh tokens",
         "infrastructure": "Railway PostgreSQL + Redis",
         "endpoints": {
