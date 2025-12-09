@@ -368,7 +368,7 @@ Janua uses self-hosted infrastructure via MADFAM's Enclii DevOps solution on Het
 enclii deploy --service janua-api
 
 # Or manually via Docker
-ssh root@95.217.198.239 'cd /opt/solarpunk/janua && docker-compose -f deployment/production/docker-compose.production.yml up -d janua-api'
+ssh ssh.madfam.io 'cd /opt/solarpunk/janua && sudo docker-compose -f deployment/production/docker-compose.production.yml up -d janua-api'
 ```
 
 ### Docker (Local/Staging)

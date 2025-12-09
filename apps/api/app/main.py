@@ -282,7 +282,7 @@ Rate limit headers returned in response:
 
 - **Production**: https://api.janua.dev
 - **Staging**: https://staging-api.janua.dev
-- **Development**: http://localhost:8000
+- **Development**: http://localhost:4100
 
 ## Support
 
@@ -381,7 +381,7 @@ Rate limit headers returned in response:
             "description": "Staging server",
         },
         {
-            "url": "http://localhost:8000",
+            "url": "http://localhost:4100",
             "description": "Local development server",
         },
     ],
@@ -429,21 +429,29 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 #     app.add_middleware(HTTPSRedirectMiddleware)
 
 # Add trusted host middleware
+# Port 4100 per PORT_ALLOCATION.md in solarpunk-foundry (Janua block: 4100-4199)
 allowed_hosts = [
     "janua.dev",
     "*.janua.dev",
+    "api.janua.dev",
     "localhost",
+    "localhost:4100",
     "127.0.0.1",
+    "127.0.0.1:4100",
     # Docker internal hostnames for container-to-container communication
     "janua-api",
-    "janua-api:8000",
+    "janua-api:4100",
     # Production domains (madfam.io infrastructure)
     "auth.madfam.io",
     "*.madfam.io",
     # Kubernetes internal networking (pod IPs, service names)
     "janua-api.janua.svc.cluster.local",
-    "janua-api.janua.svc.cluster.local:8000",
-    "*",  # Allow all hosts for k8s health checks with pod IPs
+    "janua-api.janua.svc.cluster.local:4100",
+    # K3s pod network CIDR - allows health checks from kubelet using pod IPs
+    # K3s default: 10.42.0.0/16, this covers the common IP patterns
+    "10.42.*.*",
+    "10.42.*.*:4100",
+    # Note: Wildcard removed for security. K8s health checks use service name or pod IPs.
 ]
 # Add test host for integration tests
 if settings.ENVIRONMENT == "test":
@@ -500,37 +508,36 @@ app.add_middleware(
     ],
 )
 
-# In-memory fallback storage for beta endpoints
-BETA_USERS = {}
-
-
-# Simple models
-class SignUpRequest(BaseModel):
-    email: str
-    password: str
-    name: str = "Beta User"
-
-
-class SignInRequest(BaseModel):
-    email: str
-    password: str
-
-
 # Direct Redis connection using Railway environment variables
 async def get_redis_client():
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     return redis.from_url(redis_url, decode_responses=True)
 
 
-# Secure password hashing functions
-def hash_password(password: str) -> str:
-    """Hash password using bcrypt with salt"""
-    return pwd_context.hash(password)
+# Beta endpoint support (only when ENABLE_BETA_ENDPOINTS=true)
+# SECURITY: These are disabled by default and should only be used for development/testing
+if settings.ENABLE_BETA_ENDPOINTS:
+    # In-memory fallback storage for beta endpoints
+    BETA_USERS: dict = {}
 
+    # Simple models for beta endpoints
+    class SignUpRequest(BaseModel):
+        email: str
+        password: str
+        name: str = "Beta User"
 
-def verify_password(password: str, hashed: str) -> bool:
-    """Verify password against bcrypt hash"""
-    return pwd_context.verify(password, hashed)
+    class SignInRequest(BaseModel):
+        email: str
+        password: str
+
+    # Secure password hashing functions for beta endpoints
+    def hash_password(password: str) -> str:
+        """Hash password using bcrypt with salt"""
+        return pwd_context.hash(password)
+
+    def verify_password(password: str, hashed: str) -> bool:
+        """Verify password against bcrypt hash"""
+        return pwd_context.verify(password, hashed)
 
 
 # Root endpoint
@@ -737,184 +744,136 @@ async def ready_check():
     return checks
 
 
-# Beta authentication with direct Redis operations
-@app.post("/beta/signup")
-@limiter.limit("5/minute")
-async def beta_signup(request: Request, signup_request: SignUpRequest):
-    try:
-        # Validate
-        if len(signup_request.password) < 8:
-            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+# Beta endpoints - SECURITY: Gated behind ENABLE_BETA_ENDPOINTS flag
+# These endpoints bypass standard auth flows and should only be enabled for development/testing
+# NOTE: /beta/users endpoint has been REMOVED entirely (major security risk - lists all users)
+if settings.ENABLE_BETA_ENDPOINTS:
+    logger.warning(
+        "⚠️  SECURITY WARNING: Beta endpoints are ENABLED. "
+        "These bypass standard authentication and should only be used for development/testing."
+    )
 
-        # Try Redis first, fallback to memory
-        user_id = secrets.token_hex(16)
-        user_data = {
-            "id": user_id,
-            "email": signup_request.email,
-            "name": signup_request.name,
-            "password_hash": hash_password(signup_request.password),
-            "created_at": datetime.utcnow().isoformat(),
-        }
-
+    @app.post("/beta/signup")
+    @limiter.limit("5/minute")
+    async def beta_signup(request: Request, signup_request: SignUpRequest):
         try:
-            redis_client = await get_redis_client()
-            user_key = f"beta_user:{signup_request.email}"
+            # Validate
+            if len(signup_request.password) < 8:
+                raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
-            # Check if exists
-            if await redis_client.exists(user_key):
+            # Try Redis first, fallback to memory
+            user_id = secrets.token_hex(16)
+            user_data = {
+                "id": user_id,
+                "email": signup_request.email,
+                "name": signup_request.name,
+                "password_hash": hash_password(signup_request.password),
+                "created_at": datetime.utcnow().isoformat(),
+            }
+
+            try:
+                redis_client = await get_redis_client()
+                user_key = f"beta_user:{signup_request.email}"
+
+                # Check if exists
+                if await redis_client.exists(user_key):
+                    await redis_client.close()
+                    raise HTTPException(status_code=400, detail="User already exists")
+
+                # Store in Redis
+                await redis_client.hset(user_key, mapping=user_data)
+                await redis_client.expire(user_key, 30 * 24 * 60 * 60)  # 30 days
                 await redis_client.close()
-                raise HTTPException(status_code=400, detail="User already exists")
 
-            # Store in Redis
-            await redis_client.hset(user_key, mapping=user_data)
-            await redis_client.expire(user_key, 30 * 24 * 60 * 60)  # 30 days
-            await redis_client.close()
+                return {
+                    "id": user_id,
+                    "email": signup_request.email,
+                    "name": signup_request.name,
+                    "message": "User created in Railway Redis",
+                    "storage": "redis",
+                }
 
-            return {
-                "id": user_id,
-                "email": signup_request.email,
-                "name": signup_request.name,
-                "message": "User created in Railway Redis",
-                "storage": "redis",
-            }
+            except Exception:
+                # Fallback to memory storage
+                if signup_request.email in BETA_USERS:
+                    raise HTTPException(status_code=400, detail="User already exists")
 
-        except Exception as redis_error:
-            # Fallback to memory storage
-            if signup_request.email in BETA_USERS:
-                raise HTTPException(status_code=400, detail="User already exists")
+                BETA_USERS[signup_request.email] = user_data
 
-            BETA_USERS[signup_request.email] = user_data
+                return {
+                    "id": user_id,
+                    "email": signup_request.email,
+                    "name": signup_request.name,
+                    "message": "User created in memory (Redis fallback)",
+                    "storage": "memory",
+                }
 
-            return {
-                "id": user_id,
-                "email": signup_request.email,
-                "name": signup_request.name,
-                "message": "User created in memory (Redis fallback)",
-                "storage": "memory",
-            }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Signup failed: {str(e)}")
-
-
-@app.post("/beta/signin")
-@limiter.limit("10/minute")
-async def beta_signin(request: Request, signin_request: SignInRequest):
-    try:
-        user_data = None
-        storage_type = "unknown"
-
-        # Try Redis first
-        try:
-            redis_client = await get_redis_client()
-            user_key = f"beta_user:{signin_request.email}"
-            user_data = await redis_client.hgetall(user_key)
-            await redis_client.close()
-
-            if user_data:
-                storage_type = "redis"
-
-        except:
-            # Fallback to memory
-            user_data = BETA_USERS.get(signin_request.email)
-            if user_data:
-                storage_type = "memory"
-
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-
-        # Verify password
-        if not verify_password(signin_request.password, user_data["password_hash"]):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-
-        # Create simple token
-        access_token = secrets.token_hex(32)
-
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": {"id": user_data["id"], "email": user_data["email"], "name": user_data["name"]},
-            "storage": storage_type,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Signin failed: {str(e)}")
-
-
-@app.get("/beta/users")
-async def beta_list_users():
-    try:
-        users = []
-        redis_users = []
-        memory_users = list(BETA_USERS.values()) if BETA_USERS else []
-
-        # Try to get users from Redis
-        try:
-            redis_client = await get_redis_client()
-            user_keys = await redis_client.keys("beta_user:*")
-
-            for key in user_keys:
-                user_data = await redis_client.hgetall(key)
-                if user_data:
-                    redis_users.append(
-                        {
-                            "id": user_data["id"],
-                            "email": user_data["email"],
-                            "name": user_data["name"],
-                            "created_at": user_data["created_at"],
-                            "storage": "redis",
-                        }
-                    )
-
-            await redis_client.close()
-
+        except HTTPException:
+            raise
         except Exception as e:
-            # Log Redis failure but continue with memory users
-            logger.warning(
-                "Failed to fetch users from Redis, falling back to memory",
-                error=str(e),
-                error_type=type(e).__name__,
-            )
+            raise HTTPException(status_code=500, detail=f"Signup failed: {str(e)}")
 
-        # Add memory users
-        for user in memory_users:
-            memory_users_formatted = {
-                "id": user["id"],
-                "email": user["email"],
-                "name": user["name"],
-                "created_at": user["created_at"],
-                "storage": "memory",
+    @app.post("/beta/signin")
+    @limiter.limit("10/minute")
+    async def beta_signin(request: Request, signin_request: SignInRequest):
+        try:
+            user_data = None
+            storage_type = "unknown"
+
+            # Try Redis first
+            try:
+                redis_client = await get_redis_client()
+                user_key = f"beta_user:{signin_request.email}"
+                user_data = await redis_client.hgetall(user_key)
+                await redis_client.close()
+
+                if user_data:
+                    storage_type = "redis"
+
+            except Exception:
+                # Fallback to memory
+                user_data = BETA_USERS.get(signin_request.email)
+                if user_data:
+                    storage_type = "memory"
+
+            if not user_data:
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+
+            # Verify password
+            if not verify_password(signin_request.password, user_data["password_hash"]):
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+
+            # Create simple token
+            access_token = secrets.token_hex(32)
+
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": {"id": user_data["id"], "email": user_data["email"], "name": user_data["name"]},
+                "storage": storage_type,
             }
-            users.append(memory_users_formatted)
 
-        all_users = redis_users + users
-
-        return {
-            "users": all_users,
-            "total": len(all_users),
-            "redis_count": len(redis_users),
-            "memory_count": len(memory_users),
-            "infrastructure": "Railway",
-        }
-
-    except Exception as e:
-        return {"error": f"Failed to list users: {str(e)}", "users": [], "total": 0}
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Signin failed: {str(e)}")
 
 
 # API status
 @app.get("/api/status")
 def api_status():
+    # Build beta endpoints list dynamically based on feature flag
+    beta_endpoints = []
+    if settings.ENABLE_BETA_ENDPOINTS:
+        beta_endpoints = ["/beta/signup", "/beta/signin"]
+
     return {
         "status": "Janua API v1.0.0 operational",
         "version": "1.0.0",
         "authentication": "JWT with refresh tokens",
         "infrastructure": "Railway PostgreSQL + Redis",
         "endpoints": {
-            "beta": ["/beta/signup", "/beta/signin", "/beta/users"],
+            "beta": beta_endpoints,
             "v1": ["/api/v1/auth/*", "/api/v1/users/*", "/api/v1/organizations/*"],
         },
         "features": {
@@ -923,6 +882,7 @@ def api_status():
             "oauth": settings.ENABLE_OAUTH,
             "mfa": settings.ENABLE_MFA,
             "organizations": settings.ENABLE_ORGANIZATIONS,
+            "beta_endpoints": settings.ENABLE_BETA_ENDPOINTS,
         },
     }
 
@@ -1008,6 +968,10 @@ async def startup_event():
     try:
         await init_database()
         logger.info("Database manager initialized successfully")
+
+        # Bootstrap admin user if ADMIN_BOOTSTRAP_PASSWORD is set
+        from app.core.database import bootstrap_admin_user
+        await bootstrap_admin_user()
 
         # Initialize performance cache manager
         await cache_manager.init_redis()

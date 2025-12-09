@@ -120,16 +120,16 @@ For the Hetzner bare metal server, secrets are managed via:
 ### Setup on Server
 
 ```bash
-# SSH to server
-ssh -i ~/.ssh/id_ed25519 root@95.217.198.239
+# SSH to server (via Cloudflare Zero Trust tunnel)
+ssh ssh.madfam.io
 
 # Create/edit production environment
 cd /opt/solarpunk/janua
-nano .env.production
+sudo nano .env.production
 
 # Set restrictive permissions
-chmod 600 .env.production
-chown root:root .env.production
+sudo chmod 600 .env.production
+sudo chown root:root .env.production
 ```
 
 ### Environment File Template

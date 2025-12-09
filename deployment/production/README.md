@@ -45,14 +45,19 @@ Production infrastructure documentation for Janua on bare metal (Hetzner).
 ### SSH Connection
 
 ```bash
-ssh -i ~/.ssh/id_ed25519 root@95.217.198.239
+# Via Cloudflare Zero Trust tunnel (recommended)
+ssh ssh.madfam.io
+# User: solarpunk (use sudo for admin commands)
+
+# Requires: cloudflared installed + ~/.ssh/config configured
+# See: solarpunk-foundry/docs/SSH_ACCESS.md for setup
 ```
 
 **Server Details:**
 | Property | Value |
 |----------|-------|
-| Hostname | enclii-core |
-| IP | 95.217.198.239 |
+| Hostname | foundry-core |
+| SSH Host | ssh.madfam.io |
 | OS | Ubuntu 24.04 LTS |
 | Provider | Hetzner |
 | Location | Helsinki, Finland |

@@ -13,12 +13,14 @@ Based on RFC 6749 (OAuth 2.0) and OpenID Connect Core 1.0
 """
 
 import hashlib
+import json
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import urlencode, urlparse
 
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
@@ -28,10 +30,63 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.database import get_db
 from app.core.jwt_manager import jwt_manager
+from app.core.redis import get_redis, ResilientRedisClient
 from app.dependencies import get_current_user, get_current_user_optional
 from app.models import OAuthClient, User
 
+logger = structlog.get_logger()
 router = APIRouter(prefix="/oauth", tags=["OAuth Provider"])
+
+
+# ============================================================================
+# Cookie-based Authentication Helper
+# ============================================================================
+
+
+async def get_user_from_cookie_or_header(
+    request: Request,
+    db: AsyncSession,
+) -> Optional[User]:
+    """
+    Get authenticated user from either:
+    1. Bearer token in Authorization header (API clients)
+    2. janua_access_token cookie (browser-based OAuth flow)
+
+    This enables the OAuth authorize endpoint to work with browser sessions
+    after the user logs in via the login form.
+    """
+    # First, try to get user from Authorization header via dependency
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            payload = jwt_manager.verify_token(token, token_type='access')
+            if payload and payload.get('sub'):
+                result = await db.execute(
+                    select(User).where(User.id == payload.get('sub'))
+                )
+                user = result.scalar_one_or_none()
+                if user:
+                    return user
+        except Exception:
+            pass
+
+    # Second, try to get user from cookie
+    access_token = request.cookies.get("janua_access_token")
+    if access_token:
+        try:
+            payload = jwt_manager.verify_token(access_token, token_type='access')
+            if payload and payload.get('sub'):
+                result = await db.execute(
+                    select(User).where(User.id == payload.get('sub'))
+                )
+                user = result.scalar_one_or_none()
+                if user:
+                    return user
+        except Exception:
+            pass
+
+    return None
 
 
 # ============================================================================
@@ -89,19 +144,40 @@ class UserInfoResponse(BaseModel):
 
 
 # ============================================================================
-# In-memory authorization code storage (should use Redis in production)
+# Redis-based authorization code storage
 # ============================================================================
 
-# Structure: {code: {client_id, user_id, redirect_uri, scope, nonce, code_challenge, expires_at}}
-_authorization_codes: dict[str, dict] = {}
+AUTH_CODE_PREFIX = "oauth:code:"
+AUTH_CODE_TTL = 600  # 10 minutes
 
 
-def _cleanup_expired_codes():
-    """Remove expired authorization codes."""
-    now = time.time()
-    expired = [code for code, data in _authorization_codes.items() if data["expires_at"] < now]
-    for code in expired:
-        del _authorization_codes[code]
+async def _store_auth_code(code: str, data: dict, redis: ResilientRedisClient):
+    """Store authorization code in Redis with TTL."""
+    key = f"{AUTH_CODE_PREFIX}{code}"
+    logger.info("Storing auth code in Redis", key=key, client_id=data.get("client_id"))
+    success = await redis.set(key, json.dumps(data), ex=AUTH_CODE_TTL)
+    if not success:
+        logger.error("Failed to store auth code in Redis", key=key)
+    else:
+        logger.info("Auth code stored successfully", key=key)
+
+
+async def _get_auth_code(code: str, redis: ResilientRedisClient) -> dict | None:
+    """Retrieve authorization code from Redis."""
+    key = f"{AUTH_CODE_PREFIX}{code}"
+    logger.info("Retrieving auth code from Redis", key=key)
+    data = await redis.get(key)
+    if data:
+        logger.info("Auth code found in Redis", key=key)
+        return json.loads(data)
+    logger.warning("Auth code NOT found in Redis", key=key)
+    return None
+
+
+async def _delete_auth_code(code: str, redis: ResilientRedisClient):
+    """Delete authorization code from Redis (single use)."""
+    key = f"{AUTH_CODE_PREFIX}{code}"
+    await redis.delete(key)
 
 
 # ============================================================================
@@ -179,7 +255,7 @@ def _generate_id_token(
         token_hash = hashlib.sha256(access_token.encode("ascii")).digest()
         claims["at_hash"] = base64.urlsafe_b64encode(token_hash[:16]).rstrip(b"=").decode("ascii")
 
-    return jwt_manager.create_token(claims, token_type="id_token", expires_delta=timedelta(hours=1))
+    return jwt_manager.encode_token(claims)
 
 
 # ============================================================================
@@ -199,14 +275,21 @@ async def authorize_get(
     code_challenge: Optional[str] = Query(None),
     code_challenge_method: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    redis: ResilientRedisClient = Depends(get_redis),
 ):
     """
     OAuth 2.0 Authorization Endpoint (GET).
 
     If user is not authenticated, redirect to login page.
     If user is authenticated, show consent screen or auto-approve.
+
+    Authentication is checked from both:
+    - Authorization header (Bearer token)
+    - janua_access_token cookie (set by login form)
     """
+    # Get user from header or cookie (supports browser-based OAuth flow)
+    current_user = await get_user_from_cookie_or_header(request, db)
+
     # Validate response_type
     if response_type != "code":
         raise HTTPException(
@@ -256,11 +339,9 @@ async def authorize_get(
         return RedirectResponse(url=login_url, status_code=302)
 
     # User is authenticated - for now, auto-approve (in production, show consent screen)
-    # Generate authorization code
-    _cleanup_expired_codes()
-
+    # Generate authorization code and store in Redis
     auth_code = secrets.token_urlsafe(32)
-    _authorization_codes[auth_code] = {
+    code_data = {
         "client_id": client_id,
         "user_id": str(current_user.id),
         "redirect_uri": redirect_uri,
@@ -268,11 +349,12 @@ async def authorize_get(
         "nonce": nonce,
         "code_challenge": code_challenge,
         "code_challenge_method": code_challenge_method or "S256",
-        "expires_at": time.time() + 600,  # 10 minutes
+        "expires_at": time.time() + AUTH_CODE_TTL,
     }
+    await _store_auth_code(auth_code, code_data, redis)
 
     # Update client last_used_at
-    client.last_used_at = datetime.now(timezone.utc)
+    client.last_used_at = datetime.utcnow()
     await db.commit()
 
     # Redirect back to client with authorization code
@@ -296,6 +378,7 @@ async def authorize_post(
     code_challenge: Optional[str] = Form(None),
     code_challenge_method: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
+    redis: ResilientRedisClient = Depends(get_redis),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -317,11 +400,9 @@ async def authorize_post(
     if not _validate_redirect_uri(redirect_uri, client.redirect_uris):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_redirect_uri")
 
-    # Generate authorization code
-    _cleanup_expired_codes()
-
+    # Generate authorization code and store in Redis
     auth_code = secrets.token_urlsafe(32)
-    _authorization_codes[auth_code] = {
+    code_data = {
         "client_id": client_id,
         "user_id": str(current_user.id),
         "redirect_uri": redirect_uri,
@@ -329,11 +410,12 @@ async def authorize_post(
         "nonce": nonce,
         "code_challenge": code_challenge,
         "code_challenge_method": code_challenge_method or "S256",
-        "expires_at": time.time() + 600,
+        "expires_at": time.time() + AUTH_CODE_TTL,
     }
+    await _store_auth_code(auth_code, code_data, redis)
 
     # Update client last_used_at
-    client.last_used_at = datetime.now(timezone.utc)
+    client.last_used_at = datetime.utcnow()
     await db.commit()
 
     # Redirect with code
@@ -361,6 +443,7 @@ async def token(
     refresh_token: Optional[str] = Form(None),
     code_verifier: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
+    redis: ResilientRedisClient = Depends(get_redis),
 ):
     """
     OAuth 2.0 Token Endpoint.
@@ -426,6 +509,7 @@ async def token(
             client=client,
             code_verifier=code_verifier,
             db=db,
+            redis=redis,
         )
     elif grant_type == "refresh_token":
         return await _handle_refresh_token_grant(
@@ -446,6 +530,7 @@ async def _handle_authorization_code_grant(
     client: OAuthClient,
     code_verifier: Optional[str],
     db: AsyncSession,
+    redis: ResilientRedisClient,
 ) -> TokenResponse:
     """Handle authorization_code grant type."""
     if not code:
@@ -454,10 +539,8 @@ async def _handle_authorization_code_grant(
             detail="invalid_request: code required",
         )
 
-    _cleanup_expired_codes()
-
-    # Validate authorization code
-    code_data = _authorization_codes.get(code)
+    # Validate authorization code from Redis
+    code_data = await _get_auth_code(code, redis)
     if not code_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -494,7 +577,7 @@ async def _handle_authorization_code_grant(
             )
 
     # Delete the code (single use)
-    del _authorization_codes[code]
+    await _delete_auth_code(code, redis)
 
     # Get user
     user_id = code_data["user_id"]
@@ -509,25 +592,17 @@ async def _handle_authorization_code_grant(
 
     # Generate tokens
     scope = code_data["scope"]
-    access_token = jwt_manager.create_token(
-        data={
-            "sub": str(user.id),
-            "email": user.email,
+    access_token, _, _ = jwt_manager.create_access_token(
+        user_id=str(user.id),
+        email=user.email,
+        additional_claims={
             "client_id": client.client_id,
             "scope": scope,
         },
-        token_type="access",
-        expires_delta=timedelta(hours=1),
     )
 
-    refresh_token = jwt_manager.create_token(
-        data={
-            "sub": str(user.id),
-            "client_id": client.client_id,
-            "scope": scope,
-        },
-        token_type="refresh",
-        expires_delta=timedelta(days=30),
+    refresh_token, _, _, _ = jwt_manager.create_refresh_token(
+        user_id=str(user.id),
     )
 
     # Generate ID token if openid scope requested
@@ -541,7 +616,7 @@ async def _handle_authorization_code_grant(
         )
 
     # Update client last_used_at
-    client.last_used_at = datetime.now(timezone.utc)
+    client.last_used_at = datetime.utcnow()
     await db.commit()
 
     return TokenResponse(
@@ -595,19 +670,17 @@ async def _handle_refresh_token_grant(
 
     # Generate new access token
     scope = payload.get("scope", "openid")
-    access_token = jwt_manager.create_token(
-        data={
-            "sub": str(user.id),
-            "email": user.email,
+    access_token, _, _ = jwt_manager.create_access_token(
+        user_id=str(user.id),
+        email=user.email,
+        additional_claims={
             "client_id": client.client_id,
             "scope": scope,
         },
-        token_type="access",
-        expires_delta=timedelta(hours=1),
     )
 
     # Update client last_used_at
-    client.last_used_at = datetime.now(timezone.utc)
+    client.last_used_at = datetime.utcnow()
     await db.commit()
 
     return TokenResponse(

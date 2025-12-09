@@ -1,7 +1,8 @@
 from typing import AsyncGenerator
+import os
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, select
 import structlog
 
 # Import config with error handling
@@ -76,9 +77,64 @@ async def init_db():
             if settings.AUTO_MIGRATE:
                 await conn.run_sync(Base.metadata.create_all)
         logger.info("Database initialized successfully")
+
+        # Bootstrap admin user if ADMIN_BOOTSTRAP_PASSWORD is set
+        await bootstrap_admin_user()
     except Exception as e:
         logger.error("Failed to initialize database", error=str(e))
         raise
+
+
+async def bootstrap_admin_user():
+    """Bootstrap the admin user if ADMIN_BOOTSTRAP_PASSWORD environment variable is set.
+
+    This creates admin@madfam.io with is_admin=True and email_verified=True.
+    Only runs if the user doesn't already exist.
+    """
+    admin_password = os.environ.get("ADMIN_BOOTSTRAP_PASSWORD")
+    if not admin_password:
+        logger.debug("ADMIN_BOOTSTRAP_PASSWORD not set, skipping admin bootstrap")
+        return
+
+    admin_email = "admin@madfam.io"
+
+    try:
+        # Import here to avoid circular imports
+        from app.models import User
+        from passlib.context import CryptContext
+        from app.core.database_manager import db_manager
+
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+        async with db_manager.get_session() as session:
+            # Check if admin already exists
+            result = await session.execute(
+                select(User).where(User.email == admin_email)
+            )
+            existing_admin = result.scalar_one_or_none()
+
+            if existing_admin:
+                logger.info("Admin user already exists, skipping bootstrap", email=admin_email)
+                return
+
+            # Create admin user
+            password_hash = pwd_context.hash(admin_password)
+            admin_user = User(
+                email=admin_email,
+                email_verified=True,
+                password_hash=password_hash,
+                is_admin=True,
+                is_active=True,
+                first_name="Admin",
+                last_name="User",
+            )
+            session.add(admin_user)
+            await session.commit()
+
+            logger.info("Admin user bootstrapped successfully", email=admin_email)
+    except Exception as e:
+        logger.error("Failed to bootstrap admin user", error=str(e))
+        # Don't raise - this is a non-critical bootstrap operation
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

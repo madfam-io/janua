@@ -169,8 +169,8 @@ class Session(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    token = Column(String(500), unique=True, nullable=False)
-    refresh_token = Column(String(500), unique=True)
+    token = Column(Text, unique=True, nullable=False)
+    refresh_token = Column(Text, unique=True)
     access_token_jti = Column(String(255), unique=True)  # JWT token identifier
     refresh_token_jti = Column(String(255), unique=True)  # Refresh token identifier
     refresh_token_family = Column(String(255), index=True)  # Token family for rotation

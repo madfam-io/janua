@@ -201,6 +201,15 @@ class JWTManager:
         logger.info("Refresh token created", user_id=user_id, jti=jti, family=family, algorithm=self.algorithm)
         return token, jti, family, expires_at
 
+    def encode_token(self, claims: Dict[str, Any]) -> str:
+        """Encode arbitrary claims into a signed JWT token (e.g., for ID tokens)."""
+        return jwt.encode(
+            claims,
+            self._get_signing_key(),
+            algorithm=self.algorithm,
+            headers=self._get_token_headers()
+        )
+
     def verify_token(self, token: str, token_type: str = "access") -> Optional[Dict[str, Any]]:
         """Verify and decode a JWT token"""
         try:

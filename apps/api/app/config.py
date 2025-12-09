@@ -164,6 +164,12 @@ class Settings(BaseSettings):
     ENABLE_OAUTH: bool = Field(default=True)
     ENABLE_MFA: bool = Field(default=True)
     ENABLE_ORGANIZATIONS: bool = Field(default=True)
+    # Beta endpoints - SECURITY: Disabled by default in production
+    # These bypass standard auth flows and should only be enabled for development/testing
+    ENABLE_BETA_ENDPOINTS: bool = Field(
+        default=False,
+        description="Enable beta endpoints (/beta/signup, /beta/signin). SECURITY WARNING: These bypass standard auth."
+    )
 
     # OAuth Providers - Google
     OAUTH_GOOGLE_CLIENT_ID: Optional[str] = Field(

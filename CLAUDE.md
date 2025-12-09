@@ -204,11 +204,16 @@ POST   /api/v1/organizations       # Create organization
 DATABASE_URL=postgresql://user:pass@localhost:5432/janua
 REDIS_URL=redis://localhost:6379
 
-# JWT
-JWT_SECRET=your-secret-key
+# JWT (RS256 with RSA-2048 keys)
+JWT_SECRET_KEY=your-secret-key       # For HS256 fallback
 JWT_ALGORITHM=RS256
 JWT_PRIVATE_KEY_PATH=./keys/private.pem
 JWT_PUBLIC_KEY_PATH=./keys/public.pem
+ACCESS_TOKEN_EXPIRE_MINUTES=15       # Default: 15min
+REFRESH_TOKEN_EXPIRE_DAYS=7          # Default: 7 days
+
+# Admin Bootstrap (optional - creates admin@madfam.io on first run)
+ADMIN_BOOTSTRAP_PASSWORD=your-secure-password
 
 # OAuth Providers
 GOOGLE_CLIENT_ID=...
@@ -220,6 +225,15 @@ GITHUB_CLIENT_SECRET=...
 SMTP_HOST=localhost
 SMTP_PORT=1025
 SMTP_FROM=noreply@janua.dev
+```
+
+### Admin Bootstrap
+
+Set `ADMIN_BOOTSTRAP_PASSWORD` to automatically create an admin user on first startup:
+
+```bash
+# Creates admin@madfam.io with is_admin=true, email_verified=true
+ADMIN_BOOTSTRAP_PASSWORD='SecurePassword123!' uvicorn app.main:app --port 4100
 ```
 
 ---

@@ -16,6 +16,9 @@ from .models import User, UserStatus, Organization, OrganizationMember
 from app.services.auth_service import AuthService
 
 security = HTTPBearer()
+# Optional security scheme for endpoints that work with or without authentication
+# auto_error=False prevents 403 when no Authorization header is present
+security_optional = HTTPBearer(auto_error=False)
 
 
 # ============================================================================
@@ -217,15 +220,21 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: AsyncSession = Depends(get_db)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
+    db: AsyncSession = Depends(get_db),
+    redis: ResilientRedisClient = Depends(get_redis)
 ) -> Optional[User]:
-    """Get current authenticated user from JWT token, returns None if not authenticated"""
+    """Get current authenticated user from JWT token, returns None if not authenticated.
+
+    Uses security_optional (auto_error=False) to allow unauthenticated requests
+    to proceed without raising 403. This is critical for OAuth authorize endpoint
+    which needs to redirect unauthenticated users to login instead of blocking them.
+    """
     if not credentials:
         return None
 
     try:
-        return await get_current_user(credentials, db)
+        return await get_current_user(credentials, db, redis)
     except HTTPException:
         return None
 

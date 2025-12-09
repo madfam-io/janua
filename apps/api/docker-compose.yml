@@ -1,8 +1,9 @@
-version: '3.8'
+name: janua
 
 services:
-  postgres:
+  janua-postgres:
     image: postgres:15-alpine
+    container_name: janua-postgres
     environment:
       POSTGRES_USER: janua
       POSTGRES_PASSWORD: janua_dev
@@ -17,8 +18,9 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
+  janua-redis:
     image: redis:7-alpine
+    container_name: janua-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -27,20 +29,21 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
+  janua-api:
     build: .
+    container_name: janua-api
     ports:
       - "4100:4100"
     environment:
-      DATABASE_URL: postgresql://janua:janua_dev@postgres:5432/janua_db
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://janua:janua_dev@janua-postgres:5432/janua_db
+      REDIS_URL: redis://janua-redis:6379/0
       SECRET_KEY: dev-secret-key-change-in-production
       DEBUG: "true"
       PORT: "4100"
     depends_on:
-      postgres:
+      janua-postgres:
         condition: service_healthy
-      redis:
+      janua-redis:
         condition: service_healthy
     volumes:
       - ./app:/app/app

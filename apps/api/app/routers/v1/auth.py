@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from slowapi import Limiter
@@ -281,6 +281,331 @@ async def sign_in(credentials: SignInRequest, request: Request, db: Session = De
             expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         ),
     )
+
+
+# GET /login - Render login form for OAuth flows
+@router.get("/login")
+async def login_page(
+    request: Request,
+    next: Optional[str] = None,
+    client_id: Optional[str] = None,
+    client_name: Optional[str] = None,
+):
+    """
+    Render login page for OAuth authorization flows.
+
+    This endpoint serves an HTML login form that:
+    1. Accepts email/password credentials
+    2. POSTs to /api/v1/auth/login
+    3. On success, redirects to the 'next' URL (OAuth authorize endpoint)
+
+    Query params:
+    - next: URL to redirect to after successful login
+    - client_id: OAuth client requesting authorization
+    - client_name: Human-readable name of the OAuth client
+    """
+    from fastapi.responses import HTMLResponse
+
+    # Escape values for HTML safety
+    import html
+    next_url = html.escape(next or "/")
+    app_name = html.escape(client_name or "Application")
+
+    html_content = f'''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in - Janua</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .login-container {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }}
+        .logo {{
+            text-align: center;
+            margin-bottom: 30px;
+        }}
+        .logo h1 {{
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 8px;
+        }}
+        .logo p {{
+            color: #666;
+            font-size: 14px;
+        }}
+        .app-info {{
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 24px;
+            text-align: center;
+        }}
+        .app-info span {{
+            color: #666;
+            font-size: 13px;
+        }}
+        .app-info strong {{
+            color: #333;
+        }}
+        .form-group {{
+            margin-bottom: 20px;
+        }}
+        label {{
+            display: block;
+            margin-bottom: 6px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }}
+        input[type="email"], input[type="password"] {{
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5eb;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }}
+        input:focus {{
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }}
+        button {{
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }}
+        button:hover {{
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }}
+        button:disabled {{
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }}
+        .error {{
+            background: #fee;
+            color: #c00;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 24px;
+            color: #666;
+            font-size: 12px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>🔐 Janua</h1>
+            <p>Identity Platform</p>
+        </div>
+
+        <div class="app-info">
+            <span>Signing in to <strong>{app_name}</strong></span>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <form id="loginForm" method="POST" action="/api/v1/auth/login-form">
+            <input type="hidden" name="next" value="{next_url}">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required autocomplete="email" autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+            <button type="submit" id="submitBtn">Sign In</button>
+        </form>
+
+        <div class="footer">
+            Powered by Janua &bull; Secure Authentication
+        </div>
+    </div>
+</body>
+</html>
+'''
+    return HTMLResponse(content=html_content)
+
+
+# Form-based login for OAuth flows (handles browser form POST, sets cookies, redirects)
+@router.post("/login-form")
+@limiter.limit("5/minute")
+async def login_form(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    next: str = Form("/"),
+    db: Session = Depends(get_db),
+):
+    """
+    Handle form-based login for OAuth authorization flows.
+
+    This endpoint:
+    1. Authenticates the user with email/password
+    2. Sets access_token cookie for subsequent requests
+    3. Redirects to the 'next' URL (typically OAuth authorize)
+
+    This works without JavaScript, avoiding CSP issues with inline scripts.
+    """
+    from fastapi.responses import RedirectResponse
+    import html
+
+    # Find user by email
+    result = await db.execute(
+        select(User).where(User.email == email, User.status == UserStatus.ACTIVE)
+    )
+    user = result.scalar_one_or_none()
+
+    # Verify password
+    if not user or not user.password_hash or not AuthService.verify_password(password, user.password_hash):
+        # Return login page with error
+        from fastapi.responses import HTMLResponse
+        error_html = f'''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in - Janua</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .login-container {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }}
+        .logo {{ text-align: center; margin-bottom: 30px; }}
+        .logo h1 {{ font-size: 28px; color: #333; margin-bottom: 8px; }}
+        .logo p {{ color: #666; font-size: 14px; }}
+        .form-group {{ margin-bottom: 20px; }}
+        label {{ display: block; margin-bottom: 6px; color: #333; font-weight: 500; font-size: 14px; }}
+        input[type="email"], input[type="password"] {{
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5eb;
+            border-radius: 8px;
+            font-size: 16px;
+        }}
+        input:focus {{ outline: none; border-color: #667eea; }}
+        button {{
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }}
+        .error {{
+            background: #fee;
+            color: #c00;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }}
+        .footer {{ text-align: center; margin-top: 24px; color: #666; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>🔐 Janua</h1>
+            <p>Identity Platform</p>
+        </div>
+        <div class="error">Invalid email or password. Please try again.</div>
+        <form method="POST" action="/api/v1/auth/login-form">
+            <input type="hidden" name="next" value="{html.escape(next)}">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" value="{html.escape(email)}" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit">Sign In</button>
+        </form>
+        <div class="footer">Powered by Janua &bull; Secure Authentication</div>
+    </div>
+</body>
+</html>
+'''
+        return HTMLResponse(content=error_html, status_code=401)
+
+    # Create session and tokens
+    access_token, refresh_token, session = await AuthService.create_session(
+        db, user, ip_address=request.client.host, user_agent=request.headers.get("user-agent")
+    )
+
+    # Create redirect response with cookies
+    response = RedirectResponse(url=next, status_code=302)
+    response.set_cookie(
+        key="janua_access_token",
+        value=access_token,
+        max_age=3600,  # 1 hour
+        httponly=False,  # Allow JS access for API calls
+        samesite="lax",
+        secure=True,  # HTTPS only
+    )
+    response.set_cookie(
+        key="janua_refresh_token",
+        value=refresh_token,
+        max_age=604800,  # 7 days
+        httponly=True,  # HttpOnly for security
+        samesite="lax",
+        secure=True,
+    )
+
+    return response
 
 
 # Alias for /signin (tests expect /login)
