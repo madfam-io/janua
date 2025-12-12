@@ -114,7 +114,9 @@ async def get_integration_token(
         activity = ActivityLog(
             user_id=current_user.id,
             action="integration_token_accessed",
-            details={
+            resource_type="oauth_integration",
+            resource_id=provider,
+            activity_metadata={
                 "provider": provider,
                 "provider_user_id": oauth_account.provider_user_id,
             }

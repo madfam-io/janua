@@ -85,11 +85,67 @@ async def init_db():
         raise
 
 
-async def bootstrap_admin_user():
-    """Bootstrap the admin user if ADMIN_BOOTSTRAP_PASSWORD environment variable is set.
+async def create_organization_with_membership(
+    session,
+    owner,
+    name: str,
+    slug: str,
+    description: str = None,
+    settings: dict = None,
+    subscription_tier: str = "community",
+    billing_plan: str = "free",
+) -> tuple:
+    """Create an organization and add the owner as an OWNER member.
 
-    This creates admin@madfam.io with is_admin=True and email_verified=True.
-    Only runs if the user doesn't already exist.
+    This is a reusable helper function that ensures organizations are always
+    created with proper membership records. Use this instead of creating
+    Organization objects directly.
+
+    Args:
+        session: Database session
+        owner: User object who will own the organization
+        name: Organization display name
+        slug: URL-safe unique identifier
+        description: Optional organization description
+        settings: Optional organization settings dict
+        subscription_tier: Subscription tier (community, pro, scale, enterprise)
+        billing_plan: Billing plan (free, pro, enterprise)
+
+    Returns:
+        Tuple of (Organization, OrganizationMember)
+    """
+    from app.models import Organization, OrganizationMember
+
+    org = Organization(
+        name=name,
+        slug=slug,
+        owner_id=owner.id,
+        description=description,
+        settings=settings or {},
+        subscription_tier=subscription_tier,
+        billing_plan=billing_plan,
+    )
+    session.add(org)
+    await session.flush()  # Get org.id before creating membership
+
+    membership = OrganizationMember(
+        organization_id=org.id,
+        user_id=owner.id,
+        role="owner",
+    )
+    session.add(membership)
+
+    return org, membership
+
+
+async def bootstrap_admin_user():
+    """Bootstrap the admin user and default organization if ADMIN_BOOTSTRAP_PASSWORD is set.
+
+    This creates:
+    1. admin@madfam.io with is_admin=True and email_verified=True
+    2. MADFAM organization with the admin as owner
+
+    Both operations are idempotent - they only run if the resources don't exist.
     """
     admin_password = os.environ.get("ADMIN_BOOTSTRAP_PASSWORD")
     if not admin_password:
@@ -97,10 +153,11 @@ async def bootstrap_admin_user():
         return
 
     admin_email = "admin@madfam.io"
+    default_org_slug = "madfam"
 
     try:
         # Import here to avoid circular imports
-        from app.models import User
+        from app.models import User, Organization, OrganizationMember
         from passlib.context import CryptContext
         from app.core.database_manager import db_manager
 
@@ -114,26 +171,68 @@ async def bootstrap_admin_user():
             existing_admin = result.scalar_one_or_none()
 
             if existing_admin:
-                logger.info("Admin user already exists, skipping bootstrap", email=admin_email)
-                return
+                admin_user = existing_admin
+                logger.info("Admin user already exists", email=admin_email)
+            else:
+                # Create admin user
+                password_hash = pwd_context.hash(admin_password)
+                admin_user = User(
+                    email=admin_email,
+                    email_verified=True,
+                    password_hash=password_hash,
+                    is_admin=True,
+                    is_active=True,
+                    first_name="Admin",
+                    last_name="User",
+                )
+                session.add(admin_user)
+                await session.flush()  # Get admin_user.id
+                logger.info("Admin user bootstrapped successfully", email=admin_email)
 
-            # Create admin user
-            password_hash = pwd_context.hash(admin_password)
-            admin_user = User(
-                email=admin_email,
-                email_verified=True,
-                password_hash=password_hash,
-                is_admin=True,
-                is_active=True,
-                first_name="Admin",
-                last_name="User",
+            # Check if default organization already exists
+            result = await session.execute(
+                select(Organization).where(Organization.slug == default_org_slug)
             )
-            session.add(admin_user)
+            existing_org = result.scalar_one_or_none()
+
+            if existing_org:
+                # Ensure admin is a member of the org
+                result = await session.execute(
+                    select(OrganizationMember).where(
+                        OrganizationMember.organization_id == existing_org.id,
+                        OrganizationMember.user_id == admin_user.id,
+                    )
+                )
+                existing_membership = result.scalar_one_or_none()
+
+                if not existing_membership:
+                    membership = OrganizationMember(
+                        organization_id=existing_org.id,
+                        user_id=admin_user.id,
+                        role="owner",
+                    )
+                    session.add(membership)
+                    logger.info("Added admin to existing organization", org=default_org_slug)
+                else:
+                    logger.info("Admin already member of organization", org=default_org_slug)
+            else:
+                # Create default organization with admin as owner (enterprise tier for MADFAM)
+                org, membership = await create_organization_with_membership(
+                    session=session,
+                    owner=admin_user,
+                    name="MADFAM",
+                    slug=default_org_slug,
+                    description="MADFAM development organization",
+                    settings={"is_default": True},
+                    subscription_tier="enterprise",
+                    billing_plan="enterprise",
+                )
+                logger.info("Default organization bootstrapped", org=default_org_slug)
+
             await session.commit()
 
-            logger.info("Admin user bootstrapped successfully", email=admin_email)
     except Exception as e:
-        logger.error("Failed to bootstrap admin user", error=str(e))
+        logger.error("Failed to bootstrap admin user/organization", error=str(e))
         # Don't raise - this is a non-critical bootstrap operation
 
 

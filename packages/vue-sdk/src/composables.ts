@@ -30,11 +30,7 @@ export function useAuth() {
   };
 }
 
-export function useUser(): {
-  user: ComputedRef<Readonly<User> | null>;
-  isLoading: ComputedRef<boolean>;
-  updateUser: (data: any) => Promise<User>;
-} {
+export function useUser() {
   const janua = useJanua();
   const client = janua.getClient();
   const state = janua.getState();
@@ -46,7 +42,7 @@ export function useUser(): {
   };
 
   return {
-    user: computed(() => state.user),
+    user: computed(() => state.user as User | null),
     isLoading: computed(() => state.isLoading),
     updateUser,
   };

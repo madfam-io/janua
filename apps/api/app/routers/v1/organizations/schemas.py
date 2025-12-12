@@ -99,6 +99,10 @@ class OrganizationResponse(BaseModel):
     updated_at: datetime
     member_count: Optional[int] = None
     settings: Optional[Dict[str, Any]] = None
+    # Added for UI compatibility - maps subscription_tier to plan
+    plan: Optional[str] = None
+    # Owner email for display in organization lists
+    owner_email: Optional[str] = None
 
     class Config:
         from_attributes = True

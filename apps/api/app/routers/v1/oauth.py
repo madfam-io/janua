@@ -136,13 +136,13 @@ async def oauth_authorize(
         state = OAuthService.generate_state_token()
 
         # Store state in Redis with 10-minute expiry for validation
-        from app.core.database import get_redis
+        from app.core.redis import get_redis
 
         redis_client = await get_redis()
-        await redis_client.setex(
+        await redis_client.set(
             f"oauth_state:{state}",
-            600,  # 10 minutes
             provider,  # Store provider for additional validation
+            ex=600,  # 10 minutes
         )
 
         # Build redirect URI if not provided
@@ -189,7 +189,7 @@ async def oauth_callback(
             raise HTTPException(status_code=400, detail=f"Invalid provider: {provider}")
 
         # Validate state token from Redis
-        from app.core.database import get_redis
+        from app.core.redis import get_redis
 
         redis_client = await get_redis()
         stored_provider = await redis_client.get(f"oauth_state:{state}")
@@ -200,7 +200,8 @@ async def oauth_callback(
             )
 
         # Verify provider matches
-        if stored_provider.decode() != provider.lower():
+        # ResilientRedisClient returns strings directly (already decoded)
+        if stored_provider != provider.lower():
             raise HTTPException(status_code=400, detail="State token provider mismatch")
 
         # Delete state token to prevent reuse
@@ -303,8 +304,16 @@ async def link_oauth_account(
     current_user: User = Depends(get_current_user),
     redirect_uri: Optional[str] = Query(None),
 ):
-    """Link an OAuth account to existing user"""
+    """Link an OAuth account to existing user.
+
+    The redirect_uri parameter is where the user will be redirected AFTER
+    the OAuth flow completes (i.e., after Janua processes the callback).
+    Janua always uses its own callback URL when talking to OAuth providers.
+    """
     try:
+        # Validate redirect_uri if provided (prevents open redirect)
+        final_redirect = validate_redirect_url(redirect_uri)
+
         # Parse provider enum
         try:
             oauth_provider = OAuthProvider(provider.lower())
@@ -329,19 +338,34 @@ async def link_oauth_account(
 
         # Generate state token with link flag
         state = OAuthService.generate_state_token()
-
-        # Store link intent in state (in production, use Redis)
-        # For now, we'll encode it in the state token
         link_state = f"link_{current_user.id}_{state}"
 
-        # Build redirect URI if not provided
-        if not redirect_uri:
-            base_url = str(request.base_url).rstrip("/")
-            redirect_uri = f"{base_url}/api/v1/auth/oauth/callback/{provider}?link=true"
+        # Store link state in Redis with metadata (final redirect, user, etc.)
+        from app.core.redis import get_redis
+        import json
 
-        # Get authorization URL
+        redis_client = await get_redis()
+        state_data = {
+            "provider": provider.lower(),
+            "user_id": str(current_user.id),
+            "action": "link",
+            "final_redirect": final_redirect,  # Where to redirect after OAuth completes
+        }
+        await redis_client.set(
+            f"oauth_state:{link_state}",
+            json.dumps(state_data),
+            ex=600,  # 10 minutes
+        )
+
+        # ALWAYS use Janua's callback URL for OAuth providers
+        # The provider (GitHub, etc.) will redirect back to Janua,
+        # then Janua will redirect to the final_redirect
+        base_url = str(request.base_url).rstrip("/")
+        oauth_callback_uri = f"{base_url}/api/v1/auth/oauth/link/callback/{provider}"
+
+        # Get authorization URL using Janua's callback
         auth_url = OAuthService.get_authorization_url(
-            oauth_provider, redirect_uri, link_state, None
+            oauth_provider, oauth_callback_uri, link_state, None
         )
 
         if not auth_url:
@@ -359,6 +383,175 @@ async def link_oauth_account(
     except Exception as e:
         logger.error(f"OAuth link error: {e}")
         raise HTTPException(status_code=500, detail="OAuth link initialization failed")
+
+
+@router.get("/link/callback/{provider}")
+async def link_oauth_callback(
+    provider: str,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    code: str = Query(...),
+    state: str = Query(...),
+):
+    """Handle OAuth callback for account linking.
+
+    This endpoint receives the callback from OAuth providers (GitHub, etc.)
+    after the user authorizes the app. It then:
+    1. Exchanges the code for tokens
+    2. Links the OAuth account to the user
+    3. Redirects to the final destination (the original client page)
+    """
+    import json
+    from urllib.parse import urlencode
+    from starlette.responses import RedirectResponse
+
+    try:
+        # Parse provider enum
+        try:
+            oauth_provider = OAuthProvider(provider.lower())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid provider: {provider}")
+
+        # Retrieve and validate state from Redis
+        from app.core.redis import get_redis
+
+        redis_client = await get_redis()
+        stored_state_data = await redis_client.get(f"oauth_state:{state}")
+
+        if not stored_state_data:
+            raise HTTPException(
+                status_code=400, detail="Invalid or expired state token. Please try again."
+            )
+
+        # Parse state data
+        # ResilientRedisClient returns strings directly (already decoded)
+        state_data = json.loads(stored_state_data)
+
+        # Verify it's a link action
+        if state_data.get("action") != "link":
+            raise HTTPException(status_code=400, detail="Invalid state: not a link action")
+
+        # Verify provider matches
+        if state_data.get("provider") != provider.lower():
+            raise HTTPException(status_code=400, detail="State token provider mismatch")
+
+        # Get user ID from state
+        user_id = state_data.get("user_id")
+        final_redirect = state_data.get("final_redirect")
+
+        # Delete state token to prevent reuse
+        await redis_client.delete(f"oauth_state:{state}")
+
+        # Build the callback URI that was used (must match for token exchange)
+        base_url = str(request.base_url).rstrip("/")
+        oauth_callback_uri = f"{base_url}/api/v1/auth/oauth/link/callback/{provider}"
+
+        # Exchange code for tokens
+        tokens = await OAuthService.exchange_code_for_tokens(
+            oauth_provider, code, oauth_callback_uri
+        )
+
+        if not tokens:
+            raise HTTPException(status_code=401, detail="Failed to exchange OAuth code for tokens")
+
+        # Get user info from provider
+        user_info = await OAuthService.get_user_info(oauth_provider, tokens["access_token"])
+
+        if not user_info:
+            raise HTTPException(status_code=401, detail="Failed to get user info from OAuth provider")
+
+        # Get the user from database
+        from uuid import UUID
+        result = await db.execute(select(User).where(User.id == UUID(user_id)))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Check if this OAuth account is already linked to another user
+        provider_user_id = str(user_info.get("id") or user_info.get("sub"))
+        existing_result = await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == oauth_provider,
+                OAuthAccount.provider_user_id == provider_user_id,
+            )
+        )
+        existing_account = existing_result.scalar_one_or_none()
+
+        if existing_account:
+            if str(existing_account.user_id) != user_id:
+                error_msg = f"This {provider} account is already linked to another user"
+                if final_redirect:
+                    return RedirectResponse(
+                        url=f"{final_redirect}?error={urlencode({'error': error_msg})}",
+                        status_code=302,
+                    )
+                raise HTTPException(status_code=400, detail=error_msg)
+
+        # Build provider_data with scopes from token response
+        # GitHub returns scope as a comma-separated string in the token response
+        granted_scopes = []
+        if tokens.get("scope"):
+            # GitHub returns comma-separated scopes, other providers may use space
+            scope_str = tokens.get("scope", "")
+            if "," in scope_str:
+                granted_scopes = [s.strip() for s in scope_str.split(",")]
+            else:
+                granted_scopes = scope_str.split()
+        
+        # Fallback to configured scopes if provider doesn't return them
+        if not granted_scopes:
+            config = OAuthService.get_provider_config(oauth_provider)
+            if config:
+                granted_scopes = config.get("scopes", [])
+        
+        provider_data = {
+            "scopes": granted_scopes,
+            "raw_user_info": user_info,
+        }
+        
+        # Create OAuth account link
+        oauth_account = OAuthAccount(
+            user_id=UUID(user_id),
+            provider=oauth_provider,
+            provider_user_id=provider_user_id,
+            provider_email=user_info.get("email"),
+            access_token=tokens["access_token"],
+            refresh_token=tokens.get("refresh_token"),
+            token_expires_at=tokens.get("expires_at"),
+            provider_data=provider_data,
+        )
+        db.add(oauth_account)
+
+        # Log activity
+        activity = ActivityLog(
+            user_id=UUID(user_id),
+            action="oauth_linked",
+            activity_metadata={"provider": provider, "provider_email": user_info.get("email")},
+        )
+        db.add(activity)
+
+        await db.commit()
+
+        logger.info(f"Successfully linked {provider} account for user {user_id}")
+
+        # Redirect to final destination or return success
+        if final_redirect:
+            return RedirectResponse(url=final_redirect, status_code=302)
+
+        return {
+            "status": "success",
+            "message": f"{provider} account linked successfully",
+            "provider": provider,
+            "provider_email": user_info.get("email"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OAuth link callback error: {e}")
+        raise HTTPException(status_code=500, detail="OAuth link callback processing failed")
 
 
 @router.delete("/unlink/{provider}")
@@ -404,11 +597,11 @@ async def unlink_oauth_account(
             )
 
         # Delete OAuth account
-        db.delete(oauth_account)
+        await db.delete(oauth_account)
 
         # Log activity
         activity = ActivityLog(
-            user_id=current_user.id, action="oauth_unlinked", details={"provider": provider}
+            user_id=current_user.id, action="oauth_unlinked", activity_metadata={"provider": provider}
         )
         db.add(activity)
 

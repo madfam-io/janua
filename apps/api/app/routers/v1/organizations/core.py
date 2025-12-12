@@ -122,8 +122,9 @@ async def list_organizations(
     result = await db.execute(stmt.offset(offset).limit(per_page))
     user_orgs = result.all()
 
-    result = []
+    orgs_result = []
     for org, role in user_orgs:
+        # Get member count
         count_result = await db.execute(
             select(func.count(organization_members.c.user_id)).where(
                 organization_members.c.organization_id == org.id
@@ -131,7 +132,15 @@ async def list_organizations(
         )
         member_count = count_result.scalar()
 
-        result.append(OrganizationResponse(
+        # Get owner email for display
+        owner_email = None
+        if org.owner_id:
+            owner_result = await db.execute(select(User).where(User.id == org.owner_id))
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                owner_email = owner.email
+
+        orgs_result.append(OrganizationResponse(
             id=str(org.id),
             name=org.name,
             slug=org.slug,
@@ -141,11 +150,14 @@ async def list_organizations(
             created_at=org.created_at,
             updated_at=org.updated_at,
             member_count=member_count,
-            settings=org.settings or {}
+            settings=org.settings or {},
+            # Include plan (subscription_tier) and owner_email for UI
+            plan=getattr(org, 'subscription_tier', None) or getattr(org, 'billing_plan', 'community'),
+            owner_email=owner_email
         ))
 
     return OrganizationListResponse(
-        organizations=result,
+        organizations=orgs_result,
         total=total,
         page=page,
         per_page=per_page

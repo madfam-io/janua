@@ -38,7 +38,7 @@ class OAuthService:
             "token_url": "https://github.com/login/oauth/access_token",
             "user_info_url": "https://api.github.com/user",
             "email_url": "https://api.github.com/user/emails",
-            "scopes": ["user:email"],
+            "scopes": ["user:email", "repo", "read:user"],
             "client_id_setting": "OAUTH_GITHUB_CLIENT_ID",
             "client_secret_setting": "OAUTH_GITHUB_CLIENT_SECRET",
         },
@@ -161,6 +161,33 @@ class OAuthService:
         return secrets.token_urlsafe(32)
 
     @classmethod
+    def _parse_scopes_from_tokens(cls, tokens: Dict[str, Any], provider: OAuthProvider) -> list:
+        """Parse granted scopes from token response.
+        
+        GitHub returns scopes as comma-separated string in the token response.
+        Other providers may return space-separated strings or lists.
+        Falls back to configured scopes if provider doesn't return them.
+        """
+        granted_scopes = []
+        
+        if tokens.get("scope"):
+            scope_str = tokens.get("scope", "")
+            # GitHub uses comma-separated scopes
+            if "," in scope_str:
+                granted_scopes = [s.strip() for s in scope_str.split(",")]
+            else:
+                # Most providers use space-separated
+                granted_scopes = scope_str.split()
+        
+        # Fallback to configured scopes if provider doesn't return them
+        if not granted_scopes:
+            config = cls.get_provider_config(provider)
+            if config:
+                granted_scopes = config.get("scopes", [])
+        
+        return granted_scopes
+
+    @classmethod
     def get_authorization_url(
         cls,
         provider: OAuthProvider,
@@ -272,7 +299,7 @@ class OAuthService:
                     logger.error(f"Failed to get user info: {response.text}")
                     return None
 
-                user_info = await response.json()
+                user_info = response.json()
 
                 # GitHub requires separate email endpoint
                 if provider == OAuthProvider.GITHUB and "email_url" in config:
@@ -432,7 +459,12 @@ class OAuthService:
                 oauth_account.token_expires_at = datetime.utcnow() + timedelta(
                     seconds=tokens["expires_in"]
                 )
-            oauth_account.provider_data = user_info["raw_data"]
+            # Store provider data with scopes from token response
+            granted_scopes = cls._parse_scopes_from_tokens(tokens, provider)
+            oauth_account.provider_data = {
+                "scopes": granted_scopes,
+                "raw_user_info": user_info["raw_data"],
+            }
             db.commit()
 
             return oauth_account.user, False
@@ -461,6 +493,9 @@ class OAuthService:
             db.flush()
             is_new_user = True
 
+        # Parse scopes from token response
+        granted_scopes = cls._parse_scopes_from_tokens(tokens, provider)
+        
         # Create OAuth account link
         oauth_account = OAuthAccount(
             user_id=user.id,
@@ -474,7 +509,10 @@ class OAuthService:
                 if tokens.get("expires_in")
                 else None
             ),
-            provider_data=user_info["raw_data"],
+            provider_data={
+                "scopes": granted_scopes,
+                "raw_user_info": user_info["raw_data"],
+            },
         )
         db.add(oauth_account)
 
