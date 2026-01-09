@@ -10,15 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install poetry
-RUN pip install --no-cache-dir poetry==1.7.1
-
-# Copy dependency files
-COPY apps/api/pyproject.toml apps/api/poetry.lock* ./
+# Copy requirements file
+COPY apps/api/requirements.txt ./
 
 # Install dependencies
-RUN poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi --only main
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Production stage
 FROM python:3.11-slim AS runner
@@ -45,5 +41,9 @@ EXPOSE 8000
 
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
