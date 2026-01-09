@@ -82,6 +82,12 @@ spec:
     - domain: auth.madfam.io
       tls: true
       tlsIssuer: cloudflare
+    - domain: api.janua.dev
+      tls: true
+      tlsIssuer: cloudflare
+    - domain: janua.dev
+      tls: true
+      tlsIssuer: cloudflare
 
   autoscaling:
     enabled: true
