@@ -160,8 +160,11 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         # Get client identifier (IP, user ID, or API key)
         client_id = self.get_client_identifier(request)
 
-        # Get rate limit configuration for this endpoint
-        max_requests, time_window = EndpointRateLimitConfig.get_limit_for_path(path)
+        # Get base rate limit configuration for this endpoint
+        base_limit, time_window = EndpointRateLimitConfig.get_limit_for_path(path)
+
+        # Apply tier-based rate limit multipliers
+        max_requests = await self._apply_tier_multiplier(request, client_id, base_limit)
 
         # Check rate limit
         is_allowed, remaining, reset_time = await self.check_rate_limit(
@@ -229,6 +232,123 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
             ip = request.client.host if request.client else "unknown"
 
         return f"ip:{ip}"
+
+    async def _apply_tier_multiplier(
+        self, request: Request, client_id: str, base_limit: int
+    ) -> int:
+        """
+        Apply tier-based rate limit multipliers based on user/organization subscription.
+
+        Tier multipliers:
+        - community/free: 1.0x (base limit)
+        - pro: 2.0x
+        - scale: 5.0x
+        - enterprise: 10.0x
+
+        Returns adjusted rate limit based on subscription tier.
+        """
+        # Tier multipliers for rate limiting
+        TIER_MULTIPLIERS = {
+            "free": 1.0,
+            "community": 1.0,
+            "pro": 2.0,
+            "premium": 2.0,  # Alias for pro
+            "scale": 5.0,
+            "enterprise": 10.0,
+        }
+
+        # If no Redis, can't cache tier lookups efficiently
+        if not self.redis_client:
+            return base_limit
+
+        try:
+            # Check if we have a cached tier for this client
+            tier_cache_key = f"client_tier:{client_id}"
+            cached_tier = await self.redis_client.get(tier_cache_key)
+
+            if cached_tier:
+                tier = cached_tier if isinstance(cached_tier, str) else cached_tier.decode("utf-8")
+                multiplier = TIER_MULTIPLIERS.get(tier.lower(), 1.0)
+                return int(base_limit * multiplier)
+
+            # Extract tier from user or organization
+            tier = "free"  # Default
+
+            # Check if client is an authenticated user
+            if client_id.startswith("user:"):
+                user_id = client_id.split(":", 1)[1]
+                tier = await self._get_user_tier(user_id)
+
+            # Check if client is identified by API key (organization tier)
+            elif client_id.startswith("api:"):
+                # API keys are typically tied to organizations
+                # For now, assume pro tier for API key users
+                tier = "pro"
+
+            # Check for organization/tenant context in request state
+            if hasattr(request.state, "organization"):
+                org = request.state.organization
+                if hasattr(org, "subscription_tier") and org.subscription_tier:
+                    tier = org.subscription_tier
+                elif hasattr(org, "billing_plan") and org.billing_plan:
+                    tier = org.billing_plan
+
+            # Cache the tier for future requests (5 minute TTL)
+            await self.redis_client.setex(tier_cache_key, 300, tier)
+
+            multiplier = TIER_MULTIPLIERS.get(tier.lower(), 1.0)
+            return int(base_limit * multiplier)
+
+        except Exception as e:
+            logger.warning(f"Failed to apply tier multiplier for {client_id}: {e}")
+            return base_limit
+
+    async def _get_user_tier(self, user_id: str) -> str:
+        """
+        Fetch user's subscription tier from database via their organization.
+
+        Args:
+            user_id: User UUID string
+
+        Returns:
+            Tier name: "free", "pro", "scale", or "enterprise"
+        """
+        try:
+            from uuid import UUID
+
+            from sqlalchemy import select
+            from sqlalchemy.ext.asyncio import AsyncSession
+
+            from app.core.database import get_db_session
+            from app.models import Organization, OrganizationMember
+
+            # Convert string to UUID
+            user_uuid = UUID(user_id)
+
+            async with get_db_session() as session:
+                # Find user's primary organization and its subscription tier
+                result = await session.execute(
+                    select(Organization.subscription_tier, Organization.billing_plan)
+                    .join(
+                        OrganizationMember,
+                        OrganizationMember.organization_id == Organization.id,
+                    )
+                    .where(OrganizationMember.user_id == user_uuid)
+                    .where(OrganizationMember.status == "active")
+                    .limit(1)
+                )
+                row = result.first()
+
+                if row:
+                    # Prefer subscription_tier, fall back to billing_plan
+                    tier = row[0] or row[1] or "free"
+                    return tier.lower()
+
+            return "free"
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch user tier for {user_id}: {e}")
+            return "free"
 
     async def check_rate_limit(
         self, client_id: str, path: str, max_requests: int, time_window: int

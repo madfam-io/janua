@@ -568,24 +568,39 @@ async def test_json_endpoint(data: dict):
 # OpenID Connect discovery endpoints
 @app.get("/.well-known/openid-configuration")
 def openid_configuration():
-    base_url = settings.BASE_URL or "https://auth.madfam.io"
+    """
+    OpenID Connect Discovery endpoint.
+
+    Returns the OIDC provider configuration document per RFC 8414.
+    Used by clients to automatically configure OAuth2/OIDC integration.
+    """
+    # Use API_BASE_URL for the actual API endpoints
+    api_base_url = settings.API_BASE_URL.rstrip("/")
+    # Use BASE_URL as the issuer identifier (the main identity)
+    issuer = settings.BASE_URL.rstrip("/") if settings.BASE_URL else api_base_url
+
     return {
-        "issuer": base_url,
-        "authorization_endpoint": f"{base_url}/api/v1/oauth/authorize",
-        "token_endpoint": f"{base_url}/api/v1/oauth/token",
-        "userinfo_endpoint": f"{base_url}/api/v1/oauth/userinfo",
-        "jwks_uri": f"{base_url}/.well-known/jwks.json",
-        "introspection_endpoint": f"{base_url}/api/v1/oauth/introspect",
-        "revocation_endpoint": f"{base_url}/api/v1/oauth/revoke",
-        "response_types_supported": ["code"],
-        "response_modes_supported": ["query"],
-        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "issuer": issuer,
+        "authorization_endpoint": f"{api_base_url}/api/v1/oauth/authorize",
+        "token_endpoint": f"{api_base_url}/api/v1/oauth/token",
+        "userinfo_endpoint": f"{api_base_url}/api/v1/oauth/userinfo",
+        "jwks_uri": f"{api_base_url}/.well-known/jwks.json",
+        "introspection_endpoint": f"{api_base_url}/api/v1/oauth/introspect",
+        "revocation_endpoint": f"{api_base_url}/api/v1/oauth/revoke",
+        "registration_endpoint": f"{api_base_url}/api/v1/oauth/register",
+        "response_types_supported": ["code", "token", "id_token", "code token", "code id_token", "token id_token", "code token id_token"],
+        "response_modes_supported": ["query", "fragment", "form_post"],
+        "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"],
-        "scopes_supported": ["openid", "profile", "email"],
-        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
-        "claims_supported": ["sub", "email", "email_verified", "name", "given_name", "family_name", "picture", "updated_at"],
+        "scopes_supported": ["openid", "profile", "email", "offline_access"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
+        "claims_supported": [
+            "sub", "iss", "aud", "exp", "iat", "auth_time", "nonce",
+            "email", "email_verified", "name", "given_name", "family_name", "picture", "updated_at"
+        ],
         "code_challenge_methods_supported": ["S256", "plain"],
+        "service_documentation": "https://docs.janua.dev",
     }
 
 

@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: janua-docs
-          image: localhost:5000/janua-docs:latest
-          imagePullPolicy: Always
+          image: ghcr.io/madfam-io/janua-docs:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 4103
               protocol: TCP
@@ -49,5 +49,3 @@ spec:
               port: 4103
             initialDelaySeconds: 5
             periodSeconds: 10
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
         default="development", pattern="^(development|staging|production|test)$"
     )
     BASE_URL: str = Field(default="https://janua.dev")
+    API_BASE_URL: str = Field(
+        default="https://api.janua.dev",
+        description="Base URL for the API (used for SSO callbacks, OIDC discovery, etc.)"
+    )
     INTERNAL_BASE_URL: Optional[str] = Field(
         default=None, description="Internal service URL for Railway private networking"
     )

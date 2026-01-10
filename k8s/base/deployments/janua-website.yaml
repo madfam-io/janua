@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: janua-website
-          image: localhost:5000/janua-website:latest
-          imagePullPolicy: Always
+          image: ghcr.io/madfam-io/janua-website:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 4104
               protocol: TCP
@@ -49,5 +49,3 @@ spec:
               port: 4104
             initialDelaySeconds: 5
             periodSeconds: 10
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
