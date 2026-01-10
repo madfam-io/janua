@@ -672,7 +672,7 @@ test('renders dashboard for authenticated user', async () => {
 ## Support
 
 - **Documentation**: [docs.janua.dev](https://docs.janua.dev)
-- **Examples**: [github.com/madfam-io/examples](https://github.com/madfam-io/examples)
+- **Examples**: [github.com/madfam-org/examples](https://github.com/madfam-org/examples)
 - **Discord**: [discord.gg/janua](https://discord.gg/janua)
 - **Email**: react-support@janua.dev
 

@@ -81,7 +81,7 @@ python auth0_migrate.py --config config.json
 
 ```bash
 # Clone the repository
-git clone https://github.com/madfam-io/janua.git
+git clone https://github.com/madfam-org/janua.git
 cd janua
 
 # Install dependencies (pnpm monorepo)
@@ -199,7 +199,7 @@ For CI/CD environments, set the `NPM_MADFAM_TOKEN` secret in your GitHub Actions
 **Docker Compose** (Recommended):
 ```bash
 # Clone and configure
-git clone https://github.com/madfam-io/janua.git
+git clone https://github.com/madfam-org/janua.git
 cd janua
 
 # Copy environment files
@@ -446,8 +446,8 @@ See [LICENSE](LICENSE) for details.
 ## Support
 
 - 📖 **Documentation:** [docs/](docs/)
-- 🐛 **Bug Reports:** [GitHub Issues](https://github.com/madfam-io/janua/issues)
-- 💬 **Questions:** [GitHub Discussions](https://github.com/madfam-io/janua/discussions)
+- 🐛 **Bug Reports:** [GitHub Issues](https://github.com/madfam-org/janua/issues)
+- 💬 **Questions:** [GitHub Discussions](https://github.com/madfam-org/janua/discussions)
 - 📧 **Security Issues:** security@janua.dev
 
 **No Discord/Slack yet.** We'll create them when we have enough users to justify it.

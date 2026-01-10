@@ -39,7 +39,7 @@
    - "All", "Performance", "Security"
    - "Developer Experience", "Enterprise"
 3. **View Live Demo CTA** - Button responds to clicks
-4. **View Source Code CTA** - Valid GitHub URL: `https://github.com/madfam-io/janua`
+4. **View Source Code CTA** - Valid GitHub URL: `https://github.com/madfam-org/janua`
 5. **Start Free CTA** - Valid app URL: `https://app.janua.dev/auth/signup`
 
 #### ❌ Issues Identified:
@@ -51,10 +51,10 @@
 **Status**: ✅ 100% Success Rate (17/17 working)
 
 #### GitHub Links (6 found):
-- ✅ Main repository: `https://github.com/madfam-io/janua`
-- ✅ TypeScript SDK: `https://github.com/madfam-io/janua/tree/main/apps/api/sdks/typescript`
-- ✅ Issues page: `https://github.com/madfam-io/janua/issues`
-- ✅ MADFAM repo: `https://github.com/madfam-io/janua`
+- ✅ Main repository: `https://github.com/madfam-org/janua`
+- ✅ TypeScript SDK: `https://github.com/madfam-org/janua/tree/main/apps/api/sdks/typescript`
+- ✅ Issues page: `https://github.com/madfam-org/janua/issues`
+- ✅ MADFAM repo: `https://github.com/madfam-org/janua`
 - ✅ All links have proper `target="_blank"` or same-tab navigation
 
 #### App Integration Links (2 found):
@@ -82,7 +82,7 @@
 
 #### Social Media Integration:
 - ✅ **Twitter**: `https://twitter.com/getjanua`
-- ✅ **GitHub**: `https://github.com/madfam-io/janua`
+- ✅ **GitHub**: `https://github.com/madfam-org/janua`
 - ✅ **LinkedIn**: `https://linkedin.com/company/janua-dev`
 - ✅ **Email**: `mailto:hello@janua.dev`
 - ℹ️ **Discord**: Not implemented (acceptable)

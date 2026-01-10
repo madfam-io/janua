@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 ENVIRONMENT=${1:-staging}
 BUILD_DIR=".next"
 IMAGE_NAME="janua-website"
-REGISTRY="ghcr.io/madfam-io"
+REGISTRY="ghcr.io/madfam-org"
 
 echo -e "${GREEN}🚀 Janua Website Deployment${NC}"
 echo -e "${YELLOW}Environment: ${ENVIRONMENT}${NC}"

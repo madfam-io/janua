@@ -217,10 +217,10 @@ Go modules are published via git tags, not a package registry.
 
 ```bash
 # Install specific version
-go get github.com/madfam-io/janua/packages/go-sdk@v1.0.0
+go get github.com/madfam-org/janua/packages/go-sdk@v1.0.0
 
 # Install latest
-go get github.com/madfam-io/janua/packages/go-sdk@latest
+go get github.com/madfam-org/janua/packages/go-sdk@latest
 ```
 
 ## Versioning Guidelines

@@ -764,4 +764,4 @@ const isValid = verifyWebhookSignature(
 - **Documentation**: https://docs.janua.dev
 - **Status Page**: https://status.janua.dev
 - **Support Email**: support@janua.dev
-- **GitHub Issues**: https://github.com/madfam-io/janua/issues
+- **GitHub Issues**: https://github.com/madfam-org/janua/issues

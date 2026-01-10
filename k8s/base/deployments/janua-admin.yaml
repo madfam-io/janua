@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: janua-admin
-          image: ghcr.io/madfam-io/janua-admin:latest
+          image: ghcr.io/madfam-org/janua-admin:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 4102

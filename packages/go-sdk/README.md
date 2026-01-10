@@ -5,7 +5,7 @@ Official Go SDK for the Janua Identity Platform.
 ## Installation
 
 ```bash
-go get github.com/madfam-io/go-sdk
+go get github.com/madfam-org/go-sdk
 ```
 
 ## Quick Start
@@ -17,7 +17,7 @@ import (
     "context"
     "log"
     
-    janua "github.com/madfam-io/go-sdk/client"
+    janua "github.com/madfam-org/go-sdk/client"
 )
 
 func main() {

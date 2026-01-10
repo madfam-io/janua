@@ -500,7 +500,7 @@ This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE)
 ## Support
 
 - Documentation: [https://docs.janua.dev](https://docs.janua.dev)
-- GitHub Issues: [https://github.com/madfam-io/janua/issues](https://github.com/madfam-io/janua/issues)
+- GitHub Issues: [https://github.com/madfam-org/janua/issues](https://github.com/madfam-org/janua/issues)
 - Discord: [https://discord.gg/janua](https://discord.gg/janua)
 - Email: support@janua.dev
 

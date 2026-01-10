@@ -959,7 +959,7 @@ try {
 - **Polar Documentation**: [docs.polar.sh](https://docs.polar.sh)
 - **Polar Dashboard**: [polar.sh/dashboard](https://polar.sh/dashboard)
 - **API Reference**: [docs.polar.sh/api](https://docs.polar.sh/api)
-- **Janua Issues**: [github.com/madfam-io/janua/issues](https://github.com/madfam-io/janua/issues)
+- **Janua Issues**: [github.com/madfam-org/janua/issues](https://github.com/madfam-org/janua/issues)
 
 ---
 

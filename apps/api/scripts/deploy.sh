@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 # Configuration
 ENVIRONMENT=${1:-staging}
 IMAGE_NAME="janua-api"
-REGISTRY="ghcr.io/madfam-io"
+REGISTRY="ghcr.io/madfam-org"
 PORT=4100  # MADFAM standard port for Janua API
 
 echo -e "${GREEN}🚀 Janua API Deployment${NC}"

@@ -128,7 +128,7 @@ pnpm lint             # Lint all packages
 
 ## Port Allocation
 
-Per [MADFAM Ecosystem Standard](https://github.com/madfam-io/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Janua uses the 4100-4199 block.
+Per [MADFAM Ecosystem Standard](https://github.com/madfam-org/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Janua uses the 4100-4199 block.
 
 | Service | Port | Container | Public Domain |
 |---------|------|-----------|---------------|
@@ -261,7 +261,7 @@ pip install janua-sdk
 
 ### Go
 ```bash
-go get github.com/madfam-io/janua/packages/go-sdk
+go get github.com/madfam-org/janua/packages/go-sdk
 ```
 
 ---
@@ -380,7 +380,7 @@ enclii deploy --service janua
 ## Related Resources
 
 - **Website**: [janua.dev](https://janua.dev)
-- **GitHub**: [madfam-io/janua](https://github.com/madfam-io/janua)
+- **GitHub**: [madfam-org/janua](https://github.com/madfam-org/janua)
 - **Docs**: 204 markdown files in `docs/`
 - **License**: AGPL v3
 

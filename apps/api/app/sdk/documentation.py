@@ -329,8 +329,8 @@ import (
     "fmt"
     "log"
 
-    "github.com/madfam-io/go-sdk/client"
-    "github.com/madfam-io/go-sdk/auth"
+    "github.com/madfam-org/go-sdk/client"
+    "github.com/madfam-org/go-sdk/auth"
 )
 
 func main() {
@@ -358,8 +358,8 @@ func main() {
     fmt.Printf("Welcome, %s!\\n", response.Data.User.Email)
 }
             """,
-            imports=["github.com/madfam-io/go-sdk"],
-            dependencies=["github.com/madfam-io/go-sdk@v1.0.0"]
+            imports=["github.com/madfam-org/go-sdk"],
+            dependencies=["github.com/madfam-org/go-sdk@v1.0.0"]
         )
     ]
 
@@ -524,7 +524,7 @@ npm install @janua/typescript-sdk
 
 ### Go
 ```bash
-go get github.com/madfam-io/go-sdk
+go get github.com/madfam-org/go-sdk
 ```
 
 ## Quick Start
@@ -558,7 +558,7 @@ const response = await client.auth.signIn({
 
 #### Go
 ```go
-import "github.com/madfam-io/go-sdk/client"
+import "github.com/madfam-org/go-sdk/client"
 
 client := client.NewJanuaClient(&client.Config{
     BaseURL: "https://api.janua.dev",

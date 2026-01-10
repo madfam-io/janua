@@ -2515,7 +2515,7 @@ NEXT_PUBLIC_JANUA_BASE_URL=https://api.janua.dev
 ## Support and Resources
 
 - **Documentation**: [https://docs.janua.dev](https://docs.janua.dev)
-- **GitHub**: [https://github.com/madfam-io/janua](https://github.com/madfam-io/janua)
+- **GitHub**: [https://github.com/madfam-org/janua](https://github.com/madfam-org/janua)
 - **npm**: [@janua/sdk](https://www.npmjs.com/package/@janua/sdk)
 - **PyPI**: [janua-python](https://pypi.org/project/janua-python/)
 - **Support**: [support@janua.dev](mailto:support@janua.dev)

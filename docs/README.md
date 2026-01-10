@@ -97,7 +97,7 @@ Found an issue or want to improve documentation?
 
 ## 📬 Support
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/madfam-io/janua/issues)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/madfam-org/janua/issues)
 - **Documentation Issues**: Tag with `documentation` label
 - **Security Issues**: security@janua.dev (private disclosure)
 

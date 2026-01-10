@@ -141,7 +141,7 @@ yarn db:reset        # Reset database
 - **Dashboard**: https://app.janua.dev
 - **Admin**: https://admin.janua.dev
 - **Docs**: https://docs.janua.dev
-- **GitHub**: https://github.com/madfam-io/janua
+- **GitHub**: https://github.com/madfam-org/janua
 
 ## 📚 Documentation Map
 

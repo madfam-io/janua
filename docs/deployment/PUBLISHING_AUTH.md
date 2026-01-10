@@ -94,7 +94,7 @@ git push origin v1.0.0
 ### 3. The module will be automatically available
 Users can get it with:
 ```bash
-go get github.com/madfam-io/janua/go-sdk@v1.0.0
+go get github.com/madfam-org/janua/go-sdk@v1.0.0
 ```
 
 ## Current Authentication Status

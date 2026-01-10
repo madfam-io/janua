@@ -52,11 +52,11 @@
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/madfam-io/janua.git",
+    "url": "https://github.com/madfam-org/janua.git",
     "directory": "packages/typescript-sdk"
   },
   "bugs": {
-    "url": "https://github.com/madfam-io/janua/issues"
+    "url": "https://github.com/madfam-org/janua/issues"
   },
   "publishConfig": {
     "access": "restricted",

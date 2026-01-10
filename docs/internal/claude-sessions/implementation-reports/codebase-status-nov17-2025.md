@@ -1,7 +1,7 @@
 # Janua Codebase Evidence-Based Status Report
 **Generated**: November 17, 2025  
 **Method**: Direct file system analysis, line counting, pattern matching  
-**Repository**: github.com/madfam-io/janua
+**Repository**: github.com/madfam-org/janua
 
 ---
 

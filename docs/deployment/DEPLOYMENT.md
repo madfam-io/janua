@@ -46,7 +46,7 @@ This guide covers deploying Janua to production using MADFAM's self-hosted infra
 
 ## Port Allocation (MADFAM Standard)
 
-Per [MADFAM Ecosystem Port Standard](https://github.com/madfam-io/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Janua uses the **4100-4199 block**:
+Per [MADFAM Ecosystem Port Standard](https://github.com/madfam-org/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Janua uses the **4100-4199 block**:
 
 | Service | Port | Container Name | Public Domain |
 |---------|------|----------------|---------------|
@@ -88,7 +88,7 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 ```bash
 # Clone repository
-git clone https://github.com/madfam-io/janua.git
+git clone https://github.com/madfam-org/janua.git
 cd janua
 
 # Copy and configure production environment
@@ -100,10 +100,10 @@ cp .env.production.example .env.production
 
 ```bash
 # Pull latest images from GitHub Container Registry
-docker pull ghcr.io/madfam-io/janua-api:latest
-docker pull ghcr.io/madfam-io/janua-dashboard:latest
-docker pull ghcr.io/madfam-io/janua-website:latest
-docker pull ghcr.io/madfam-io/janua-docs:latest
+docker pull ghcr.io/madfam-org/janua-api:latest
+docker pull ghcr.io/madfam-org/janua-dashboard:latest
+docker pull ghcr.io/madfam-org/janua-website:latest
+docker pull ghcr.io/madfam-org/janua-docs:latest
 ```
 
 ### 3. Start Infrastructure
@@ -202,7 +202,7 @@ jobs:
         with:
           file: ./Dockerfile.api
           push: true
-          tags: ghcr.io/madfam-io/janua-api:latest
+          tags: ghcr.io/madfam-org/janua-api:latest
 
   deploy:
     needs: [build-api, build-dashboard, build-website, build-docs]
@@ -411,7 +411,7 @@ Access Grafana at `http://localhost:3000` (internal only):
 ## Support
 
 - **Documentation**: https://docs.janua.dev
-- **GitHub Issues**: https://github.com/madfam-io/janua/issues
+- **GitHub Issues**: https://github.com/madfam-org/janua/issues
 - **Email**: support@janua.dev
 
 ---

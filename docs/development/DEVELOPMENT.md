@@ -34,7 +34,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/madfam-io/janua.git
+git clone https://github.com/madfam-org/janua.git
 cd janua
 ```
 

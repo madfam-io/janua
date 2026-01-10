@@ -600,7 +600,7 @@ JANUA_WEBHOOK_SECRET=your-webhook-secret
 
 ```bash
 # Clone the repo
-git clone https://github.com/madfam-io/janua.git
+git clone https://github.com/madfam-org/janua.git
 
 # Navigate to React package
 cd packages/react
@@ -623,7 +623,7 @@ yarn build
 - [React Hooks Documentation](https://docs.janua.dev/react/hooks)
 - [Component Reference](https://docs.janua.dev/react/components)
 - [SSR Guide](https://docs.janua.dev/react/ssr)
-- [Examples](https://github.com/madfam-io/janua/tree/main/examples/react)
+- [Examples](https://github.com/madfam-org/janua/tree/main/examples/react)
 
 ## 🎯 Roadmap
 

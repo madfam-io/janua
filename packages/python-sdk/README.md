@@ -513,7 +513,7 @@ MIT
 ## Support
 
 - Documentation: https://docs.janua.dev/sdks/python
-- GitHub Issues: https://github.com/madfam-io/python-sdk/issues
+- GitHub Issues: https://github.com/madfam-org/python-sdk/issues
 - Email: support@janua.dev
 
 ## Contributing

@@ -1238,4 +1238,4 @@ function BadDashboard() {
 
 ---
 
-**📦 [Package Repository](https://github.com/madfam-io/janua)** • **🔗 [API Reference](../api/README.md)** • **🚀 [Quick Start Examples](../examples/react/)**
+**📦 [Package Repository](https://github.com/madfam-org/janua)** • **🔗 [API Reference](../api/README.md)** • **🚀 [Quick Start Examples](../examples/react/)**

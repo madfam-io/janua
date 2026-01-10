@@ -63,11 +63,11 @@
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/madfam-io/janua.git",
+    "url": "https://github.com/madfam-org/janua.git",
     "directory": "packages/react-sdk"
   },
   "bugs": {
-    "url": "https://github.com/madfam-io/janua/issues"
+    "url": "https://github.com/madfam-org/janua/issues"
   },
   "homepage": "https://janua.dev",
   "publishConfig": {

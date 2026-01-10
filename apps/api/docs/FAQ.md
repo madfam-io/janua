@@ -378,8 +378,8 @@ async def reset_password(email: str, new_password: str):
 Can't find what you're looking for? Here's how to get help:
 
 1. **Search Documentation**: Use the search function in our docs
-2. **Check Issues**: Look through [GitHub Issues](https://github.com/madfam-io/janua/issues)
-3. **Ask Community**: Post in [GitHub Discussions](https://github.com/madfam-io/janua/discussions)
+2. **Check Issues**: Look through [GitHub Issues](https://github.com/madfam-org/janua/issues)
+3. **Ask Community**: Post in [GitHub Discussions](https://github.com/madfam-org/janua/discussions)
 4. **Join Discord**: Real-time chat at [discord.gg/janua-dev](https://discord.gg/janua-dev)
 5. **Contact Support**: Email [support@janua.dev](mailto:support@janua.dev)
 

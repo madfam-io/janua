@@ -288,7 +288,7 @@ cat > ../$PUBLIC_REPO/typescript/package.json << 'EOF'
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/madfam-io/janua-sdks.git",
+    "url": "https://github.com/madfam-org/janua-sdks.git",
     "directory": "typescript"
   },
   "keywords": [
@@ -302,7 +302,7 @@ cat > ../$PUBLIC_REPO/typescript/package.json << 'EOF'
   ],
   "author": "Janua Team",
   "bugs": {
-    "url": "https://github.com/madfam-io/janua-sdks/issues"
+    "url": "https://github.com/madfam-org/janua-sdks/issues"
   },
   "homepage": "https://janua.dev",
   "publishConfig": {
@@ -483,7 +483,7 @@ AGPL-3.0 License - see [LICENSE](./LICENSE) for details.
 
 - **Documentation**: [https://docs.janua.dev](https://docs.janua.dev)
 - **Community Forum**: [https://community.janua.dev](https://community.janua.dev)
-- **GitHub Issues**: [https://github.com/madfam-io/janua-sdks/issues](https://github.com/madfam-io/janua-sdks/issues)
+- **GitHub Issues**: [https://github.com/madfam-org/janua-sdks/issues](https://github.com/madfam-org/janua-sdks/issues)
 - **Enterprise Support**: [sales@janua.dev](mailto:sales@janua.dev)
 EOF
 
@@ -595,7 +595,7 @@ echo "  1. Review the public repository at ../$PUBLIC_REPO"
 echo "  2. Create GitHub repository: https://github.com/new"
 echo "  3. Push public SDKs:"
 echo "     cd ../$PUBLIC_REPO"
-echo "     git remote add origin git@github.com:madfam-io/janua-sdks.git"
+echo "     git remote add origin git@github.com:madfam-org/janua-sdks.git"
 echo "     git push -u origin main"
 echo ""
 echo "  4. Publish packages:"

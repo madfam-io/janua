@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: janua-docs
-          image: ghcr.io/madfam-io/janua-docs:latest
+          image: ghcr.io/madfam-org/janua-docs:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 4103

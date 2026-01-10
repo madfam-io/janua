@@ -76,10 +76,10 @@ Build production-ready, enterprise-competitive identity platform that can direct
 ```bash
 # Tasks
 - Review packages/go-sdk/go.mod
-- Ensure module path is correct: github.com/madfam-io/janua/go-sdk
+- Ensure module path is correct: github.com/madfam-org/janua/go-sdk
 - Add go.sum with dependencies
 - Test build: go build ./...
-- Test installation: go get github.com/madfam-io/janua/go-sdk
+- Test installation: go get github.com/madfam-org/janua/go-sdk
 - Create example usage
 
 # Success Criteria
@@ -96,7 +96,7 @@ npm link packages/nextjs-sdk
 npm link packages/react-sdk
 npm link packages/vue-sdk
 pip install -e packages/python-sdk
-go get github.com/madfam-io/janua/go-sdk
+go get github.com/madfam-org/janua/go-sdk
 
 # Create test projects for each
 mkdir -p test-installations/{ts,nextjs,react,vue,python,go}

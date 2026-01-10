@@ -610,7 +610,7 @@ const client = createClient({
 
 For issues, questions, or feature requests:
 
-- GitHub Issues: https://github.com/madfam-io/janua/issues
+- GitHub Issues: https://github.com/madfam-org/janua/issues
 - Documentation: https://docs.janua.dev
 - Community: https://community.janua.dev
 

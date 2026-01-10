@@ -99,7 +99,7 @@ To verify the fix works:
 
 1. Make a trivial change to `apps/landing/README.md`
 2. Commit and push
-3. Monitor workflow run at: https://github.com/madfam-io/janua/actions/workflows/validate-user-journeys.yml
+3. Monitor workflow run at: https://github.com/madfam-org/janua/actions/workflows/validate-user-journeys.yml
 4. Verify all jobs pass or fail with meaningful errors (not "page not found")
 
 ## Infrastructure Improvements

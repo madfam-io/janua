@@ -36,11 +36,11 @@
   "homepage": "https://janua.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/madfam-io/janua.git",
+    "url": "https://github.com/madfam-org/janua.git",
     "directory": "apps/api/sdks/typescript"
   },
   "bugs": {
-    "url": "https://github.com/madfam-io/janua/issues"
+    "url": "https://github.com/madfam-org/janua/issues"
   },
   "dependencies": {
     "axios": "^1.6.0",

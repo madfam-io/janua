@@ -332,7 +332,7 @@ python auth0_migrate.py --config config.json
 
 1. Check `migration_report.json` for error details
 2. Review [Troubleshooting](#troubleshooting) section
-3. Open [GitHub Issue](https://github.com/madfam-io/janua/issues)
+3. Open [GitHub Issue](https://github.com/madfam-org/janua/issues)
 4. Include: Error message, config (redacted), migration report
 
 **Security concerns:**

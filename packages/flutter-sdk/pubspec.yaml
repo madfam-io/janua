@@ -2,8 +2,8 @@ name: janua_flutter
 description: Official Flutter SDK for Janua Identity Platform with support for iOS, Android, and Web platforms
 version: 1.0.0
 homepage: https://janua.dev
-repository: https://github.com/madfam-io/janua
-issue_tracker: https://github.com/madfam-io/janua/issues
+repository: https://github.com/madfam-org/janua
+issue_tracker: https://github.com/madfam-org/janua/issues
 documentation: https://docs.janua.dev/sdks/flutter
 
 environment:

@@ -1,7 +1,7 @@
 # Janua Codebase Audit Report
 **Date**: November 19, 2025
 **Auditor**: Claude Code (Anthropic)
-**Repository**: madfam-io/janua
+**Repository**: madfam-org/janua
 **Branch**: claude/codebase-audit-01Re2L6DdU3drSqiGHS9dJoZ
 
 ---

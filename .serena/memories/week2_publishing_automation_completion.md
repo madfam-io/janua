@@ -252,10 +252,10 @@ git push origin typescript-sdk-v1.1.0
 ### Setup Instructions
 ```bash
 # NPM token (create at npmjs.com)
-gh secret set NPM_TOKEN --repo madfam-io/janua
+gh secret set NPM_TOKEN --repo madfam-org/janua
 
 # PyPI token (create at pypi.org)
-gh secret set PYPI_API_TOKEN --repo madfam-io/janua
+gh secret set PYPI_API_TOKEN --repo madfam-org/janua
 ```
 
 ## Success Metrics

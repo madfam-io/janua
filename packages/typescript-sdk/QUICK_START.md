@@ -476,7 +476,7 @@ For complete API documentation, see [API Reference](../../docs/reference/API_SPE
 ## Support
 
 - **Documentation**: [docs.janua.dev](https://docs.janua.dev)
-- **GitHub Issues**: [github.com/madfam-io/sdk-js](https://github.com/madfam-io/sdk-js)
+- **GitHub Issues**: [github.com/madfam-org/sdk-js](https://github.com/madfam-org/sdk-js)
 - **Discord**: [discord.gg/janua](https://discord.gg/janua)
 - **Email**: sdk-support@janua.dev
 

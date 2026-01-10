@@ -84,7 +84,7 @@ case "$SDK_NAME" in
         echo "     git push origin go-sdk/v1.0.0"
         echo ""
         echo "Users can then install with:"
-        echo "  go get github.com/madfam-io/janua/packages/go-sdk@v1.0.0"
+        echo "  go get github.com/madfam-org/janua/packages/go-sdk@v1.0.0"
         exit 0
         ;;
     *)

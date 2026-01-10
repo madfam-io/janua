@@ -162,7 +162,7 @@ function OrgSelector() {
 
 ### Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/madfam-io/janua/tree/main/examples/nextjs-app)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/madfam-org/janua/tree/main/examples/nextjs-app)
 
 ### Docker
 
@@ -232,7 +232,7 @@ npm run test:e2e
 
 ## Support
 
-- **GitHub Issues**: [github.com/madfam-io/janua/issues](https://github.com/madfam-io/janua/issues)
+- **GitHub Issues**: [github.com/madfam-org/janua/issues](https://github.com/madfam-org/janua/issues)
 - **Discord Community**: [discord.gg/janua](https://discord.gg/janua)
 - **Email Support**: support@janua.dev
 

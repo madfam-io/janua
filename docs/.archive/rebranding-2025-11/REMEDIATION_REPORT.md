@@ -61,12 +61,12 @@ Following the initial rebranding effort, a comprehensive forensic audit revealed
 
 **Before:**
 ```go
-module github.com/madfam-io/plinto/go-sdk
+module github.com/madfam-org/plinto/go-sdk
 ```
 
 **After:**
 ```go
-module github.com/madfam-io/janua/go-sdk
+module github.com/madfam-org/janua/go-sdk
 ```
 
 **Impact:** Fixed all Go import paths

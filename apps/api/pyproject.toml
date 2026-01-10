@@ -108,9 +108,9 @@ all = [
 [project.urls]
 Homepage = "https://janua.dev"
 Documentation = "https://docs.janua.dev"
-Repository = "https://github.com/madfam-io/janua"
-"Bug Tracker" = "https://github.com/madfam-io/janua/issues"
-Changelog = "https://github.com/madfam-io/janua/blob/main/CHANGELOG.md"
+Repository = "https://github.com/madfam-org/janua"
+"Bug Tracker" = "https://github.com/madfam-org/janua/issues"
+Changelog = "https://github.com/madfam-org/janua/blob/main/CHANGELOG.md"
 
 [project.scripts]
 janua = "janua.cli:cli_main"

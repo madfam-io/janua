@@ -52,12 +52,12 @@
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/madfam-io/janua.git",
+    "url": "https://github.com/madfam-org/janua.git",
     "directory": "packages/nextjs-sdk"
   },
   "homepage": "https://janua.dev",
   "bugs": {
-    "url": "https://github.com/madfam-io/janua/issues"
+    "url": "https://github.com/madfam-org/janua/issues"
   },
   "dependencies": {
     "@janua/typescript-sdk": "workspace:*",

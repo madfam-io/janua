@@ -36,7 +36,7 @@ Production infrastructure documentation for Janua on bare metal (Hetzner).
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-> **Port Standard**: Janua uses ports 4100-4199 per the [MADFAM Ecosystem Port Allocation](https://github.com/madfam-io/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md).
+> **Port Standard**: Janua uses ports 4100-4199 per the [MADFAM Ecosystem Port Allocation](https://github.com/madfam-org/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md).
 
 ---
 

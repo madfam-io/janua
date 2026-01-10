@@ -35,17 +35,17 @@ git push origin main
 ```bash
 # For Janua API
 cd apps/api
-docker build -t ghcr.io/madfam-io/janua-api:v0.1.x .
+docker build -t ghcr.io/madfam-org/janua-api:v0.1.x .
 
 # For frontend apps
 cd apps/dashboard
-docker build -t ghcr.io/madfam-io/janua-dashboard:v0.1.x .
+docker build -t ghcr.io/madfam-org/janua-dashboard:v0.1.x .
 ```
 
 ### 4. Push to Registry
 ```bash
-docker push ghcr.io/madfam-io/janua-api:v0.1.x
-docker push ghcr.io/madfam-io/janua-dashboard:v0.1.x
+docker push ghcr.io/madfam-org/janua-api:v0.1.x
+docker push ghcr.io/madfam-org/janua-dashboard:v0.1.x
 ```
 
 ### 5. Deploy via Enclii

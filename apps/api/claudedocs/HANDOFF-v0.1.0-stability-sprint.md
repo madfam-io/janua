@@ -17,7 +17,7 @@
 | Janua Dashboard (4101) | ✅ Verified | Playwright screenshot: login form renders |
 | Janua Docs (4103) | ✅ Verified | Playwright screenshot: full docs site |
 | Enclii API (4200) | ✅ Verified | Health endpoint returns v0.1.0 |
-| Docker images pushed | ✅ Complete | `ghcr.io/madfam-io/janua-api:v0.1.0`, `ghcr.io/madfam-io/enclii-api:v0.1.0` |
+| Docker images pushed | ✅ Complete | `ghcr.io/madfam-org/janua-api:v0.1.0`, `ghcr.io/madfam-org/enclii-api:v0.1.0` |
 
 ### Blocked (Known Issues)
 
@@ -84,8 +84,8 @@ ssh root@ssh.madfam.io
 1. **Pull latest images on server**:
 ```bash
 ssh root@ssh.madfam.io
-docker pull ghcr.io/madfam-io/janua-api:v0.1.0
-docker pull ghcr.io/madfam-io/enclii-api:v0.1.0
+docker pull ghcr.io/madfam-org/janua-api:v0.1.0
+docker pull ghcr.io/madfam-org/enclii-api:v0.1.0
 ```
 
 2. **Apply K8s manifests**:
@@ -161,7 +161,7 @@ docker run -d --name janua-api-test \
   -e ENABLE_BETA_ENDPOINTS="false" \
   -e EMAIL_PROVIDER="resend" \
   -e RESEND_API_KEY="re_placeholder" \
-  ghcr.io/madfam-io/janua-api:v0.1.0
+  ghcr.io/madfam-org/janua-api:v0.1.0
 ```
 
 **Note for macOS**: Use `-p` port mapping (not `--network host`) and `host.docker.internal` for localhost services.

@@ -14,7 +14,7 @@ This guide covers deploying Janua authentication platform using Enclii, MADFAM's
 ```bash
 # 1. Clone and navigate to deployment
 cd /opt/solarpunk/janua
-git clone https://github.com/madfam-io/janua.git .
+git clone https://github.com/madfam-org/janua.git .
 cd deployment/enclii
 
 # 2. Configure environment
@@ -301,5 +301,5 @@ docker image prune -a --filter "until=168h"  # Remove images older than 1 week
 ## Support
 
 - Documentation: https://docs.janua.dev
-- Issues: https://github.com/madfam-io/janua/issues
+- Issues: https://github.com/madfam-org/janua/issues
 - Enclii: https://enclii.madfam.io

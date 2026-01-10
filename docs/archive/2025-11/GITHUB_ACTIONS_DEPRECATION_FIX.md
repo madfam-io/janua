@@ -79,7 +79,7 @@ After applying these fixes:
 ```bash
 # All workflows should run without deprecation errors
 # Check any workflow run at:
-https://github.com/madfam-io/janua/actions
+https://github.com/madfam-org/janua/actions
 ```
 
 ## Prevention

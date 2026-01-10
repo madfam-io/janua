@@ -365,19 +365,19 @@ from janua import Client
 **Update go.mod:**
 ```go
 // Old
-require github.com/madfam-io/plinto v1.0.0
+require github.com/madfam-org/plinto v1.0.0
 
 // New
-require github.com/madfam-io/janua v1.0.0
+require github.com/madfam-org/janua v1.0.0
 ```
 
 **Update imports:**
 ```go
 // Old
-import "github.com/madfam-io/plinto"
+import "github.com/madfam-org/plinto"
 
 // New
-import "github.com/madfam-io/janua"
+import "github.com/madfam-org/janua"
 ```
 
 ### Environment Variables

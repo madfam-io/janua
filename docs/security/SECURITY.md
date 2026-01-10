@@ -23,7 +23,7 @@ Instead, please report them using one of the following methods:
 
 #### 1. GitHub Security Advisory (Preferred)
 Report directly through GitHub's Security Advisory feature:
-- Go to https://github.com/madfam-io/janua/security/advisories
+- Go to https://github.com/madfam-org/janua/security/advisories
 - Click "Report a vulnerability"
 - Provide detailed information about the vulnerability
 

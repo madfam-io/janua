@@ -634,7 +634,7 @@ claims = janua.sessions.verify(token)
 ### Go
 
 ```go
-import "github.com/madfam-io/janua-go"
+import "github.com/madfam-org/janua-go"
 
 client := janua.NewClient(
     janua.WithAPIKey(os.Getenv("JANUA_API_KEY")),

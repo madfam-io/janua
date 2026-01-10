@@ -176,4 +176,4 @@ npm version --workspace=packages/typescript-sdk patch
 
 - **NPM Organization**: https://www.npmjs.com/org/janua
 - **PyPI Project**: https://pypi.org/project/janua-sdk/
-- **GitHub Releases**: https://github.com/madfam-io/janua/releases
+- **GitHub Releases**: https://github.com/madfam-org/janua/releases

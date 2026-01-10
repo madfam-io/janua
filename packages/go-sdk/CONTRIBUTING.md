@@ -11,7 +11,7 @@
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/madfam-io/janua.git
+   git clone https://github.com/madfam-org/janua.git
    cd janua/packages/go-sdk
    ```
 

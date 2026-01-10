@@ -50,7 +50,7 @@
 **Publication Readiness**: 77/100 → **95/100** (+18 points)
 
 ### Successfully Fixed
-1. ✅ Repository URLs (nextjs-sdk, edge, jwt-utils) - All now point to github.com/madfam-io/janua
+1. ✅ Repository URLs (nextjs-sdk, edge, jwt-utils) - All now point to github.com/madfam-org/janua
 2. ✅ Vue SDK package name - Renamed from @janua/vue to @janua/vue-sdk
 3. ✅ **React SDK TypeScript definitions** - Fixed 6 code errors, types now generated successfully
 4. ✅ README repository links - Fixed in typescript-sdk and react-sdk

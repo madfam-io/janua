@@ -13,8 +13,8 @@ description: "Self-hosted OAuth2/OIDC authentication platform"
 # Metadata
 # =============================================================================
 metadata:
-  owner: madfam-io
-  repository: https://github.com/madfam-io/janua
+  owner: madfam-org
+  repository: https://github.com/madfam-org/janua
   documentation: https://docs.janua.dev
   license: AGPL-3.0
   port_block: 4100-4199  # MADFAM ecosystem allocation

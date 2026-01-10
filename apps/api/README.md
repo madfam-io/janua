@@ -551,8 +551,8 @@ This project is licensed under the AGPL-3.0 License - see the [LICENSE](../../LI
 ## 🆘 Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/madfam-io/janua/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/madfam-io/janua/discussions)
+- **Issues**: [GitHub Issues](https://github.com/madfam-org/janua/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/madfam-org/janua/discussions)
 - **Email**: [support@janua.dev](mailto:support@janua.dev)
 
 ---

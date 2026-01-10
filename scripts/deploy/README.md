@@ -61,11 +61,11 @@ The primary CI/CD pipeline is defined in `.github/workflows/deploy.yml`.
 ### Container Registry
 
 Images are published to GitHub Container Registry:
-- `ghcr.io/madfam-io/janua-api:latest`
-- `ghcr.io/madfam-io/janua-dashboard:latest`
-- `ghcr.io/madfam-io/janua-admin:latest`
-- `ghcr.io/madfam-io/janua-docs:latest`
-- `ghcr.io/madfam-io/janua-website:latest`
+- `ghcr.io/madfam-org/janua-api:latest`
+- `ghcr.io/madfam-org/janua-dashboard:latest`
+- `ghcr.io/madfam-org/janua-admin:latest`
+- `ghcr.io/madfam-org/janua-docs:latest`
+- `ghcr.io/madfam-org/janua-website:latest`
 
 ### Required Secrets
 

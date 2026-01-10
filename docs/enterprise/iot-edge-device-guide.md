@@ -1163,6 +1163,6 @@ class FleetManagementService {
 ## Support & Resources
 
 - IoT Documentation: https://docs.janua.dev/iot
-- Device SDKs: https://github.com/madfam-io/device-sdks
-- Edge Gateway: https://github.com/madfam-io/edge-gateway
+- Device SDKs: https://github.com/madfam-org/device-sdks
+- Edge Gateway: https://github.com/madfam-org/edge-gateway
 - Support: iot@janua.dev

@@ -139,6 +139,6 @@ janua create-user --email admin@example.com --admin
 
 ### Support
 - Documentation: https://docs.janua.dev
-- Issues: https://github.com/madfam-io/janua/issues
+- Issues: https://github.com/madfam-org/janua/issues
 - Community: https://discord.gg/janua
 - Security: security@janua.dev

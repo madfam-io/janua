@@ -10,7 +10,7 @@ Thanks for considering contributing to Janua! We need your help to make self-hos
 
 **The fastest way to contribute:**
 
-1. **Find an issue** - Check [Issues](https://github.com/madfam-io/janua/issues) for `good-first-issue` label
+1. **Find an issue** - Check [Issues](https://github.com/madfam-org/janua/issues) for `good-first-issue` label
 2. **Comment** - Say "I'd like to work on this"
 3. **Fork & Code** - Make your changes
 4. **Submit PR** - We'll review within 48 hours
@@ -25,8 +25,8 @@ You don't need to be a coding expert. Here's how you can help:
 
 ### 🐛 Report Bugs
 Found something broken?
-1. Check if it's [already reported](https://github.com/madfam-io/janua/issues)
-2. If not, [create a new issue](https://github.com/madfam-io/janua/issues/new)
+1. Check if it's [already reported](https://github.com/madfam-org/janua/issues)
+2. If not, [create a new issue](https://github.com/madfam-org/janua/issues/new)
 3. Include: What happened, what you expected, steps to reproduce
 
 **Good bug report:**
@@ -66,11 +66,11 @@ Make the components better:
 
 **Check out:**
 - [UI Components](packages/ui/src/components/auth/)
-- [Existing issues labeled "ui"](https://github.com/madfam-io/janua/labels/ui)
+- [Existing issues labeled "ui"](https://github.com/madfam-org/janua/labels/ui)
 
 ### 🔧 Fix Bugs
 Pick an issue, fix it, submit a PR:
-1. Look for [`bug` label](https://github.com/madfam-io/janua/labels/bug)
+1. Look for [`bug` label](https://github.com/madfam-org/janua/labels/bug)
 2. Comment that you're working on it
 3. Fork, fix, test, PR
 
@@ -369,11 +369,11 @@ chore: update dependencies
 
 **Before asking:**
 1. Check the [documentation](docs/)
-2. Search [existing issues](https://github.com/madfam-io/janua/issues)
+2. Search [existing issues](https://github.com/madfam-org/janua/issues)
 3. Read this guide again
 
 **Still stuck?**
-- Open a [GitHub Discussion](https://github.com/madfam-io/janua/discussions)
+- Open a [GitHub Discussion](https://github.com/madfam-org/janua/discussions)
 - Tag your question with `question` label
 - We'll respond within 24-48 hours
 
@@ -387,7 +387,7 @@ chore: update dependencies
 ## 🎖️ Recognition
 
 All contributors get:
-- ✅ Listed in our [Contributors](https://github.com/madfam-io/janua/graphs/contributors) page
+- ✅ Listed in our [Contributors](https://github.com/madfam-org/janua/graphs/contributors) page
 - ✅ Mentioned in release notes (for significant contributions)
 - ✅ Our eternal gratitude
 
@@ -442,7 +442,7 @@ New to the project? Start here:
 - [ ] Add integration tests for SAML
 - [ ] Test mobile responsiveness
 
-[**See all good first issues →**](https://github.com/madfam-io/janua/labels/good-first-issue)
+[**See all good first issues →**](https://github.com/madfam-org/janua/labels/good-first-issue)
 
 ---
 
@@ -467,6 +467,6 @@ New to the project? Start here:
 
 **Ready to contribute?**
 
-🎉 [**Pick a good first issue →**](https://github.com/madfam-io/janua/labels/good-first-issue)
+🎉 [**Pick a good first issue →**](https://github.com/madfam-org/janua/labels/good-first-issue)
 
 Thank you for making Janua better! 🙏
