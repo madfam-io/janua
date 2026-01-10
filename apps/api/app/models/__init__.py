@@ -5,6 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -390,7 +391,7 @@ class AuditLog(Base):
     resource_type = Column(String(100))
     resource_id = Column(UUID(as_uuid=True))
     details = Column(JSONB, default={})
-    ip_address = Column(String(50))  # DB uses inet type but String works
+    ip_address = Column(INET)  # PostgreSQL native inet type
     user_agent = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
