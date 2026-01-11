@@ -354,8 +354,8 @@ enclii deploy --service janua
 ```
 
 ### Production Infrastructure
-**Server**: foundry-core (95.217.198.239) via Cloudflare Tunnel `ssh.madfam.io`
-**K8s Cluster**: K3s single-node
+**Server**: foundry-core (95.217.198.239) via Cloudflare Tunnel
+**K8s Cluster**: K3s (3-node Hetzner)
 **Namespace**: janua
 
 **Active Services**:
@@ -367,13 +367,19 @@ enclii deploy --service janua
 | janua-docs | Deployment | Port 4103 |
 | janua-website | Deployment | Port 4104 |
 
-**Cloudflare Tunnels**:
-- `janua-prod` - Routes api.janua.dev, auth.madfam.io, app.janua.dev, etc.
-- `foundry-prod` - Routes ssh.madfam.io (SSH access)
+**Cloudflare Tunnel Routing** (via unified `enclii-production` tunnel):
 
-**SystemD Services**:
-- `janua-port-forward.service` - kubectl port-forward for API
-- `cloudflared-janua.service` - Cloudflare tunnel connector
+| Public Domain | Internal Service |
+|---------------|------------------|
+| auth.madfam.io | janua-api.janua.svc.cluster.local:4100 |
+| dashboard.madfam.io | janua-dashboard.janua.svc.cluster.local:4101 |
+| admin.madfam.io | janua-admin.janua.svc.cluster.local:4102 |
+| docs.madfam.io | janua-docs.janua.svc.cluster.local:4103 |
+| madfam.io | janua-website.janua.svc.cluster.local:4104 |
+
+See `enclii/infra/k8s/production/cloudflared-unified.yaml` for routing configuration.
+
+**NetworkPolicy**: Requires `allow-cloudflared-ingress` policy to permit traffic from cloudflare-tunnel namespace.
 
 ---
 
