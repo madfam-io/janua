@@ -98,6 +98,54 @@ class Settings(BaseSettings):
     RATE_LIMIT_WHITELIST: str = Field(
         default="127.0.0.1,::1", description="Comma-separated list of IPs exempt from rate limiting"
     )
+    # SECURITY: Only trust X-Forwarded-For/X-Real-IP from these proxy IPs
+    # Set to Cloudflare IPs, your load balancer IPs, etc.
+    TRUSTED_PROXIES: str = Field(
+        default="127.0.0.1,::1",
+        description="Comma-separated list of trusted proxy IPs that can set X-Forwarded-For"
+    )
+
+    # Account Lockout
+    ACCOUNT_LOCKOUT_ENABLED: bool = Field(
+        default=True,
+        description="Enable account lockout after failed login attempts"
+    )
+    ACCOUNT_LOCKOUT_THRESHOLD: int = Field(
+        default=5,
+        description="Number of failed attempts before account is locked"
+    )
+    ACCOUNT_LOCKOUT_DURATION_MINUTES: int = Field(
+        default=15,
+        description="Duration in minutes to lock account after threshold is reached"
+    )
+    ACCOUNT_LOCKOUT_RESET_ON_SUCCESS: bool = Field(
+        default=True,
+        description="Reset failed attempt counter on successful login"
+    )
+
+    # Email Verification Enforcement
+    REQUIRE_EMAIL_VERIFICATION: bool = Field(
+        default=True,
+        description="Require email verification for sensitive operations"
+    )
+    EMAIL_VERIFICATION_GRACE_PERIOD_HOURS: int = Field(
+        default=24,
+        description="Hours to allow unverified users to access system before blocking"
+    )
+
+    # OAuth Client Credential Rotation
+    CLIENT_SECRET_ROTATION_ENABLED: bool = Field(
+        default=True,
+        description="Enable graceful client secret rotation with overlap period"
+    )
+    CLIENT_SECRET_ROTATION_GRACE_HOURS: int = Field(
+        default=24,
+        description="Hours that old secret remains valid after rotation"
+    )
+    CLIENT_SECRET_MAX_AGE_DAYS: int = Field(
+        default=90,
+        description="Maximum age in days for client secrets before requiring rotation"
+    )
 
     # Email
     EMAIL_ENABLED: bool = Field(default=False)
@@ -382,8 +430,34 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET_KEY", mode="before")
     @classmethod
     def validate_jwt_secret(cls, v):
+        import os
+
+        environment = os.getenv("ENVIRONMENT", "development")
+
+        # In production, JWT_SECRET_KEY must be strong if used (HS256 fallback)
+        if environment == "production":
+            weak_secrets = [
+                "development-secret-key",
+                "secret",
+                "secret-key",
+                None,
+                "",
+            ]
+            if v in weak_secrets:
+                # In production, we prefer RS256 - if HS256 fallback is used, require strong key
+                # This will be checked later; for now, allow None (RS256 should be configured)
+                pass
+            elif v and len(v) < 32:
+                raise ValueError(
+                    "JWT_SECRET_KEY must be at least 32 characters in production. "
+                    "Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                )
+
         # Only use default if no value provided at all (not even empty string)
         if v is None:
+            if environment == "production":
+                # Return None - jwt_manager will enforce RS256 or raise error
+                return None
             return "development-secret-key"
         return v
 

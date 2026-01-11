@@ -193,36 +193,14 @@ async def change_password(
             event_data={}
         )
         
-        # Revoke all existing sessions for security (force re-login on all devices)
-        # Keep only the current session if revoke_other_sessions query param is False
-        try:
-            from sqlalchemy import update as sql_update
-            
-            # Get current session token from request context if available
-            # For maximum security, revoke ALL sessions including current
-            await db.execute(
-                sql_update(Session)
-                .where(Session.user_id == current_user.id)
-                .where(Session.is_active == True)
-                .values(
-                    is_active=False,
-                    revoked_at=datetime.utcnow(),
-                    revoked_reason="password_changed"
-                )
-            )
-            await db.commit()
-            
-            logger.info(
-                "All sessions revoked after password change",
-                user_id=str(current_user.id)
-            )
-        except Exception as session_err:
-            # Log but don't fail the password change
-            logger.warning(
-                "Failed to revoke sessions after password change",
-                error=str(session_err),
-                user_id=str(current_user.id)
-            )
+        # SECURITY: Invalidate ALL sessions when password changes
+        # This forces re-login on all devices and blacklists all tokens
+        revoked_count = await AuthService.invalidate_user_sessions(db, current_user.id)
+        logger.info(
+            "All sessions invalidated after password change",
+            user_id=str(current_user.id),
+            sessions_revoked=revoked_count,
+        )
         
         logger.info("Password changed", user_id=str(current_user.id))
         

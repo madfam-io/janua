@@ -248,6 +248,43 @@ def require_admin(
     return current_user
 
 
+def require_verified_email(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """
+    Require user to have verified their email address.
+
+    This dependency should be used on sensitive endpoints like:
+    - OAuth/OIDC authorization (issuing tokens to third parties)
+    - Creating organizations
+    - Sensitive account changes
+    - Admin operations
+
+    Raises:
+        HTTPException: 403 if email is not verified (or within grace period for new accounts)
+    """
+    from datetime import datetime, timedelta
+    from app.config import settings
+
+    if not settings.REQUIRE_EMAIL_VERIFICATION:
+        return current_user
+
+    if getattr(current_user, 'email_verified', False):
+        return current_user
+
+    # Check if within grace period for new accounts
+    if current_user.created_at:
+        grace_period = timedelta(hours=settings.EMAIL_VERIFICATION_GRACE_PERIOD_HOURS)
+        grace_deadline = current_user.created_at + grace_period
+        if datetime.utcnow() < grace_deadline:
+            return current_user
+
+    raise HTTPException(
+        status_code=403,
+        detail="Email verification required. Please verify your email address to continue."
+    )
+
+
 async def require_org_admin(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)

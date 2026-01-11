@@ -19,6 +19,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.services.auth_service import AuthService
 from app.services.email import EmailService
+from app.services.account_lockout_service import AccountLockoutService
 
 from ...models import ActivityLog, EmailVerification, MagicLink, PasswordReset, User, UserStatus
 from ...models import Session as UserSession
@@ -231,28 +232,56 @@ async def sign_up(
 @limiter.limit("5/minute")  # Rate limiting for signin attempts
 async def sign_in(credentials: SignInRequest, request: Request, db: Session = Depends(get_db)):
     """Authenticate user and get tokens"""
-    # Find user
+    # Find user - we need to find the user first to check lockout status
+    # Note: We look for any user (not just ACTIVE) to check lockout, then verify status
     if credentials.email:
         result = await db.execute(
-            select(User).where(User.email == credentials.email, User.status == UserStatus.ACTIVE)
+            select(User).where(User.email == credentials.email)
         )
         user = result.scalar_one_or_none()
     else:
         result = await db.execute(
-            select(User).where(
-                User.username == credentials.username, User.status == UserStatus.ACTIVE
-            )
+            select(User).where(User.username == credentials.username)
         )
         user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    # Check if account is locked
+    is_locked, seconds_remaining = AccountLockoutService.is_account_locked(user)
+    if is_locked:
+        minutes_remaining = (seconds_remaining or 0) // 60 + 1
+        raise HTTPException(
+            status_code=423,  # HTTP 423 Locked
+            detail=f"Account temporarily locked due to too many failed login attempts. "
+                   f"Please try again in {minutes_remaining} minute(s).",
+        )
+
+    # Check user status after lockout check
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
     # Verify password
     if not user.password_hash or not AuthService.verify_password(
         credentials.password, user.password_hash
     ):
+        # Record failed attempt
+        ip_address = request.client.host if request.client else None
+        is_now_locked, lock_seconds = await AccountLockoutService.record_failed_attempt(
+            db, user, ip_address=ip_address
+        )
+        if is_now_locked:
+            minutes_remaining = (lock_seconds or 0) // 60 + 1
+            raise HTTPException(
+                status_code=423,
+                detail=f"Account locked due to too many failed login attempts. "
+                       f"Please try again in {minutes_remaining} minute(s).",
+            )
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Reset failed attempts on successful login
+    await AccountLockoutService.reset_failed_attempts(db, user)
 
     # Create session
     access_token, refresh_token, session = await AuthService.create_session(
@@ -553,19 +582,11 @@ async def login_form(
 
     This works without JavaScript, avoiding CSP issues with inline scripts.
     """
-    from fastapi.responses import RedirectResponse
+    from fastapi.responses import RedirectResponse, HTMLResponse
     import html
 
-    # Find user by email
-    result = await db.execute(
-        select(User).where(User.email == email, User.status == UserStatus.ACTIVE)
-    )
-    user = result.scalar_one_or_none()
-
-    # Verify password
-    if not user or not user.password_hash or not AuthService.verify_password(password, user.password_hash):
-        # Return login page with error
-        from fastapi.responses import HTMLResponse
+    # Helper to return error page
+    def make_error_page(error_message: str) -> HTMLResponse:
         error_html = f'''
 <!DOCTYPE html>
 <html lang="en">
@@ -630,10 +651,10 @@ async def login_form(
 <body>
     <div class="login-container">
         <div class="logo">
-            <h1>🔐 Janua</h1>
+            <h1>&#128274; Janua</h1>
             <p>Identity Platform</p>
         </div>
-        <div class="error">Invalid email or password. Please try again.</div>
+        <div class="error">{html.escape(error_message)}</div>
         <form method="POST" action="/api/v1/auth/login-form">
             <input type="hidden" name="next" value="{html.escape(next)}">
             <div class="form-group">
@@ -652,6 +673,44 @@ async def login_form(
 </html>
 '''
         return HTMLResponse(content=error_html, status_code=401)
+
+    # Find user by email (without status filter to check lockout first)
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return make_error_page("Invalid email or password. Please try again.")
+
+    # Check if account is locked
+    is_locked, seconds_remaining = AccountLockoutService.is_account_locked(user)
+    if is_locked:
+        minutes_remaining = (seconds_remaining or 0) // 60 + 1
+        return make_error_page(
+            f"Account temporarily locked due to too many failed login attempts. "
+            f"Please try again in {minutes_remaining} minute(s)."
+        )
+
+    # Check user status after lockout check
+    if user.status != UserStatus.ACTIVE:
+        return make_error_page("Invalid email or password. Please try again.")
+
+    # Verify password
+    if not user.password_hash or not AuthService.verify_password(password, user.password_hash):
+        # Record failed attempt
+        ip_address = request.client.host if request.client else None
+        is_now_locked, lock_seconds = await AccountLockoutService.record_failed_attempt(
+            db, user, ip_address=ip_address
+        )
+        if is_now_locked:
+            minutes_remaining = (lock_seconds or 0) // 60 + 1
+            return make_error_page(
+                f"Account locked due to too many failed login attempts. "
+                f"Please try again in {minutes_remaining} minute(s)."
+            )
+        return make_error_page("Invalid email or password. Please try again.")
+
+    # Reset failed attempts on successful login
+    await AccountLockoutService.reset_failed_attempts(db, user)
 
     # Create session and tokens
     access_token, refresh_token, session = await AuthService.create_session(

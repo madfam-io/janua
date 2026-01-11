@@ -276,22 +276,36 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         )
 
     def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP from request"""
-        
-        # Check for forwarded IP (behind proxy/load balancer)
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip
-        
-        # Fallback to direct connection IP
-        if request.client:
-            return request.client.host
-        
-        return "unknown"
+        """Extract client IP from request.
+
+        SECURITY: Only trusts X-Forwarded-For and X-Real-IP headers if the
+        direct connection comes from a trusted proxy. This prevents IP spoofing
+        for rate limit bypass.
+        """
+        # Get the direct connection IP first
+        direct_ip = request.client.host if request.client else "unknown"
+
+        # Parse trusted proxies from config
+        trusted_proxies = set(
+            ip.strip()
+            for ip in settings.TRUSTED_PROXIES.split(",")
+            if ip.strip()
+        )
+
+        # Only trust forwarded headers if direct connection is from trusted proxy
+        if direct_ip in trusted_proxies:
+            # Check for forwarded IP (behind proxy/load balancer)
+            forwarded = request.headers.get("X-Forwarded-For")
+            if forwarded:
+                # Take the first (client) IP from the chain
+                return forwarded.split(",")[0].strip()
+
+            real_ip = request.headers.get("X-Real-IP")
+            if real_ip:
+                return real_ip
+
+        # Direct connection or untrusted proxy - use direct IP
+        return direct_ip
 
     def _get_tenant_id(self, request: Request) -> Optional[str]:
         """Extract tenant ID from request"""

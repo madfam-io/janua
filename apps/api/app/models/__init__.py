@@ -50,6 +50,11 @@ class User(Base):
     mfa_secret = Column(String(255))
     mfa_backup_codes = Column(JSONB, default=[])
 
+    # Account lockout fields
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    last_failed_login = Column(DateTime, nullable=True)
+
     # Additional profile fields
     display_name = Column(String(200))
     bio = Column(Text)
@@ -178,12 +183,69 @@ class Session(Base):
     ip_address = Column(String(50))
     user_agent = Column(Text)
     device_name = Column(String(255))  # Device identification
+    device_fingerprint = Column(String(255), index=True)  # Unique device fingerprint
     is_active = Column(Boolean, default=True)  # Session active status
     revoked_at = Column(DateTime)  # When session was revoked
     revoked_reason = Column(String(255))  # Reason for revocation
+    is_trusted_device = Column(Boolean, default=False)  # If this session is from a trusted device
     expires_at = Column(DateTime, nullable=False)
     last_activity = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TrustedDevice(Base):
+    """
+    Represents a device that a user has explicitly trusted.
+
+    Trusted devices:
+    - Don't require MFA re-verification for a configured period
+    - Can be managed by the user from their security settings
+    - Trigger notifications when removed or when login from new device occurs
+    """
+    __tablename__ = "trusted_devices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    device_fingerprint = Column(String(255), nullable=False, index=True)
+    device_name = Column(String(255))  # User-friendly device name
+    user_agent = Column(Text)  # Browser/app user agent
+    ip_address = Column(String(50))  # Last known IP
+    last_ip_address = Column(String(50))  # Most recent IP (may differ from initial)
+    last_location = Column(String(255))  # Approximate location (city, country)
+    trust_expires_at = Column(DateTime)  # When trust expires (None = permanent)
+    last_used_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Composite unique constraint
+    __table_args__ = (
+        # Each device fingerprint should be unique per user
+        {"sqlite_autoincrement": True},
+    )
+
+
+class UserConsent(Base):
+    """
+    Stores user consent for OAuth client access.
+
+    When a user approves an OAuth authorization request, their consent
+    is stored here to avoid asking for the same scopes again.
+    """
+    __tablename__ = "user_consents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    client_id = Column(String(255), nullable=False, index=True)  # OAuth client ID
+    scopes = Column(JSONB, nullable=False, default=[])  # List of approved scopes
+    granted_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)  # Optional expiration
+    revoked_at = Column(DateTime, nullable=True)  # When consent was revoked
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        # Each user-client combination should have one consent record
+        {"sqlite_autoincrement": True},
+    )
 
 
 class OAuthProvider(str, enum.Enum):
@@ -270,6 +332,53 @@ class OAuthClient(Base):
             return bcrypt.checkpw(
                 plain_secret.encode('utf-8'),
                 self.client_secret_hash.encode('utf-8')
+            )
+        except Exception:
+            return False
+
+
+class OAuthClientSecret(Base):
+    """
+    Stores client secrets for OAuth clients, supporting graceful rotation.
+
+    During rotation, multiple secrets can be active simultaneously for a grace period,
+    allowing applications to update their configuration without downtime.
+    """
+    __tablename__ = "oauth_client_secrets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id = Column(UUID(as_uuid=True), ForeignKey("oauth_clients.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Secret data (hashed)
+    secret_hash = Column(String(255), nullable=False)
+    secret_prefix = Column(String(20), nullable=False)  # For display: jns_abc...
+
+    # Lifecycle management
+    is_primary = Column(Boolean, default=True)  # The main/current secret
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)  # When this secret becomes invalid
+    revoked_at = Column(DateTime, nullable=True)  # Manual revocation timestamp
+    last_used_at = Column(DateTime, nullable=True)
+
+    # Audit
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    revoked_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    def is_valid(self) -> bool:
+        """Check if this secret is still valid (not expired or revoked)."""
+        if self.revoked_at is not None:
+            return False
+        if self.expires_at is not None and self.expires_at < datetime.utcnow():
+            return False
+        return True
+
+    def verify(self, plain_secret: str) -> bool:
+        """Verify a plain-text secret against this hash."""
+        import bcrypt
+        try:
+            return bcrypt.checkpw(
+                plain_secret.encode('utf-8'),
+                self.secret_hash.encode('utf-8')
             )
         except Exception:
             return False

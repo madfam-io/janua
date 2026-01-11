@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.routers.v1.auth import get_current_user
+from app.dependencies import require_verified_email
 from app.services.email import EmailService
 
 from ...models import (
@@ -225,10 +226,13 @@ async def check_organization_permission(
 @router.post("/", response_model=OrganizationResponse)
 async def create_organization(
     request: OrganizationCreateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: Session = Depends(get_db),
 ):
-    """Create a new organization"""
+    """Create a new organization.
+
+    Requires email verification to prevent abuse.
+    """
     # Check if slug is already taken
     result = await db.execute(select(Organization).where(Organization.slug == request.slug))
     existing = result.scalar_one_or_none()

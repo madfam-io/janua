@@ -33,9 +33,51 @@ from app.core.jwt_manager import jwt_manager
 from app.core.redis import get_redis, ResilientRedisClient
 from app.dependencies import get_current_user, get_current_user_optional
 from app.models import OAuthClient, User
+from app.services.consent_service import ConsentService
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/oauth", tags=["OAuth Provider"])
+
+# CSRF token TTL (10 minutes)
+CSRF_TOKEN_TTL = 600
+
+
+async def _generate_csrf_token(user_id: str, redis: ResilientRedisClient) -> str:
+    """Generate a CSRF token for OAuth consent forms."""
+    csrf_token = secrets.token_urlsafe(32)
+    await redis.setex(
+        f"oauth:csrf:{csrf_token}",
+        CSRF_TOKEN_TTL,
+        user_id,
+    )
+    return csrf_token
+
+
+async def _validate_csrf_token(
+    csrf_token: str, user_id: str, redis: ResilientRedisClient
+) -> bool:
+    """Validate a CSRF token and consume it (single use)."""
+    if not csrf_token:
+        return False
+
+    key = f"oauth:csrf:{csrf_token}"
+    stored_user_id = await redis.get(key)
+
+    if not stored_user_id:
+        return False
+
+    # Verify it belongs to the same user
+    if stored_user_id != user_id:
+        logger.warning(
+            "CSRF token user mismatch",
+            expected=user_id,
+            got=stored_user_id,
+        )
+        return False
+
+    # Delete token (single use)
+    await redis.delete(key)
+    return True
 
 
 # ============================================================================
@@ -209,17 +251,22 @@ def _validate_redirect_uri(redirect_uri: str, allowed_uris: list[str]) -> bool:
 
 
 def _verify_pkce(code_verifier: str, code_challenge: str, method: str = "S256") -> bool:
-    """Verify PKCE code verifier against stored challenge."""
-    if method == "S256":
-        # S256: BASE64URL(SHA256(code_verifier))
-        import base64
+    """Verify PKCE code verifier against stored challenge.
 
-        verifier_hash = hashlib.sha256(code_verifier.encode("ascii")).digest()
-        computed_challenge = base64.urlsafe_b64encode(verifier_hash).rstrip(b"=").decode("ascii")
-        return secrets.compare_digest(computed_challenge, code_challenge)
-    elif method == "plain":
-        return secrets.compare_digest(code_verifier, code_challenge)
-    return False
+    SECURITY: Only S256 method is supported. Plain method is not allowed
+    as it provides no security benefit and violates OAuth 2.1 recommendations.
+    """
+    if method != "S256":
+        # SECURITY: Only S256 is allowed - plain method is not secure
+        logger.warning("Rejected PKCE with non-S256 method", method=method)
+        return False
+
+    # S256: BASE64URL(SHA256(code_verifier))
+    import base64
+
+    verifier_hash = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    computed_challenge = base64.urlsafe_b64encode(verifier_hash).rstrip(b"=").decode("ascii")
+    return secrets.compare_digest(computed_challenge, code_challenge)
 
 
 def _generate_id_token(
@@ -318,11 +365,18 @@ async def authorize_get(
             detail="invalid_redirect_uri: URI not registered for this client",
         )
 
-    # Validate PKCE if provided
-    if code_challenge and code_challenge_method not in (None, "S256", "plain"):
+    # Validate PKCE - SECURITY: Only S256 is allowed (OAuth 2.1 requirement)
+    if code_challenge_method and code_challenge_method != "S256":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="invalid_request: Unsupported code_challenge_method",
+            detail="invalid_request: Only S256 code_challenge_method is supported",
+        )
+
+    # SECURITY: PKCE is required for public (non-confidential) clients
+    if not getattr(client, 'is_confidential', False) and not code_challenge:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid_request: PKCE (code_challenge) is required for public clients",
         )
 
     # If user not authenticated, redirect to login
@@ -338,8 +392,187 @@ async def authorize_get(
         login_url = f"/api/v1/auth/login?{login_params}"
         return RedirectResponse(url=login_url, status_code=302)
 
-    # User is authenticated - for now, auto-approve (in production, show consent screen)
-    # Generate authorization code and store in Redis
+    # SECURITY: Require email verification for OAuth authorization
+    if settings.REQUIRE_EMAIL_VERIFICATION and not getattr(current_user, 'email_verified', False):
+        # Check grace period for new accounts
+        from datetime import timedelta
+        if current_user.created_at:
+            grace_period = timedelta(hours=settings.EMAIL_VERIFICATION_GRACE_PERIOD_HOURS)
+            grace_deadline = current_user.created_at + grace_period
+            if datetime.utcnow() >= grace_deadline:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Email verification required. Please verify your email before authorizing third-party applications.",
+                )
+
+    # Check if user has already consented to all requested scopes
+    requested_scopes = ConsentService.parse_scopes(scope)
+    has_consent = await ConsentService.has_consent(
+        db, current_user.id, client_id, requested_scopes
+    )
+
+    if not has_consent:
+        # Show consent screen
+        csrf_token = await _generate_csrf_token(str(current_user.id), redis)
+        scope_descriptions = ConsentService.get_scope_descriptions()
+
+        # Build scope list for display
+        scope_display = []
+        for s in requested_scopes:
+            if s in scope_descriptions:
+                name, desc = scope_descriptions[s]
+                scope_display.append({"scope": s, "name": name, "description": desc})
+            else:
+                scope_display.append({"scope": s, "name": s, "description": f"Access {s}"})
+
+        # Pre-generate scope items HTML (avoids f-string bracket issues in Python <3.12)
+        scope_items_html = ""
+        for s in scope_display:
+            scope_items_html += f'''
+            <div class="scope-item">
+                <svg class="scope-icon" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+                <div class="scope-text">
+                    <h4>{s["name"]}</h4>
+                    <p>{s["description"]}</p>
+                </div>
+            </div>
+            '''
+
+        # Pre-generate redirect URI display
+        redirect_display = redirect_uri.split("//")[1].split("/")[0] if "//" in redirect_uri else redirect_uri
+
+        # Store authorization request for POST handler
+        auth_request_id = secrets.token_urlsafe(16)
+        auth_request_data = {
+            "response_type": response_type,
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "scope": scope,
+            "state": state,
+            "nonce": nonce,
+            "code_challenge": code_challenge,
+            "code_challenge_method": code_challenge_method,
+        }
+        await redis.setex(
+            f"oauth:auth_request:{auth_request_id}",
+            600,  # 10 minutes
+            json.dumps(auth_request_data)
+        )
+
+        consent_html = f'''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authorize {client.name} - Janua</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .consent-container {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 450px;
+        }}
+        .header {{ text-align: center; margin-bottom: 30px; }}
+        .header h1 {{ font-size: 24px; color: #333; margin-bottom: 8px; }}
+        .header p {{ color: #666; font-size: 14px; }}
+        .client-info {{
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            text-align: center;
+        }}
+        .client-name {{ font-size: 18px; font-weight: 600; color: #333; }}
+        .client-url {{ font-size: 12px; color: #888; margin-top: 4px; }}
+        .scopes-section {{ margin-bottom: 24px; }}
+        .scopes-title {{ font-size: 14px; font-weight: 600; color: #333; margin-bottom: 12px; }}
+        .scope-item {{
+            display: flex;
+            align-items: flex-start;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }}
+        .scope-item:last-child {{ border-bottom: none; }}
+        .scope-icon {{ width: 24px; height: 24px; margin-right: 12px; color: #667eea; }}
+        .scope-text h4 {{ font-size: 14px; font-weight: 500; color: #333; }}
+        .scope-text p {{ font-size: 12px; color: #666; margin-top: 2px; }}
+        .user-info {{ font-size: 12px; color: #888; margin-bottom: 20px; text-align: center; }}
+        .buttons {{ display: flex; gap: 12px; }}
+        button {{
+            flex: 1;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }}
+        .btn-allow {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }}
+        .btn-deny {{
+            background: #f1f3f4;
+            color: #333;
+        }}
+        .footer {{ text-align: center; margin-top: 24px; color: #888; font-size: 11px; }}
+    </style>
+</head>
+<body>
+    <div class="consent-container">
+        <div class="header">
+            <h1>&#128274; Authorize Application</h1>
+            <p>An application is requesting access to your account</p>
+        </div>
+
+        <div class="client-info">
+            <div class="client-name">{client.name}</div>
+            <div class="client-url">{redirect_display}</div>
+        </div>
+
+        <div class="scopes-section">
+            <div class="scopes-title">This application will be able to:</div>
+            {scope_items_html}
+        </div>
+
+        <div class="user-info">
+            Signed in as <strong>{current_user.email}</strong>
+        </div>
+
+        <form method="POST" action="/api/v1/oauth/consent">
+            <input type="hidden" name="auth_request_id" value="{auth_request_id}">
+            <input type="hidden" name="csrf_token" value="{csrf_token}">
+            <div class="buttons">
+                <button type="submit" name="action" value="deny" class="btn-deny">Deny</button>
+                <button type="submit" name="action" value="allow" class="btn-allow">Allow</button>
+            </div>
+        </form>
+
+        <div class="footer">
+            Powered by Janua Identity Platform
+        </div>
+    </div>
+</body>
+</html>
+'''
+        return HTMLResponse(content=consent_html)
+
+    # User has consented - generate authorization code
     auth_code = secrets.token_urlsafe(32)
     code_data = {
         "client_id": client_id,
@@ -366,6 +599,102 @@ async def authorize_get(
     return RedirectResponse(url=callback_url, status_code=302)
 
 
+@router.post("/consent")
+async def handle_consent(
+    request: Request,
+    auth_request_id: str = Form(...),
+    csrf_token: str = Form(...),
+    action: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    redis: ResilientRedisClient = Depends(get_redis),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Handle OAuth consent form submission.
+
+    User can either 'allow' or 'deny' the authorization request.
+    """
+    # Validate CSRF token
+    if not await _validate_csrf_token(csrf_token, str(current_user.id), redis):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or expired CSRF token",
+        )
+
+    # Retrieve stored authorization request
+    auth_request_key = f"oauth:auth_request:{auth_request_id}"
+    auth_request_json = await redis.get(auth_request_key)
+
+    if not auth_request_json:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authorization request expired or invalid",
+        )
+
+    # Delete the request to prevent replay
+    await redis.delete(auth_request_key)
+
+    auth_request = json.loads(auth_request_json)
+    redirect_uri = auth_request["redirect_uri"]
+    state = auth_request.get("state")
+
+    if action == "deny":
+        # User denied the request
+        error_params = {"error": "access_denied", "error_description": "User denied the request"}
+        if state:
+            error_params["state"] = state
+        error_url = f"{redirect_uri}?{urlencode(error_params)}"
+        return RedirectResponse(url=error_url, status_code=302)
+
+    # User approved - store consent
+    client_id = auth_request["client_id"]
+    scope = auth_request["scope"]
+    requested_scopes = ConsentService.parse_scopes(scope)
+
+    await ConsentService.grant_consent(
+        db=db,
+        user_id=current_user.id,
+        client_id=client_id,
+        scopes=requested_scopes,
+    )
+
+    # Generate authorization code
+    auth_code = secrets.token_urlsafe(32)
+    code_data = {
+        "client_id": client_id,
+        "user_id": str(current_user.id),
+        "redirect_uri": redirect_uri,
+        "scope": scope,
+        "nonce": auth_request.get("nonce"),
+        "code_challenge": auth_request.get("code_challenge"),
+        "code_challenge_method": auth_request.get("code_challenge_method") or "S256",
+        "expires_at": time.time() + AUTH_CODE_TTL,
+    }
+    await _store_auth_code(auth_code, code_data, redis)
+
+    # Update client last_used_at
+    client = await _get_oauth_client(client_id, db)
+    if client:
+        client.last_used_at = datetime.utcnow()
+        await db.commit()
+
+    # Redirect with code
+    callback_params = {"code": auth_code}
+    if state:
+        callback_params["state"] = state
+
+    callback_url = f"{redirect_uri}?{urlencode(callback_params)}"
+
+    logger.info(
+        "OAuth consent granted",
+        user_id=str(current_user.id),
+        client_id=client_id,
+        scopes=list(requested_scopes),
+    )
+
+    return RedirectResponse(url=callback_url, status_code=302)
+
+
 @router.post("/authorize")
 async def authorize_post(
     request: Request,
@@ -377,6 +706,7 @@ async def authorize_post(
     nonce: Optional[str] = Form(None),
     code_challenge: Optional[str] = Form(None),
     code_challenge_method: Optional[str] = Form(None),
+    csrf_token: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     redis: ResilientRedisClient = Depends(get_redis),
     current_user: User = Depends(get_current_user),
@@ -385,7 +715,17 @@ async def authorize_post(
     OAuth 2.0 Authorization Endpoint (POST).
 
     Used for form-based authorization (consent submission).
+    Requires CSRF token for protection against cross-site request forgery.
     """
+    # SECURITY: Validate CSRF token
+    if not csrf_token or not await _validate_csrf_token(
+        csrf_token, str(current_user.id), redis
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or missing CSRF token",
+        )
+
     # Same validation as GET
     if response_type != "code":
         raise HTTPException(
@@ -399,6 +739,33 @@ async def authorize_post(
 
     if not _validate_redirect_uri(redirect_uri, client.redirect_uris):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_redirect_uri")
+
+    # Validate PKCE - SECURITY: Only S256 is allowed (OAuth 2.1 requirement)
+    if code_challenge_method and code_challenge_method != "S256":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid_request: Only S256 code_challenge_method is supported",
+        )
+
+    # SECURITY: PKCE is required for public (non-confidential) clients
+    if not getattr(client, 'is_confidential', False) and not code_challenge:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid_request: PKCE (code_challenge) is required for public clients",
+        )
+
+    # SECURITY: Require email verification for OAuth authorization
+    if settings.REQUIRE_EMAIL_VERIFICATION and not getattr(current_user, 'email_verified', False):
+        # Check grace period for new accounts
+        from datetime import timedelta
+        if current_user.created_at:
+            grace_period = timedelta(hours=settings.EMAIL_VERIFICATION_GRACE_PERIOD_HOURS)
+            grace_deadline = current_user.created_at + grace_period
+            if datetime.utcnow() >= grace_deadline:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Email verification required. Please verify your email before authorizing third-party applications.",
+                )
 
     # Generate authorization code and store in Redis
     auth_code = secrets.token_urlsafe(32)
@@ -561,6 +928,7 @@ async def _handle_authorization_code_grant(
             detail="invalid_grant: redirect_uri mismatch",
         )
 
+    # SECURITY: PKCE is required for public clients (OAuth 2.1 requirement)
     # Verify PKCE if code_challenge was provided during authorization
     if code_data.get("code_challenge"):
         if not code_verifier:
@@ -575,6 +943,13 @@ async def _handle_authorization_code_grant(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="invalid_grant: PKCE verification failed",
             )
+    elif not getattr(client, 'is_confidential', False):
+        # Public client without PKCE - this should have been caught at authorization
+        # but provide defense-in-depth
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid_request: PKCE is required for public clients",
+        )
 
     # Delete the code (single use)
     await _delete_auth_code(code, redis)

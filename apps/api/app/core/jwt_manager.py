@@ -74,16 +74,23 @@ class JWTManager:
 
         # Fallback to HS256 for testing/development
         else:
+            if settings.ENVIRONMENT == "production":
+                # SECURITY: Raise error in production - RS256 is required for proper security
+                raise ValueError(
+                    "CRITICAL: RS256 keys required in production. "
+                    "HS256 fallback is not allowed for production deployments. "
+                    "Generate RSA keys with: "
+                    "openssl genrsa -out private.pem 2048 && "
+                    "openssl rsa -in private.pem -pubout -out public.pem"
+                )
+
             self.algorithm = "HS256"
             self.private_key = settings.JWT_SECRET_KEY or settings.SECRET_KEY
             self.public_key = self.private_key  # Same key for HS256
             self._private_key_pem = None
             self._public_key_pem = None
 
-            if settings.ENVIRONMENT == "production":
-                logger.warning("JWT Manager using HS256 in production - RS256 recommended!")
-            else:
-                logger.info("JWT Manager initialized with HS256 (symmetric key)")
+            logger.info("JWT Manager initialized with HS256 (symmetric key) - development mode only")
 
     def get_jwks(self) -> Dict[str, Any]:
         """
@@ -287,10 +294,18 @@ class JWTManager:
 
         redis_client = await get_redis()
 
-        # Check blacklist
+        # Check blacklist - if token is already blacklisted, this indicates token reuse (theft)
         is_blacklisted = await redis_client.exists(f"blacklist:refresh:{refresh_jti}")
         if is_blacklisted:
-            logger.warning("Attempted use of blacklisted refresh token", jti=refresh_jti)
+            logger.warning(
+                "Token reuse detected - potential token theft",
+                jti=refresh_jti,
+                user_id=user_id,
+                family=family
+            )
+            # CRITICAL: Revoke entire token family to invalidate any stolen tokens
+            if family:
+                await self.revoke_token_family(family, reason="token_reuse_detected", db=db)
             return None
 
         # Check session status in database
@@ -433,7 +448,8 @@ class JWTManager:
         """
         try:
             return jwt.decode(token, options={"verify_signature": False})
-        except:
+        except (jwt.InvalidTokenError, jwt.DecodeError, Exception) as e:
+            logger.debug("Failed to decode token unsafely", error=str(e))
             return None
 
 

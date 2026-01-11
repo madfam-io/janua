@@ -163,4 +163,50 @@ class OAuthClientSecretRotateResponse(BaseModel):
     client_id: str
     client_secret: str = Field(..., description="New client secret (save immediately)")
     rotated_at: datetime
+    grace_period_hours: int = Field(..., description="Hours before old secrets expire")
+    old_secrets_expire_at: datetime = Field(..., description="When old secrets become invalid")
     message: str = "Client secret rotated successfully. Save the new secret immediately."
+
+
+class OAuthClientSecretInfo(BaseModel):
+    """Information about a single client secret"""
+
+    id: str
+    prefix: str = Field(..., description="Display prefix (e.g., jns_abc...)")
+    is_primary: bool
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    is_valid: bool
+
+
+class OAuthClientSecretStatusResponse(BaseModel):
+    """Status of client secret rotation"""
+
+    client_id: str
+    active_count: int = Field(..., description="Number of currently active secrets")
+    total_count: int = Field(..., description="Total secrets (including expired/revoked)")
+    has_primary: bool
+    primary_created_at: Optional[datetime] = None
+    primary_age_days: Optional[int] = None
+    rotation_recommended: bool = Field(..., description="True if rotation is recommended based on age")
+    max_age_days: int = Field(..., description="Maximum recommended age for secrets")
+    secrets: List[OAuthClientSecretInfo]
+
+
+class OAuthClientSecretRevokeRequest(BaseModel):
+    """Request to revoke a specific secret"""
+
+    secret_id: str = Field(..., description="ID of the secret to revoke")
+
+
+class OAuthClientSecretRotateRequest(BaseModel):
+    """Optional parameters for secret rotation"""
+
+    grace_period_hours: Optional[int] = Field(
+        None,
+        ge=0,
+        le=168,
+        description="Hours before old secrets expire (0-168, default from config)"
+    )

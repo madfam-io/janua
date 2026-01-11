@@ -130,10 +130,10 @@ class InputSanitizer:
             # Only allow http/https
             if parsed.scheme not in ['http', 'https']:
                 return None
-            
+
             # Reconstruct clean URL
             return urllib.parse.urlunparse(parsed)
-        except:
+        except (ValueError, UnicodeError, Exception):
             return None
     
     @staticmethod
@@ -267,7 +267,7 @@ class InputValidator:
         try:
             parsed = phonenumbers.parse(phone, region)
             return phonenumbers.is_valid_number(parsed)
-        except:
+        except phonenumbers.phonenumberutil.NumberParseException:
             return False
     
     @staticmethod
@@ -295,18 +295,18 @@ class InputValidator:
                 # Could reject, but for now just log
             except ValueError:
                 pass  # Not an IP, which is good
-            
+
             return True
-        except:
+        except (ValueError, UnicodeError, Exception):
             return False
-    
+
     @staticmethod
     def validate_date(date_str: str, format: str = "%Y-%m-%d") -> bool:
         """Validate date string format"""
         try:
             datetime.strptime(date_str, format)
             return True
-        except:
+        except ValueError:
             return False
     
     @staticmethod

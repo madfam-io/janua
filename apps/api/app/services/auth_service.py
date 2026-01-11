@@ -247,14 +247,139 @@ class AuthService:
         return token, jti, family, expires_at
 
     @staticmethod
+    async def invalidate_user_sessions(
+        db: AsyncSession,
+        user_id: UUID,
+        exclude_session_id: Optional[UUID] = None,
+    ) -> int:
+        """Invalidate all sessions for a user.
+
+        SECURITY: Used to prevent session fixation and ensure clean session state
+        when a user authenticates.
+
+        Args:
+            db: Database session
+            user_id: User whose sessions to invalidate
+            exclude_session_id: Optional session ID to keep valid (for current session)
+
+        Returns:
+            Number of sessions revoked
+        """
+        from app.core.jwt_manager import jwt_manager
+
+        # Find all active sessions for this user
+        query = select(Session).where(
+            and_(
+                Session.user_id == user_id,
+                Session.revoked == False,
+            )
+        )
+
+        if exclude_session_id:
+            query = query.where(Session.id != exclude_session_id)
+
+        result = await db.execute(query)
+        sessions = result.scalars().all()
+
+        revoked_count = 0
+        redis = await get_redis()
+
+        for session in sessions:
+            # Mark session as revoked
+            session.revoked = True
+
+            # Blacklist the tokens
+            if session.refresh_token_jti:
+                await jwt_manager.blacklist_token(session.refresh_token_jti, "refresh")
+            if session.access_token_jti:
+                await jwt_manager.blacklist_token(session.access_token_jti, "access")
+
+            # Remove from Redis
+            session_store = SessionStore(redis)
+            await session_store.delete(str(session.id))
+
+            revoked_count += 1
+
+        if revoked_count > 0:
+            await db.commit()
+            logger.info(
+                "Invalidated user sessions",
+                user_id=str(user_id),
+                sessions_revoked=revoked_count,
+                reason="session_fixation_prevention",
+            )
+
+        return revoked_count
+
+    @staticmethod
     async def create_session(
         db: AsyncSession,
         user: User,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
         device_name: Optional[str] = None,
+        invalidate_existing: bool = False,
+        enforce_session_limit: bool = True,
     ) -> Tuple[str, str, Session]:
-        """Create a new session with tokens"""
+        """Create a new session with tokens.
+
+        SECURITY: Enforces concurrent session limits to prevent session abuse.
+        When the limit is reached, the oldest session is revoked.
+
+        Args:
+            invalidate_existing: If True, revoke all existing sessions first
+                                (use for password change, security events)
+            enforce_session_limit: If True (default), enforce MAX_SESSIONS_PER_IDENTITY
+                                   by revoking oldest session when limit exceeded
+        """
+        from app.core.jwt_manager import jwt_manager
+
+        # SECURITY: Invalidate existing sessions if requested (e.g., password change)
+        if invalidate_existing:
+            await AuthService.invalidate_user_sessions(db, user.id)
+        elif enforce_session_limit:
+            # Enforce concurrent session limit
+            max_sessions = settings.MAX_SESSIONS_PER_IDENTITY
+
+            # Count active sessions for this user
+            result = await db.execute(
+                select(Session).where(
+                    and_(
+                        Session.user_id == user.id,
+                        Session.revoked == False,
+                    )
+                ).order_by(Session.created_at.asc())
+            )
+            existing_sessions = result.scalars().all()
+
+            # If at or over limit, revoke oldest sessions
+            sessions_to_remove = len(existing_sessions) - max_sessions + 1  # +1 for new session
+            if sessions_to_remove > 0:
+                redis = await get_redis()
+                for i, old_session in enumerate(existing_sessions):
+                    if i >= sessions_to_remove:
+                        break
+
+                    # Revoke old session
+                    old_session.revoked = True
+
+                    # Blacklist tokens
+                    if old_session.refresh_token_jti:
+                        await jwt_manager.blacklist_token(old_session.refresh_token_jti, "refresh")
+                    if old_session.access_token_jti:
+                        await jwt_manager.blacklist_token(old_session.access_token_jti, "access")
+
+                    # Remove from Redis
+                    session_store = SessionStore(redis)
+                    await session_store.delete(str(old_session.id))
+
+                logger.info(
+                    "Revoked oldest sessions due to limit",
+                    user_id=str(user.id),
+                    sessions_revoked=sessions_to_remove,
+                    max_sessions=max_sessions,
+                )
+
         # Create tokens
         access_token, access_jti, access_expires = AuthService.create_access_token(
             user_id=str(user.id), tenant_id=str(user.tenant_id), email=user.email

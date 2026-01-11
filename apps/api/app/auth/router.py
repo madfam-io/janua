@@ -261,8 +261,9 @@ async def signout(
 
             payload = jwt.decode(token, options={"verify_signature": False})
             user_id = payload.get("sub")
-        except:
+        except (jwt.InvalidTokenError, jwt.DecodeError, Exception) as e:
             # If token parsing fails, still proceed with cleanup
+            logger.debug("Token parsing failed during logout", error=str(e))
             user_id = None
 
         # Create session store instance
@@ -505,11 +506,17 @@ async def reset_password(request: ResetPasswordRequest, db=Depends(get_db)):
 
         # Update user password
         user.password_hash = hashed_password
-        db.commit()
+        await db.commit()
 
-        # Invalidate all sessions for security
-        session_store = SessionStore(redis_client)
-        await session_store.delete_session(str(user.id))
+        # SECURITY: Invalidate ALL sessions when password changes
+        # This prevents any compromised sessions from remaining valid
+        from app.services.auth_service import AuthService
+        revoked_count = await AuthService.invalidate_user_sessions(db, user.id)
+        logger.info(
+            "Invalidated sessions on password reset",
+            user_id=str(user.id),
+            sessions_revoked=revoked_count,
+        )
 
         # Remove the reset token
         await redis_client.delete(f"reset_token:{request.token}")

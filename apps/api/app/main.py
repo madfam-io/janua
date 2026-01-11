@@ -115,6 +115,9 @@ from app.routers.v1 import (
     sessions as sessions_v1,
 )
 from app.routers.v1 import (
+    devices as devices_v1,
+)
+from app.routers.v1 import (
     users as users_v1,
 )
 from app.routers.v1 import (
@@ -750,7 +753,8 @@ async def ready_check():
         await redis_client.ping()
         checks["redis"] = True
         await redis_client.close()
-    except:
+    except Exception as e:
+        logger.warning("Redis health check failed", error=str(e))
         checks["redis"] = False
 
     # Overall status
@@ -915,6 +919,7 @@ app.include_router(oauth_clients_v1.router, prefix="/api/v1")
 app.include_router(oauth_provider_v1.router, prefix="/api/v1")
 app.include_router(users_v1.router, prefix="/api/v1")
 app.include_router(sessions_v1.router, prefix="/api/v1")
+app.include_router(devices_v1.router, prefix="/api/v1")
 app.include_router(organizations_v1.router, prefix="/api/v1")
 app.include_router(organization_members_v1.router, prefix="/api/v1")
 app.include_router(rbac_v1.router, prefix="/api/v1")
@@ -1030,7 +1035,8 @@ async def _check_redis_health():
         await redis_client.ping()
         await redis_client.close()
         return True
-    except:
+    except Exception as e:
+        logger.debug("Redis ping check failed", error=str(e))
         return False
 
 

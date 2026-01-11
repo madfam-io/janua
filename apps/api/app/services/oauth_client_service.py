@@ -367,6 +367,9 @@ class OAuthClientService:
         """
         Validate client credentials for OAuth flow.
 
+        Supports credential rotation by checking all active secrets during
+        the grace period, as well as the primary secret stored on the client.
+
         Args:
             client_id: The client's public identifier
             client_secret: The client's secret
@@ -374,10 +377,27 @@ class OAuthClientService:
         Returns:
             OAuthClient if valid, None otherwise
         """
+        from app.config import settings
+
         client = await self.get_client_by_client_id(client_id)
         if not client:
             return None
 
+        # If rotation is enabled, use the rotation service
+        if settings.CLIENT_SECRET_ROTATION_ENABLED:
+            from app.services.credential_rotation_service import CredentialRotationService
+            rotation_service = CredentialRotationService(self.db)
+            matched_secret = await rotation_service.validate_secret(client, client_secret)
+
+            # If we got a matched secret or None (legacy valid), the secret is valid
+            if matched_secret is not None or client.verify_secret(client_secret):
+                # Update last used timestamp
+                client.last_used_at = datetime.utcnow()
+                await self.db.commit()
+                return client
+            return None
+
+        # Legacy validation (single secret)
         if not self.verify_client_secret(client_secret, client.client_secret_hash):
             return None
 

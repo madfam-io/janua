@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.routers.v1.auth import get_current_user
+from app.services.account_lockout_service import AccountLockoutService
 
 # Application start time for uptime calculation
 APPLICATION_START_TIME = time.time()
@@ -458,6 +459,62 @@ async def delete_user_admin(
     await db.commit()
 
     return {"message": f"User {'permanently' if permanent else 'soft'} deleted"}
+
+
+@router.post("/users/{user_id}/unlock")
+async def unlock_user_account(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Unlock a user account that was locked due to failed login attempts.
+
+    Admin only endpoint to manually unlock accounts before the automatic
+    unlock time has passed.
+    """
+    check_admin_permission(current_user)
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    success = await AccountLockoutService.unlock_account(
+        db, user_uuid, admin_user_id=current_user.id
+    )
+
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {"message": "User account unlocked successfully"}
+
+
+@router.get("/users/{user_id}/lockout-status")
+async def get_user_lockout_status(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get the lockout status for a specific user.
+
+    Admin only endpoint to check if a user account is locked and
+    view failed login attempt counts.
+    """
+    check_admin_permission(current_user)
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    status = await AccountLockoutService.get_lockout_status(db, user_uuid)
+
+    if "error" in status:
+        raise HTTPException(status_code=404, detail=status["error"])
+
+    return status
 
 
 @router.get("/organizations", response_model=List[OrganizationAdminResponse])
