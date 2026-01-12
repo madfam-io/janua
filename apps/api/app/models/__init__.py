@@ -185,6 +185,7 @@ class Session(Base):
     device_name = Column(String(255))  # Device identification
     device_fingerprint = Column(String(255), index=True)  # Unique device fingerprint
     is_active = Column(Boolean, default=True)  # Session active status
+    revoked = Column(Boolean, default=False)  # Whether session is revoked
     revoked_at = Column(DateTime)  # When session was revoked
     revoked_reason = Column(String(255))  # Reason for revocation
     is_trusted_device = Column(Boolean, default=False)  # If this session is from a trusted device
