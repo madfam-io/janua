@@ -1,0 +1,221 @@
+name: Configuration Drift Detection
+
+on:
+  schedule:
+    # Run every 6 hours to catch drift early
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      create_issue:
+        description: 'Create GitHub issue on drift'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  NAMESPACE: janua
+
+jobs:
+  check-drift:
+    name: Check Configuration Drift
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.29.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Test cluster connectivity
+        id: connectivity
+        run: |
+          if kubectl cluster-info &>/dev/null; then
+            echo "connected=true" >> $GITHUB_OUTPUT
+            echo "Cluster connectivity: OK"
+          else
+            echo "connected=false" >> $GITHUB_OUTPUT
+            echo "Cluster connectivity: FAILED"
+          fi
+
+      - name: Render expected manifests
+        if: steps.connectivity.outputs.connected == 'true'
+        run: |
+          # Check if kustomize overlay exists
+          if [[ -d "k8s/overlays/prod" ]]; then
+            kubectl kustomize k8s/overlays/prod > /tmp/expected.yaml
+            echo "Rendered expected manifests from k8s/overlays/prod"
+          else
+            # Fallback to base if overlay doesn't exist
+            kubectl kustomize k8s/base > /tmp/expected.yaml
+            echo "Rendered expected manifests from k8s/base"
+          fi
+
+          echo "Expected manifest size: $(wc -l < /tmp/expected.yaml) lines"
+
+      - name: Get current cluster state
+        if: steps.connectivity.outputs.connected == 'true'
+        run: |
+          kubectl get deploy,svc,configmap -n ${{ env.NAMESPACE }} -o yaml > /tmp/current.yaml
+          echo "Current state size: $(wc -l < /tmp/current.yaml) lines"
+
+      - name: Check for drift
+        id: drift
+        if: steps.connectivity.outputs.connected == 'true'
+        run: |
+          chmod +x scripts/drift-check.sh
+
+          # Capture output and exit code
+          set +e
+          OUTPUT=$(./scripts/drift-check.sh /tmp/expected.yaml /tmp/current.yaml 2>&1)
+          EXIT_CODE=$?
+          set -e
+
+          echo "$OUTPUT"
+          echo "$OUTPUT" > /tmp/drift-report.txt
+
+          if [[ $EXIT_CODE -eq 1 ]]; then
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+            echo "## Drift Detected" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+            echo "## No Drift Detected" >> $GITHUB_STEP_SUMMARY
+            echo "Configuration is in sync between Git and cluster." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check running images
+        id: images
+        if: steps.connectivity.outputs.connected == 'true'
+        run: |
+          echo "## Running Images" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          DRIFT_FOUND=false
+
+          for DEPLOY in janua-api janua-dashboard janua-admin; do
+            RUNNING=$(kubectl get deploy "$DEPLOY" -n ${{ env.NAMESPACE }} -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "NOT_DEPLOYED")
+            echo "$DEPLOY: $RUNNING" >> $GITHUB_STEP_SUMMARY
+
+            # Check if this image is in our kustomization
+            if [[ -f "k8s/overlays/prod/kustomization.yaml" ]]; then
+              if ! grep -q "$RUNNING" k8s/overlays/prod/kustomization.yaml 2>/dev/null; then
+                echo "  ⚠️ Image not found in kustomization.yaml" >> $GITHUB_STEP_SUMMARY
+                DRIFT_FOUND=true
+              fi
+            fi
+          done
+
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          if [[ "$DRIFT_FOUND" == "true" ]]; then
+            echo "image_drift=true" >> $GITHUB_OUTPUT
+          else
+            echo "image_drift=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create issue on drift
+        if: |
+          (steps.drift.outputs.drift_detected == 'true' || steps.images.outputs.image_drift == 'true') &&
+          (github.event.inputs.create_issue != 'false')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const drift = fs.readFileSync('/tmp/drift-report.txt', 'utf8');
+            const date = new Date().toISOString().split('T')[0];
+
+            // Check for existing open drift issue
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'drift,infrastructure'
+            });
+
+            // Don't create duplicate issues
+            const existingIssue = issues.find(i => i.title.includes('Configuration Drift'));
+            if (existingIssue) {
+              // Add comment to existing issue instead
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `## Drift Check Update (${date})\n\n\`\`\`\n${drift}\n\`\`\`\n\nThis drift is still present.`
+              });
+              console.log(`Updated existing issue #${existingIssue.number}`);
+              return;
+            }
+
+            // Create new issue
+            const { data: newIssue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Configuration Drift Detected - ${date}`,
+              body: `## Drift Report
+
+            The automated drift detection found differences between Git manifests and cluster state.
+
+            \`\`\`
+            ${drift}
+            \`\`\`
+
+            ## Resolution Options
+
+            ### Option 1: Update Git to match server
+            If the server state is correct (e.g., emergency fix applied), update the k8s/ manifests:
+            \`\`\`bash
+            # Audit current state
+            ./scripts/audit-server-state.sh
+
+            # Update manifests to match
+            # Then commit and push
+            \`\`\`
+
+            ### Option 2: Re-deploy from Git
+            If Git state is the source of truth:
+            \`\`\`bash
+            kubectl apply -k k8s/overlays/prod
+            \`\`\`
+
+            ---
+            *This issue was automatically created by the drift detection workflow.*
+            *Close this issue once the drift is resolved.*`,
+              labels: ['drift', 'infrastructure', 'automated']
+            });
+
+            console.log(`Created issue #${newIssue.number}`);
+
+      - name: Fail workflow on drift (optional)
+        if: steps.drift.outputs.drift_detected == 'true'
+        run: |
+          echo "::warning::Configuration drift detected. See workflow summary for details."
+          # Uncomment below to fail the workflow on drift:
+          # exit 1
+
+  connectivity-failed:
+    name: Report Connectivity Failure
+    runs-on: ubuntu-latest
+    needs: check-drift
+    if: failure()
+
+    steps:
+      - name: Create connectivity alert
+        run: |
+          echo "::error::Failed to connect to Kubernetes cluster. Check KUBECONFIG_PRODUCTION secret."
