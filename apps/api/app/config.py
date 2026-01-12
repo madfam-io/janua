@@ -45,6 +45,24 @@ class Settings(BaseSettings):
     DATABASE_MAX_OVERFLOW: int = Field(default=10)
     DATABASE_POOL_TIMEOUT: int = Field(default=30)
     AUTO_MIGRATE: bool = Field(default=False)
+    
+    # Database SSL Configuration
+    DATABASE_SSL_MODE: str = Field(
+        default="prefer",
+        description="PostgreSQL SSL mode: disable, allow, prefer, require, verify-ca, verify-full",
+    )
+    DATABASE_SSL_CA_FILE: Optional[str] = Field(
+        default=None,
+        description="Path to CA certificate file for database SSL verification",
+    )
+    DATABASE_SSL_CERT_FILE: Optional[str] = Field(
+        default=None,
+        description="Path to client certificate file for database SSL mutual auth",
+    )
+    DATABASE_SSL_KEY_FILE: Optional[str] = Field(
+        default=None,
+        description="Path to client private key file for database SSL mutual auth",
+    )
 
     # Redis
     REDIS_URL: str = Field(default="redis://localhost:6379/0", description="Redis connection URL")

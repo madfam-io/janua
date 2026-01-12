@@ -91,3 +91,8 @@ coverage.xml
 *.sqlite
 *.sqlite3
 *.db-journal
+
+# Database SSL certificates (generated, not committed)
+deployment/production/ssl/db/*.key
+deployment/production/ssl/db/*.crt
+deployment/production/ssl/db/*.srl

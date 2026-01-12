@@ -145,14 +145,16 @@ class SSOConfiguration(Base):
 
 
 class SCIMConfiguration(Base):
+    """SCIM provisioning configuration for an organization"""
     __tablename__ = "scim_configurations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False, unique=True)
+    provider = Column(String(50), default="custom")  # okta, azure_ad, onelogin, google_workspace, jumpcloud, ping_identity, custom
     enabled = Column(Boolean, default=False)
     base_url = Column(String(500))
     bearer_token = Column(String(500))
-    configuration = Column(JSONB, default={})
+    configuration = Column(JSONB, default={})  # Provider-specific settings (attribute mappings, etc.)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -183,9 +185,44 @@ class SCIMResource(Base):
     resource_type = Column(String(255), nullable=False)  # "User", "Group", etc.
     scim_id = Column(String(255), nullable=False)
     internal_id = Column(UUID(as_uuid=True))
+    external_id = Column(String(255))  # ID from the IdP
     attributes = Column(JSONB, default={})
+    raw_attributes = Column(JSONB, default={})  # Original SCIM payload
+    sync_status = Column(String(50), default="pending")  # pending, synced, error
+    last_synced_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SCIMSyncLog(Base):
+    """Track SCIM sync operations for audit and debugging"""
+    __tablename__ = "scim_sync_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    operation = Column(String(50), nullable=False)  # create, update, delete, patch
+    resource_type = Column(String(50), nullable=False)  # User, Group
+    scim_id = Column(String(255))
+    internal_id = Column(UUID(as_uuid=True))
+    status = Column(String(50), nullable=False)  # success, failed, partial
+    request_payload = Column(JSONB, default={})
+    response_payload = Column(JSONB, default={})
+    error_message = Column(Text)
+    error_code = Column(String(50))
+    idp_request_id = Column(String(255))  # Request ID from IdP for correlation
+    synced_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SCIMProvider(str, enum.Enum):
+    """Supported SCIM identity providers"""
+    OKTA = "okta"
+    AZURE_AD = "azure_ad"
+    ONELOGIN = "onelogin"
+    GOOGLE_WORKSPACE = "google_workspace"
+    JUMPCLOUD = "jumpcloud"
+    PING_IDENTITY = "ping_identity"
+    CUSTOM = "custom"
 
 
 class PermissionDefinition(Base):

@@ -205,6 +205,13 @@ try:
     enterprise_routers["scim"] = scim_v1
 except Exception as e:
     logger.warning(f"SCIM router not available: {e}")
+
+try:
+    from app.routers.v1 import scim_config as scim_config_v1
+
+    enterprise_routers["scim_config"] = scim_config_v1
+except Exception as e:
+    logger.warning(f"SCIM Config router not available: {e}")
 from app.core.performance import PerformanceMonitoringMiddleware, cache_manager
 from app.core.scalability import (
     get_scalability_status,

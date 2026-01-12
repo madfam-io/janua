@@ -5,16 +5,22 @@ namespace: janua
 
 resources:
   - namespace.yaml
+  # Deployments
   - deployments/janua-api.yaml
   - deployments/janua-dashboard.yaml
   - deployments/janua-admin.yaml
   - deployments/janua-docs.yaml
   - deployments/janua-website.yaml
+  # Services
   - services/janua-api.yaml
   - services/janua-dashboard.yaml
   - services/janua-admin.yaml
   - services/janua-docs.yaml
   - services/janua-website.yaml
+  # Certificate Management (requires cert-manager to be installed)
+  # Uncomment after installing cert-manager:
+  # kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+  # - cert-manager/
 
 commonLabels:
   app.kubernetes.io/part-of: janua

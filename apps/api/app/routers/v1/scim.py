@@ -541,6 +541,135 @@ async def update_user(
         )
 
 
+@router.patch("/Users/{user_id}")
+async def patch_user(
+    user_id: str,
+    patch_data: Dict[str, Any],
+    organization: Organization = Depends(verify_scim_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update a user via SCIM PATCH operations"""
+
+    try:
+        # Look up SCIM resource and user
+        result = await db.execute(
+            select(SCIMResource, User).join(
+                User, User.id == SCIMResource.internal_id
+            ).where(
+                and_(
+                    SCIMResource.scim_id == user_id,
+                    SCIMResource.organization_id == organization.id,
+                    SCIMResource.resource_type == "User"
+                )
+            )
+        )
+
+        row = result.one_or_none()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=SCIMError.format(404, "User not found")
+            )
+
+        scim_resource, user = row
+
+        # Process SCIM PATCH operations
+        operations = patch_data.get("Operations", [])
+        for op in operations:
+            op_type = op.get("op", "").lower()
+            path = op.get("path", "")
+            value = op.get("value")
+
+            if op_type == "replace":
+                apply_patch_replace(user, path, value)
+            elif op_type == "add":
+                apply_patch_add(user, path, value)
+            elif op_type == "remove":
+                apply_patch_remove(user, path)
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=SCIMError.format(400, f"Unsupported operation: {op_type}")
+                )
+
+        # Update SCIM resource tracking
+        scim_resource.last_synced_at = datetime.utcnow()
+        scim_resource.sync_status = "synced"
+
+        await db.commit()
+        await db.refresh(user)
+
+        logger.info("SCIM user patched",
+                   scim_id=scim_resource.scim_id,
+                   user_id=str(user.id),
+                   operations=len(operations))
+
+        # Get membership for response
+        membership_result = await db.execute(
+            select(OrganizationMember).where(
+                and_(
+                    OrganizationMember.user_id == user.id,
+                    OrganizationMember.organization_id == organization.id
+                )
+            )
+        )
+        membership = membership_result.scalar_one_or_none()
+
+        return format_user_resource(user, scim_resource, membership)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("SCIM user patch failed", error=str(e))
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=SCIMError.format(500, "Internal server error")
+        )
+
+
+def apply_patch_replace(user: User, path: str, value: Any):
+    """Apply a SCIM PATCH replace operation"""
+    if path == "active" or path == "":
+        if isinstance(value, dict) and "active" in value:
+            user.status = "active" if value["active"] else "inactive"
+        elif isinstance(value, bool):
+            user.status = "active" if value else "inactive"
+    elif path == "userName":
+        user.username = value
+    elif path == "displayName":
+        user.display_name = value
+    elif path == "name.givenName":
+        user.first_name = value
+    elif path == "name.familyName":
+        user.last_name = value
+    elif path == "emails" or path == "emails[type eq \"work\"].value":
+        if isinstance(value, list) and len(value) > 0:
+            primary_email = next((e["value"] for e in value if e.get("primary")), value[0].get("value"))
+            if primary_email:
+                user.email = primary_email
+        elif isinstance(value, str):
+            user.email = value
+    elif path == "externalId":
+        pass  # externalId is stored in SCIM resource, not user
+
+
+def apply_patch_add(user: User, path: str, value: Any):
+    """Apply a SCIM PATCH add operation - same as replace for most fields"""
+    apply_patch_replace(user, path, value)
+
+
+def apply_patch_remove(user: User, path: str):
+    """Apply a SCIM PATCH remove operation"""
+    if path == "name.givenName":
+        user.first_name = None
+    elif path == "name.familyName":
+        user.last_name = None
+    elif path == "displayName":
+        user.display_name = None
+    # Note: Cannot remove required fields like userName, email, active
+
+
 @router.delete("/Users/{user_id}")
 async def delete_user(
     user_id: str,
@@ -685,3 +814,509 @@ async def list_groups(
         start_index=1,
         items_per_page=100
     )
+
+
+@router.get("/Groups/{group_id}")
+async def get_group(
+    group_id: str,
+    organization: Organization = Depends(verify_scim_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific group by ID"""
+
+    try:
+        group_uuid = UUID(group_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=SCIMError.format(404, "Group not found")
+        )
+
+    result = await db.execute(
+        select(OrganizationRole).where(
+            and_(
+                OrganizationRole.id == group_uuid,
+                OrganizationRole.organization_id == organization.id
+            )
+        )
+    )
+    role = result.scalar_one_or_none()
+
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=SCIMError.format(404, "Group not found")
+        )
+
+    # Get group members
+    members_result = await db.execute(
+        select(OrganizationMember, User, SCIMResource).join(
+            User, User.id == OrganizationMember.user_id
+        ).outerjoin(
+            SCIMResource,
+            and_(
+                SCIMResource.internal_id == User.id,
+                SCIMResource.resource_type == "User",
+                SCIMResource.organization_id == organization.id
+            )
+        ).where(
+            and_(
+                OrganizationMember.organization_id == organization.id,
+                OrganizationMember.role_id == role.id
+            )
+        )
+    )
+
+    members = []
+    for member, user, scim_resource in members_result.all():
+        members.append({
+            "value": scim_resource.scim_id if scim_resource else str(user.id),
+            "$ref": f"/scim/v2/Users/{scim_resource.scim_id if scim_resource else str(user.id)}",
+            "display": user.display_name or user.email
+        })
+
+    return format_group_resource(role, members)
+
+
+@router.post("/Groups", status_code=status.HTTP_201_CREATED)
+async def create_group(
+    group_data: Dict[str, Any],
+    organization: Organization = Depends(verify_scim_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new group (role) via SCIM"""
+
+    try:
+        display_name = group_data.get("displayName")
+        if not display_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=SCIMError.format(400, "displayName is required")
+            )
+
+        # Check if role already exists
+        existing = await db.execute(
+            select(OrganizationRole).where(
+                and_(
+                    OrganizationRole.organization_id == organization.id,
+                    OrganizationRole.name == display_name
+                )
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=SCIMError.format(409, "Group already exists")
+            )
+
+        import uuid
+        role = OrganizationRole(
+            id=uuid.uuid4(),
+            organization_id=organization.id,
+            name=display_name,
+            description=group_data.get("description", ""),
+            permissions=[],  # Default empty permissions
+            is_default=False,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.add(role)
+
+        # Create SCIM resource mapping for the group
+        scim_resource = SCIMResource(
+            organization_id=organization.id,
+            scim_id=str(uuid.uuid4()),
+            resource_type="Group",
+            internal_id=role.id,
+            raw_attributes=group_data,
+            sync_status="synced"
+        )
+        db.add(scim_resource)
+
+        await db.commit()
+        await db.refresh(role)
+
+        logger.info("SCIM group created",
+                   group_id=str(role.id),
+                   name=display_name)
+
+        # Process initial members if provided
+        members = group_data.get("members", [])
+        await update_group_members(db, organization.id, role.id, members)
+
+        return format_group_resource(role, members)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("SCIM group creation failed", error=str(e))
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=SCIMError.format(500, "Internal server error")
+        )
+
+
+@router.put("/Groups/{group_id}")
+async def update_group(
+    group_id: str,
+    group_data: Dict[str, Any],
+    organization: Organization = Depends(verify_scim_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a group via SCIM (full replacement)"""
+
+    try:
+        group_uuid = UUID(group_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=SCIMError.format(404, "Group not found")
+        )
+
+    try:
+        result = await db.execute(
+            select(OrganizationRole).where(
+                and_(
+                    OrganizationRole.id == group_uuid,
+                    OrganizationRole.organization_id == organization.id
+                )
+            )
+        )
+        role = result.scalar_one_or_none()
+
+        if not role:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=SCIMError.format(404, "Group not found")
+            )
+
+        # Update role
+        if "displayName" in group_data:
+            role.name = group_data["displayName"]
+        role.updated_at = datetime.utcnow()
+
+        # Update members (full replacement)
+        members = group_data.get("members", [])
+        await update_group_members(db, organization.id, role.id, members, replace=True)
+
+        await db.commit()
+        await db.refresh(role)
+
+        logger.info("SCIM group updated",
+                   group_id=str(role.id))
+
+        return format_group_resource(role, members)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("SCIM group update failed", error=str(e))
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=SCIMError.format(500, "Internal server error")
+        )
+
+
+@router.patch("/Groups/{group_id}")
+async def patch_group(
+    group_id: str,
+    patch_data: Dict[str, Any],
+    organization: Organization = Depends(verify_scim_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update a group via SCIM PATCH operations"""
+
+    try:
+        group_uuid = UUID(group_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=SCIMError.format(404, "Group not found")
+        )
+
+    try:
+        result = await db.execute(
+            select(OrganizationRole).where(
+                and_(
+                    OrganizationRole.id == group_uuid,
+                    OrganizationRole.organization_id == organization.id
+                )
+            )
+        )
+        role = result.scalar_one_or_none()
+
+        if not role:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=SCIMError.format(404, "Group not found")
+            )
+
+        # Process SCIM PATCH operations
+        operations = patch_data.get("Operations", [])
+        for op in operations:
+            op_type = op.get("op", "").lower()
+            path = op.get("path", "")
+            value = op.get("value")
+
+            if op_type == "replace":
+                if path == "displayName" or (not path and isinstance(value, dict) and "displayName" in value):
+                    role.name = value if isinstance(value, str) else value.get("displayName")
+                elif path == "members" or (not path and isinstance(value, dict) and "members" in value):
+                    members = value if isinstance(value, list) else value.get("members", [])
+                    await update_group_members(db, organization.id, role.id, members, replace=True)
+
+            elif op_type == "add":
+                if path == "members" or "members" in path:
+                    members = value if isinstance(value, list) else [value] if value else []
+                    await update_group_members(db, organization.id, role.id, members, replace=False)
+
+            elif op_type == "remove":
+                if path and "members" in path:
+                    # Parse member to remove from path like "members[value eq \"user-id\"]"
+                    import re
+                    match = re.search(r'members\[value eq "([^"]+)"\]', path)
+                    if match:
+                        member_id = match.group(1)
+                        await remove_group_member(db, organization.id, role.id, member_id)
+
+        role.updated_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(role)
+
+        logger.info("SCIM group patched",
+                   group_id=str(role.id),
+                   operations=len(operations))
+
+        # Get current members for response
+        members = await get_group_members(db, organization.id, role.id)
+        return format_group_resource(role, members)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("SCIM group patch failed", error=str(e))
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=SCIMError.format(500, "Internal server error")
+        )
+
+
+@router.delete("/Groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_group(
+    group_id: str,
+    organization: Organization = Depends(verify_scim_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a group via SCIM"""
+
+    try:
+        group_uuid = UUID(group_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=SCIMError.format(404, "Group not found")
+        )
+
+    try:
+        result = await db.execute(
+            select(OrganizationRole).where(
+                and_(
+                    OrganizationRole.id == group_uuid,
+                    OrganizationRole.organization_id == organization.id
+                )
+            )
+        )
+        role = result.scalar_one_or_none()
+
+        if not role:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=SCIMError.format(404, "Group not found")
+            )
+
+        # Cannot delete system/default roles
+        if role.is_default:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=SCIMError.format(400, "Cannot delete default role")
+            )
+
+        # Delete SCIM resource mapping
+        await db.execute(
+            select(SCIMResource).where(
+                and_(
+                    SCIMResource.internal_id == role.id,
+                    SCIMResource.resource_type == "Group",
+                    SCIMResource.organization_id == organization.id
+                )
+            ).delete()
+        )
+
+        # Delete the role
+        await db.delete(role)
+        await db.commit()
+
+        logger.info("SCIM group deleted", group_id=group_id)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("SCIM group deletion failed", error=str(e))
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=SCIMError.format(500, "Internal server error")
+        )
+
+
+# Group helper functions
+
+def format_group_resource(role: OrganizationRole, members: List[Dict] = None) -> Dict:
+    """Format a role as a SCIM Group resource"""
+    return {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+        "id": str(role.id),
+        "displayName": role.name,
+        "members": members or [],
+        "meta": {
+            "resourceType": "Group",
+            "created": role.created_at.isoformat() if role.created_at else None,
+            "lastModified": role.updated_at.isoformat() if role.updated_at else None,
+            "location": f"/scim/v2/Groups/{role.id}"
+        }
+    }
+
+
+async def get_group_members(db: AsyncSession, org_id: UUID, role_id: UUID) -> List[Dict]:
+    """Get members of a group"""
+    result = await db.execute(
+        select(OrganizationMember, User, SCIMResource).join(
+            User, User.id == OrganizationMember.user_id
+        ).outerjoin(
+            SCIMResource,
+            and_(
+                SCIMResource.internal_id == User.id,
+                SCIMResource.resource_type == "User",
+                SCIMResource.organization_id == org_id
+            )
+        ).where(
+            and_(
+                OrganizationMember.organization_id == org_id,
+                OrganizationMember.role_id == role_id
+            )
+        )
+    )
+
+    members = []
+    for member, user, scim_resource in result.all():
+        members.append({
+            "value": scim_resource.scim_id if scim_resource else str(user.id),
+            "$ref": f"/scim/v2/Users/{scim_resource.scim_id if scim_resource else str(user.id)}",
+            "display": user.display_name or user.email
+        })
+    return members
+
+
+async def update_group_members(db: AsyncSession, org_id: UUID, role_id: UUID, members: List[Dict], replace: bool = False):
+    """Update group members"""
+    from sqlalchemy import delete
+
+    if replace:
+        # Remove all existing members with this role (just update their role, don't remove from org)
+        await db.execute(
+            select(OrganizationMember).where(
+                and_(
+                    OrganizationMember.organization_id == org_id,
+                    OrganizationMember.role_id == role_id
+                )
+            )
+        )
+        # Set role to None for existing members
+        result = await db.execute(
+            select(OrganizationMember).where(
+                and_(
+                    OrganizationMember.organization_id == org_id,
+                    OrganizationMember.role_id == role_id
+                )
+            )
+        )
+        for member in result.scalars():
+            member.role_id = None
+
+    # Add new members
+    for member_data in members:
+        member_value = member_data.get("value")
+        if not member_value:
+            continue
+
+        # Find user by SCIM ID or internal ID
+        user_result = await db.execute(
+            select(User).join(
+                SCIMResource,
+                and_(
+                    SCIMResource.internal_id == User.id,
+                    SCIMResource.scim_id == member_value,
+                    SCIMResource.organization_id == org_id
+                ),
+                isouter=True
+            ).where(
+                or_(
+                    SCIMResource.scim_id == member_value,
+                    User.id == member_value
+                )
+            )
+        )
+        user = user_result.scalar_one_or_none()
+
+        if user:
+            # Update membership to use this role
+            membership_result = await db.execute(
+                select(OrganizationMember).where(
+                    and_(
+                        OrganizationMember.organization_id == org_id,
+                        OrganizationMember.user_id == user.id
+                    )
+                )
+            )
+            membership = membership_result.scalar_one_or_none()
+            if membership:
+                membership.role_id = role_id
+
+
+async def remove_group_member(db: AsyncSession, org_id: UUID, role_id: UUID, member_id: str):
+    """Remove a specific member from a group"""
+    # Find user by SCIM ID
+    user_result = await db.execute(
+        select(User).join(
+            SCIMResource,
+            and_(
+                SCIMResource.internal_id == User.id,
+                SCIMResource.scim_id == member_id,
+                SCIMResource.organization_id == org_id
+            ),
+            isouter=True
+        ).where(
+            or_(
+                SCIMResource.scim_id == member_id,
+                User.id == member_id
+            )
+        )
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user:
+        membership_result = await db.execute(
+            select(OrganizationMember).where(
+                and_(
+                    OrganizationMember.organization_id == org_id,
+                    OrganizationMember.user_id == user.id,
+                    OrganizationMember.role_id == role_id
+                )
+            )
+        )
+        membership = membership_result.scalar_one_or_none()
+        if membership:
+            membership.role_id = None

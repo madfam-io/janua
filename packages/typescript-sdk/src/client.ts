@@ -24,6 +24,7 @@ import { Admin } from './admin';
 import { SSO } from './sso';
 import { Invitations } from './invitations';
 import { Payments } from './payments';
+import { SCIMModule } from './scim';
 import { EnterpriseFeatures, FEATURES, type LicenseInfo } from './enterprise';
 import { GraphQL } from './graphql';
 import { WebSocket } from './websocket';
@@ -46,6 +47,7 @@ export class JanuaClient extends EventEmitter<SdkEventMap> {
   public readonly sso: SSO;
   public readonly invitations: Invitations;
   public readonly payments: Payments;
+  public readonly scim: SCIMModule;
 
   // Real-time features
   public readonly graphql?: GraphQL;
@@ -96,6 +98,7 @@ export class JanuaClient extends EventEmitter<SdkEventMap> {
     this.sso = new SSO(this._httpClient);
     this.invitations = new Invitations(this._httpClient);
     this.payments = new Payments(this._httpClient);
+    this.scim = new SCIMModule(this._httpClient);
 
     // Initialize GraphQL if configured
     if ((config as any).graphqlUrl) {

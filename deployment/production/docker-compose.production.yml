@@ -14,10 +14,16 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - SENTRY_DSN=${SENTRY_DSN}
+      # Database SSL Configuration
+      - DATABASE_SSL_MODE=${DATABASE_SSL_MODE:-require}
+      - DATABASE_SSL_CA_FILE=/etc/ssl/certs/db-ca.crt
       # Email (Resend) - Centralized for all MADFAM apps
       - RESEND_API_KEY=${RESEND_API_KEY}
       # Internal API - Service-to-service communication for MADFAM apps
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+    volumes:
+      # Mount database CA certificate for SSL verification
+      - ./ssl/db/ca.crt:/etc/ssl/certs/db-ca.crt:ro
     ports:
       - "4100:4100"  # MADFAM standard: 4100 = Janua API
     healthcheck:
@@ -47,7 +53,7 @@ services:
           cpus: "1.0"
           memory: 1G
 
-  # Database
+  # Database with SSL enabled
   postgres:
     image: postgres:15-alpine
     container_name: janua-postgres
@@ -63,7 +69,17 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+      # SSL certificates for encrypted connections
+      - ./ssl/db/server.crt:/var/lib/postgresql/server.crt:ro
+      - ./ssl/db/server.key:/var/lib/postgresql/server.key:ro
+      - ./ssl/db/ca.crt:/var/lib/postgresql/ca.crt:ro
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/server.crt
+      -c ssl_key_file=/var/lib/postgresql/server.key
+      -c ssl_ca_file=/var/lib/postgresql/ca.crt
     healthcheck:
       test:
         [
@@ -301,7 +317,11 @@ services:
     ports:
       - "9187:9187"
     environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-janua}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-janua}?sslmode=disable"
+      # SSL enabled: verify-full requires CA cert, require just needs encryption
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-janua}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-janua}?sslmode=require"
+    volumes:
+      # Mount CA certificate for SSL verification (optional, for sslmode=verify-full)
+      - ./ssl/db/ca.crt:/etc/ssl/certs/ca.crt:ro
     depends_on:
       - postgres
     networks:
@@ -341,6 +361,62 @@ services:
     networks:
       - janua-network
 
+  # ============================================
+  # Automated PostgreSQL Backup Service
+  # ============================================
+  # Runs daily backups at 2 AM UTC with 30-day retention
+  # Backups are stored locally and can be synced to S3/GCS
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:15
+    container_name: janua-postgres-backup
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=${POSTGRES_DB:-janua}
+      - POSTGRES_USER=${POSTGRES_USER:-janua}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_EXTRA_OPTS=--blobs --format=custom --compress=9
+      # Schedule: Daily at 2:00 AM UTC
+      - SCHEDULE=0 2 * * *
+      # Keep 30 days of daily backups
+      - BACKUP_KEEP_DAYS=30
+      # Keep 4 weekly backups (Sundays)
+      - BACKUP_KEEP_WEEKS=4
+      # Keep 6 monthly backups (1st of month)
+      - BACKUP_KEEP_MONTHS=6
+      # Naming convention
+      - BACKUP_SUFFIX=.sql.gz
+      # Health check interval
+      - HEALTHCHECK_PORT=8080
+      # Optional: SSL mode for backup connection
+      - POSTGRES_SSL_MODE=require
+    volumes:
+      - postgres_backups:/backups
+      # Mount CA certificate for SSL verification
+      - ./ssl/db/ca.crt:/etc/ssl/certs/ca.crt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - janua-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    labels:
+      - "com.janua.description=Automated PostgreSQL backup service"
+      - "com.janua.backup.schedule=Daily at 2:00 AM UTC"
+      - "com.janua.backup.retention=30 days daily, 4 weekly, 6 monthly"
+
 networks:
   janua-network:
     driver: bridge
@@ -352,6 +428,12 @@ networks:
 volumes:
   postgres_data:
     driver: local
+  postgres_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/backups/janua/postgres
   redis_data:
     driver: local
   prometheus_data:

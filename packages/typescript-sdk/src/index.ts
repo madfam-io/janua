@@ -20,6 +20,20 @@ export { Sessions } from './sessions';
 export { Organizations } from './organizations';
 export { Webhooks } from './webhooks';
 export { Admin } from './admin';
+export { SCIMModule, createSCIMModule } from './scim';
+
+// SCIM type exports
+export type {
+  SCIMConfig,
+  SCIMConfigCreate,
+  SCIMConfigUpdate,
+  SCIMTokenResponse,
+  SCIMSyncLogEntry,
+  SCIMSyncStatusResponse,
+  SCIMLogsOptions,
+} from './scim';
+
+export { SCIMProvider, SCIMSyncStatus } from './scim';
 
 // HTTP client exports
 export { HttpClient, AxiosHttpClient, createHttpClient } from './http-client';

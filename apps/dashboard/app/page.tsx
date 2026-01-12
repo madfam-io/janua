@@ -100,9 +100,11 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="outline" size="sm">
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
+              <Button variant="outline" size="sm" asChild>
+                <a href="/settings">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </a>
               </Button>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 Sign out

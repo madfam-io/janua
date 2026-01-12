@@ -1,0 +1,142 @@
+# Wildcard Certificate for Janua services
+# This certificate covers all *.janua.dev subdomains
+#
+# Note: Wildcard certificates require DNS-01 challenge
+# For HTTP-01, create individual certificates per domain
+#
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: janua-tls
+  namespace: janua
+  labels:
+    app.kubernetes.io/name: janua-tls
+    app.kubernetes.io/part-of: janua
+spec:
+  secretName: janua-tls-secret
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  # Certificate domains
+  dnsNames:
+    - janua.dev
+    - api.janua.dev
+    - app.janua.dev
+    - admin.janua.dev
+    - docs.janua.dev
+  # Certificate duration (default: 90 days for Let's Encrypt)
+  duration: 2160h # 90 days
+  # Renew 30 days before expiry
+  renewBefore: 720h # 30 days
+  # Private key settings
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+  # Usage restrictions
+  usages:
+    - server auth
+    - client auth
+---
+# Individual certificate for API (if not using wildcard)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: janua-api-tls
+  namespace: janua
+  labels:
+    app.kubernetes.io/name: janua-api-tls
+    app.kubernetes.io/part-of: janua
+spec:
+  secretName: janua-api-tls-secret
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - api.janua.dev
+  duration: 2160h
+  renewBefore: 720h
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+---
+# Certificate for Dashboard
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: janua-dashboard-tls
+  namespace: janua
+  labels:
+    app.kubernetes.io/name: janua-dashboard-tls
+    app.kubernetes.io/part-of: janua
+spec:
+  secretName: janua-dashboard-tls-secret
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - app.janua.dev
+  duration: 2160h
+  renewBefore: 720h
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+---
+# Internal service certificates for mTLS
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: janua-internal-tls
+  namespace: janua
+  labels:
+    app.kubernetes.io/name: janua-internal-tls
+    app.kubernetes.io/part-of: janua
+spec:
+  secretName: janua-internal-tls-secret
+  # Use self-signed issuer for internal services
+  issuerRef:
+    name: janua-ca-issuer
+    kind: Issuer
+  dnsNames:
+    - janua-api.janua.svc.cluster.local
+    - janua-dashboard.janua.svc.cluster.local
+    - janua-postgres.janua.svc.cluster.local
+    - janua-redis.janua.svc.cluster.local
+  duration: 8760h # 1 year for internal certs
+  renewBefore: 720h
+  privateKey:
+    algorithm: RSA
+    size: 2048
+---
+# Self-signed CA for internal services
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: janua-ca-issuer
+  namespace: janua
+  labels:
+    app.kubernetes.io/name: janua-ca-issuer
+    app.kubernetes.io/part-of: janua
+spec:
+  selfSigned: {}
+---
+# CA Certificate for signing internal certs
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: janua-ca
+  namespace: janua
+spec:
+  isCA: true
+  commonName: janua-internal-ca
+  secretName: janua-ca-secret
+  duration: 87600h # 10 years
+  renewBefore: 8760h # 1 year
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  issuerRef:
+    name: janua-ca-issuer
+    kind: Issuer

@@ -1,5 +1,6 @@
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 import os
+import ssl
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import MetaData, select
@@ -26,6 +27,66 @@ convention = {
 metadata = MetaData(naming_convention=convention)
 Base = declarative_base(metadata=metadata)
 
+
+def create_ssl_context() -> Optional[ssl.SSLContext]:
+    """
+    Create SSL context for PostgreSQL connection based on settings.
+    
+    Returns:
+        SSL context if SSL is enabled, None if disabled.
+    """
+    ssl_mode = getattr(settings, 'DATABASE_SSL_MODE', 'prefer')
+    
+    # Disable SSL entirely
+    if ssl_mode == 'disable':
+        return None
+    
+    # For 'allow' and 'prefer', we attempt SSL but don't require verification
+    if ssl_mode in ('allow', 'prefer'):
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+    
+    # For 'require', we need SSL but don't verify certificate
+    if ssl_mode == 'require':
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+    
+    # For 'verify-ca' and 'verify-full', we need proper certificates
+    if ssl_mode in ('verify-ca', 'verify-full'):
+        ctx = ssl.create_default_context()
+        
+        # Load CA certificate if provided
+        ca_file = getattr(settings, 'DATABASE_SSL_CA_FILE', None)
+        if ca_file and os.path.exists(ca_file):
+            ctx.load_verify_locations(cafile=ca_file)
+        
+        # Load client certificate if provided (for mutual TLS)
+        cert_file = getattr(settings, 'DATABASE_SSL_CERT_FILE', None)
+        key_file = getattr(settings, 'DATABASE_SSL_KEY_FILE', None)
+        if cert_file and key_file and os.path.exists(cert_file) and os.path.exists(key_file):
+            ctx.load_cert_chain(certfile=cert_file, keyfile=key_file)
+        
+        # Configure verification mode
+        if ssl_mode == 'verify-full':
+            ctx.check_hostname = True
+            ctx.verify_mode = ssl.CERT_REQUIRED
+        else:  # verify-ca
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_REQUIRED
+        
+        return ctx
+    
+    # Default: prefer (try SSL without verification)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 # Create async engine with error handling
 try:
     if not settings.DATABASE_URL:
@@ -46,14 +107,30 @@ try:
             pool_pre_ping=True
         )
     else:
-        # PostgreSQL with connection pooling
+        # PostgreSQL with connection pooling and optional SSL
+        ssl_context = create_ssl_context()
+        ssl_mode = getattr(settings, 'DATABASE_SSL_MODE', 'prefer')
+        
+        # Build connect_args for asyncpg
+        connect_args = {}
+        if ssl_context and ssl_mode != 'disable':
+            connect_args['ssl'] = ssl_context
+            logger.info(
+                "Database SSL enabled",
+                ssl_mode=ssl_mode,
+                ca_file=getattr(settings, 'DATABASE_SSL_CA_FILE', None),
+            )
+        else:
+            logger.info("Database SSL disabled")
+        
         engine = create_async_engine(
             database_url,
             echo=settings.DEBUG,
             pool_size=settings.DATABASE_POOL_SIZE,
             max_overflow=settings.DATABASE_MAX_OVERFLOW,
             pool_timeout=settings.DATABASE_POOL_TIMEOUT,
-            pool_pre_ping=True
+            pool_pre_ping=True,
+            connect_args=connect_args,
         )
     
     # Create async session maker
