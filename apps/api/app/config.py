@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     
     # Database SSL Configuration
     DATABASE_SSL_MODE: str = Field(
-        default="prefer",
+        default="disable",
         description="PostgreSQL SSL mode: disable, allow, prefer, require, verify-ca, verify-full",
     )
     DATABASE_SSL_CA_FILE: Optional[str] = Field(

@@ -33,6 +33,9 @@ if hasattr(settings, 'DATABASE_URL') and settings.DATABASE_URL:
             "pool_recycle": 3600,  # Recycle connections after 1 hour
             "pool_timeout": 30,  # Wait up to 30 seconds for a connection
         })
+        # Disable SSL for asyncpg if connecting to PostgreSQL without SSL
+        if "asyncpg" in async_database_url:
+            engine_kwargs["connect_args"] = {"ssl": False}
     else:
         # Use NullPool for SQLite to avoid connection sharing issues
         engine_kwargs["poolclass"] = NullPool
@@ -73,6 +76,7 @@ else:
         max_overflow=100,  # Burst capacity
         pool_recycle=3600,  # Recycle connections after 1 hour
         pool_timeout=30,  # Wait up to 30 seconds for a connection
+        connect_args={"ssl": False},  # Disable SSL for asyncpg
     )
 
     sync_engine = create_engine(
