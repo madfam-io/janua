@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
         - name: janua-api
-          image: localhost:5000/janua-api:latest
+          image: ghcr.io/madfam-org/janua:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4100

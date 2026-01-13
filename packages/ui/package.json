@@ -24,6 +24,10 @@
     "./components/theme-toggle": {
       "types": "./src/components/theme-toggle.tsx",
       "default": "./src/components/theme-toggle.tsx"
+    },
+    "./lib/utils": {
+      "types": "./src/lib/utils.ts",
+      "default": "./src/lib/utils.ts"
     }
   },
   "scripts": {

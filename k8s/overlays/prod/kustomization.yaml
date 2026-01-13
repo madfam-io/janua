@@ -20,15 +20,17 @@ patches:
       kind: Deployment
       name: janua-api
 
-# Use registry images for prod
+# Image configuration for production
+# Base images already use ghcr.io/madfam-org/janua-* with :latest tag
+# Override tags here for specific deployments if needed
 images:
-  - name: localhost:5000/janua-api
+  - name: ghcr.io/madfam-org/janua
     newTag: latest
-  - name: localhost:5000/janua-dashboard
+  - name: ghcr.io/madfam-org/janua-dashboard
     newTag: latest
-  - name: localhost:5000/janua-admin
+  - name: ghcr.io/madfam-org/janua-admin
     newTag: latest
-  - name: localhost:5000/janua-docs
+  - name: ghcr.io/madfam-org/janua-docs
     newTag: latest
-  - name: localhost:5000/janua-website
+  - name: ghcr.io/madfam-org/janua-website
     newTag: latest
