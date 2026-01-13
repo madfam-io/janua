@@ -63,12 +63,18 @@ jobs:
           echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
       - name: Deploy to Kubernetes
         run: |
-          kubectl set image deployment/janua-api janua-api=ghcr.io/madfam-org/janua:main-${{ github.sha }} -n janua
+          IMAGE="ghcr.io/madfam-org/janua:main-${{ steps.sha.outputs.short }}"
+          echo "Deploying: $IMAGE"
+          kubectl set image deployment/janua-api janua-api=$IMAGE -n janua
           kubectl rollout status deployment/janua-api -n janua --timeout=180s
 
       - name: Verify deployment
         run: |
           kubectl get pods -n janua -l app=janua-api -o wide
-          echo "Deployed: ghcr.io/madfam-org/janua:main-${{ github.sha }}"
+          echo "Deployed: ghcr.io/madfam-org/janua:main-${{ steps.sha.outputs.short }}"
