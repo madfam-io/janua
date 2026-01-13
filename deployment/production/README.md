@@ -74,7 +74,7 @@ cd /opt/solarpunk/janua
 
 ### Cloudflare Tunnel Configuration
 
-The tunnel routes traffic to local Docker containers:
+**Bare Metal Deployment** (this guide): Routes traffic directly to Docker containers on localhost.
 
 | Domain | Target | Service |
 |--------|--------|---------|
@@ -83,6 +83,8 @@ The tunnel routes traffic to local Docker containers:
 | api.janua.dev | localhost:4100 | FastAPI Backend |
 | app.janua.dev | localhost:4101 | Dashboard |
 | docs.janua.dev | localhost:4103 | Documentation |
+
+> **Note for K8s Deployments**: When running on Kubernetes, Cloudflare tunnel should route to K8s Service ports (typically port 80), NOT container ports. For K8s routing configuration, see [janua CLAUDE.md](../../CLAUDE.md#deployment) which documents the correct Service:Port mapping. The K8s Services expose port 80 and forward to the container ports internally via `targetPort`.
 
 ### DNS Configuration
 

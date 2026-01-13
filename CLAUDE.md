@@ -369,13 +369,20 @@ enclii deploy --service janua
 
 **Cloudflare Tunnel Routing** (via unified `enclii-production` tunnel):
 
-| Public Domain | Internal Service |
-|---------------|------------------|
-| auth.madfam.io | janua-api.janua.svc.cluster.local:4100 |
-| dashboard.madfam.io | janua-dashboard.janua.svc.cluster.local:4101 |
-| admin.madfam.io | janua-admin.janua.svc.cluster.local:4102 |
-| docs.madfam.io | janua-docs.janua.svc.cluster.local:4103 |
-| madfam.io | janua-website.janua.svc.cluster.local:4104 |
+**Port Mapping Hierarchy** (Critical for Cloudflare Tunnel Configuration):
+1. **Container Port**: What the application listens on internally (e.g., 4100, 4101, 4104)
+2. **K8s Service Port**: What the service exposes to the cluster (typically port 80)
+3. **Cloudflare Tunnel Route**: Should point to K8s Service port (80), NOT container port
+
+| Public Domain | Internal Service (K8s Service:Port) | Container Port |
+|---------------|-------------------------------------|----------------|
+| api.janua.dev / auth.madfam.io | janua-api.janua.svc.cluster.local:80 | 4100 |
+| app.janua.dev / dashboard.janua.dev | janua-dashboard.janua.svc.cluster.local:80 | 4101 |
+| admin.janua.dev | janua-admin.janua.svc.cluster.local:80 | 4102 |
+| docs.janua.dev | janua-docs.janua.svc.cluster.local:80 | 4103 |
+| janua.dev / www.janua.dev | janua-website.janua.svc.cluster.local:80 | 4104 |
+
+> **Important**: The Cloudflare tunnel routes traffic to K8s Services, not directly to containers. Always use the K8s Service port (80) in tunnel configuration, not the container port.
 
 See `enclii/infra/k8s/production/cloudflared-unified.yaml` for routing configuration.
 
