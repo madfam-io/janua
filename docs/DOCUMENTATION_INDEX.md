@@ -43,31 +43,15 @@ This index provides a navigable structure for all Janua documentation. Organized
 
 ## 📊 Project Status & Analysis
 
-### Current Assessment (November 2025)
+### Current Assessment (January 2026)
 - **Production Readiness**: 75-80%
-- **Comprehensive Audit**: See `.serena/memories/comprehensive_audit_november_17_2025.md`
-- **Feature Inventory**: See `.serena/memories/comprehensive_feature_inventory.md`
+- **Infrastructure**: K3s single-node on Hetzner AX41-NVME (~$55/month)
+- **Status**: All 5 Janua services healthy and operational
 
-### Key Memories (Serena MCP)
-Access via `/sc:load` or direct read:
-- `project_overview` - High-level project description
-- `comprehensive_audit_november_17_2025` - Evidence-based current assessment
-- `comprehensive_feature_inventory` - Complete feature list
-- `suggested_commands` - Development command reference
-- `week6-day2-complete` - Latest E2E test implementation
+## 🗄️ Documentation Archive Policy
 
-## 🗄️ Archived Documentation
-
-### November 2025 Archives
-- [2025-11 Archive](archive/2025-11/) - Session notes and outdated reports
-- [Session Notes](archive/2025-11/session-notes/) - Development session summaries
-- [Week 6](archive/2025-11/week6/) - Weekly progress archives
-
-### January 2025 Archives (INACCURATE)
-- [2025-01 Archived Inaccurate](historical/2025-01-archived-inaccurate/) - **DO NOT USE**
-  - ⚠️ Contains severely incorrect assessments
-  - Claims disproven by November evidence-based audit
-  - Kept for historical reference only
+Historical documentation has been archived to git history as of January 2026.
+Use `git log` to access previous versions if needed.
 
 ## 📖 Documentation Categories
 
@@ -89,9 +73,8 @@ Access via `/sc:load` or direct read:
 All files in root `docs/` and `docs/implementation-reports/` are current and maintained.
 
 ### Archive Policy
-- Session notes → `docs/archive/YYYY-MM/session-notes/`
-- Outdated reports → `docs/archive/YYYY-MM/`
-- Inaccurate docs → `docs/historical/` with clear warnings
+- Outdated documentation is removed and preserved in git history
+- Use `git log --all --full-history -- <path>` to find archived content
 
 ### Quality Standards
 - ✅ Evidence-based claims with verification
@@ -109,7 +92,7 @@ All files in root `docs/` and `docs/implementation-reports/` are current and mai
 
 ---
 
-**For Questions**: See [suggested_commands memory](../.serena/memories/suggested_commands.md)  
+**For Questions**: See [CLAUDE.md](../CLAUDE.md) for development commands
 **For Updates**: Contact project maintainers or submit PR
 
 ## 🔧 Maintenance & Operations
