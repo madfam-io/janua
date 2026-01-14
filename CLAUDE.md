@@ -355,7 +355,7 @@ enclii deploy --service janua
 
 ### Production Infrastructure
 **Server**: foundry-core (95.217.198.239) via Cloudflare Tunnel
-**K8s Cluster**: K3s (3-node Hetzner)
+**K8s Cluster**: K3s single-node on Hetzner AX41-NVME (ready for multi-node scaling)
 **Namespace**: janua
 
 **Active Services**:
