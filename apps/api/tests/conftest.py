@@ -716,8 +716,21 @@ except ImportError:
     # Fallback if fixtures not found
     @pytest.fixture
     def async_redis_client():
-        """Fallback async redis client"""
-        return mock_redis()
+        """Fallback async redis client - creates mock directly (not calling mock_redis fixture)"""
+        mock = AsyncMock()
+        mock.get = AsyncMock(return_value=None)
+        mock.set = AsyncMock(return_value=True)
+        mock.setex = AsyncMock(return_value=True)
+        mock.delete = AsyncMock(return_value=True)
+        mock.exists = AsyncMock(return_value=0)
+        mock.hget = AsyncMock(return_value=None)
+        mock.hset = AsyncMock(return_value=1)
+        mock.hdel = AsyncMock(return_value=1)
+        mock.expire = AsyncMock(return_value=True)
+        mock.ttl = AsyncMock(return_value=-2)
+        mock.ping = AsyncMock(return_value=True)
+        mock.close = AsyncMock()
+        return mock
 
 
 # Import all fixtures from fixtures package (Week 1 Foundation Sprint)

@@ -1,13 +1,9 @@
-import pytest
-pytestmark = pytest.mark.asyncio
-
-
-
 """
 Working authentication tests with proper async support
 """
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
@@ -18,6 +14,8 @@ from app.config import settings
 import sys
 import os
 
+pytestmark = pytest.mark.asyncio
+
 # Add fixtures to path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from fixtures.async_fixtures import AsyncDatabaseSession, AsyncRedisClient
@@ -27,7 +25,7 @@ from fixtures.async_fixtures import AsyncDatabaseSession, AsyncRedisClient
 class TestAuthenticationWorking:
     """Authentication tests with proper async mocking"""
 
-    @pytest.fixture(autouse=True)
+    @pytest_asyncio.fixture(autouse=True)
     async def setup(self, async_db_session, async_redis_client):
         """Setup test dependencies"""
         self.db_session = async_db_session.session

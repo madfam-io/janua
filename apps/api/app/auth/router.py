@@ -5,6 +5,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Initialize logger first
 logger = structlog.get_logger(__name__)

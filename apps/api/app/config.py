@@ -77,10 +77,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = Field(default="RS256")
     JWT_ISSUER: str = Field(default="https://api.janua.dev")
     JWT_AUDIENCE: str = Field(default="janua.dev")
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=480)  # 8 hours for better UX
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
     # Aliases for compatibility
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=480)  # 8 hours for better UX
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
     ALGORITHM: str = Field(default="RS256")
 
