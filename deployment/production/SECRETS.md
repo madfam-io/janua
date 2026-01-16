@@ -1,240 +1,228 @@
-# Secrets Management Guide
+# MADFAM Secrets Management
 
-Best practices for managing secrets in Janua production deployments.
+This document provides an overview of secrets management for the MADFAM ecosystem (Janua and Enclii projects).
 
----
-
-## Overview
-
-Janua requires several secrets for production operation. This guide covers secure handling, storage, and rotation of these secrets.
-
----
-
-## Required Secrets
-
-### Database
-
-| Secret | Description | Rotation |
-|--------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | Quarterly |
-| `POSTGRES_PASSWORD` | Database user password | Quarterly |
-| `REDIS_PASSWORD` | Redis authentication | Quarterly |
-
-### Authentication
-
-| Secret | Description | Rotation |
-|--------|-------------|----------|
-| `JWT_SECRET_KEY` | JWT signing key (HS256) | Annually |
-| `JWT_PRIVATE_KEY` | JWT private key (RS256) | Annually |
-| `SECRET_KEY` | Application secret | Annually |
-| `SESSION_SECRET` | Session encryption key | Annually |
-
-### External Services
-
-| Secret | Description | Rotation |
-|--------|-------------|----------|
-| `RESEND_API_KEY` | Email service API key | As needed |
-| `SENDGRID_API_KEY` | SendGrid API key | As needed |
-| `SENTRY_DSN` | Error tracking DSN | Never (static) |
-| `INTERNAL_API_KEY` | Service-to-service auth | Quarterly |
-
-### OAuth Providers
-
-| Secret | Description | Rotation |
-|--------|-------------|----------|
-| `OAUTH_GOOGLE_CLIENT_SECRET` | Google OAuth | Annually |
-| `OAUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth | Annually |
-| `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft OAuth | Annually |
-
----
-
-## Storage Options
-
-### Option 1: Environment Files (Development Only)
+## Quick Start
 
 ```bash
-# .env.production (gitignored)
-DATABASE_URL=postgresql://user:pass@host:5432/janua
-JWT_SECRET_KEY=your-secret-key
+# Check rotation status
+./scripts/secrets/manage-secrets.sh status
+
+# List all tracked secrets
+./scripts/secrets/manage-secrets.sh list
+
+# Rotate a specific secret
+./scripts/secrets/manage-secrets.sh rotate janua-postgres-password
+
+# Run security audit
+./scripts/secrets/manage-secrets.sh audit
 ```
 
-**Warning:** Never commit `.env` files to version control.
+## Key Files
 
-### Option 2: Docker Secrets (Recommended for Self-Hosted)
+| File | Purpose |
+|------|---------|
+| `infra/secrets/SECRETS_REGISTRY.yaml` | Central inventory of all secrets |
+| `scripts/secrets/manage-secrets.sh` | Main CLI for secrets operations |
+| `scripts/secrets/check-rotation-schedule.py` | Rotation status checker |
+| `docs/runbooks/secrets/` | Rotation procedures and runbooks |
 
-```bash
-# Create secrets
-echo "your-db-password" | docker secret create postgres_password -
-echo "your-jwt-secret" | docker secret create jwt_secret -
+## Architecture
 
-# Use in docker-compose
-services:
-  janua-api:
-    secrets:
-      - postgres_password
-      - jwt_secret
-
-secrets:
-  postgres_password:
-    external: true
-  jwt_secret:
-    external: true
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        SECRETS MANAGEMENT SYSTEM                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐  │
+│  │  SECRETS_REGISTRY │───▶│  GitHub Actions   │───▶│  Slack/Issues    │  │
+│  │     .yaml         │    │  Weekly Check     │    │  Notifications   │  │
+│  └──────────────────┘    └──────────────────┘    └──────────────────┘  │
+│           │                                                              │
+│           ▼                                                              │
+│  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐  │
+│  │  manage-secrets   │───▶│  Rotation Scripts │───▶│  Kubernetes      │  │
+│  │     .sh CLI       │    │  (DB, JWT, etc)   │    │  Secrets         │  │
+│  └──────────────────┘    └──────────────────┘    └──────────────────┘  │
+│           │                                                              │
+│           ▼                                                              │
+│  ┌──────────────────┐    ┌──────────────────┐                           │
+│  │  Prometheus       │───▶│  Grafana          │                          │
+│  │  Metrics          │    │  Dashboard        │                          │
+│  └──────────────────┘    └──────────────────┘                           │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Option 3: HashiCorp Vault (Enterprise)
+## Secrets Inventory Summary
 
-```bash
-# Store secrets
-vault kv put secret/janua/db password=xxx
-vault kv put secret/janua/jwt secret=xxx
+### Janua Project (~30 secrets)
 
-# Retrieve in application
-vault kv get -field=password secret/janua/db
-```
+| Category | Count | Policy | Examples |
+|----------|-------|--------|----------|
+| Database | 3 | Quarterly | PostgreSQL, Redis passwords |
+| Authentication | 3 | Annual | JWT keys, session secret |
+| OAuth Providers | 8 | Annual | Google, GitHub, Microsoft, Apple, etc. |
+| Email | 2 | Annual | SMTP, SendGrid |
+| Payment | 3 | Annual | Stripe keys and webhook |
+| Infrastructure | 5+ | Various | Cloudflare, GHCR, S3, Sentry |
 
-### Option 4: Cloud Provider Secrets
+### Enclii Project (~8 secrets)
 
-**AWS Secrets Manager:**
-```bash
-aws secretsmanager create-secret \
-  --name janua/production/db \
-  --secret-string '{"password":"xxx"}'
-```
+| Category | Count | Policy | Examples |
+|----------|-------|--------|----------|
+| OIDC | 1 | Annual | Janua integration secret |
+| Registry | 1 | Annual | GHCR credentials |
+| Webhook | 1 | Semi-annual | Webhook signature secret |
+| Database | 1 | Quarterly | PostgreSQL password |
+| Infrastructure | 2 | Various | Cloudflare, backup keys |
 
-**Google Secret Manager:**
-```bash
-gcloud secrets create janua-db-password \
-  --data-file=- <<< "your-password"
-```
+## Rotation Policies
 
----
-
-## Current Production Setup
-
-For the Hetzner bare metal server, secrets are managed via:
-
-1. **Environment file**: `/opt/solarpunk/janua/.env.production`
-2. **Docker environment**: Passed via `--env-file` flag
-3. **Systemd**: Environment variables in service files
-
-### Setup on Server
-
-```bash
-# SSH to server (via Cloudflare Zero Trust tunnel)
-ssh ssh.madfam.io
-
-# Create/edit production environment
-cd /opt/solarpunk/janua
-sudo nano .env.production
-
-# Set restrictive permissions
-sudo chmod 600 .env.production
-sudo chown root:root .env.production
-```
-
-### Environment File Template
-
-```bash
-# /opt/solarpunk/janua/.env.production
-# DO NOT COMMIT THIS FILE
-
-# Database
-DATABASE_URL=postgresql://janua:CHANGE_ME@localhost:5432/janua
-REDIS_URL=redis://:CHANGE_ME@localhost:6379/0
-
-# Security
-JWT_SECRET_KEY=CHANGE_ME_32_CHARS_MIN
-SECRET_KEY=CHANGE_ME_32_CHARS_MIN
-
-# Email
-RESEND_API_KEY=re_CHANGE_ME
-
-# Internal
-INTERNAL_API_KEY=CHANGE_ME
-```
-
----
+| Policy | Frequency | Applicable To |
+|--------|-----------|---------------|
+| **Quarterly** | Every 90 days | Database passwords, service accounts |
+| **Semi-annual** | Every 180 days | API keys, integration tokens |
+| **Annual** | Every 365 days | OAuth secrets, JWT keys, registry creds |
+| **On-demand** | As needed | Encryption keys, root credentials |
 
 ## Rotation Procedures
 
-### Database Password Rotation
+### Automated Scripts
+
+| Secret Type | Script | Downtime |
+|-------------|--------|----------|
+| Database passwords | `rotate-db-password.sh` | Rolling restart |
+| JWT keys | `rotate-jwt-keys.sh` | None (24h grace) |
+
+### Manual Procedures (See Runbooks)
+
+| Secret Type | Runbook |
+|-------------|---------|
+| Google OAuth | `docs/runbooks/secrets/oauth-google-rotation.md` |
+| GitHub OAuth | `docs/runbooks/secrets/oauth-github-rotation.md` |
+| Stripe keys | `docs/runbooks/secrets/stripe-rotation.md` |
+| GHCR credentials | `docs/runbooks/secrets/ghcr-pat-rotation.md` |
+| Emergency | `docs/runbooks/secrets/EMERGENCY_ROTATION.md` |
+
+## Automated Reminders
+
+GitHub Actions workflow runs weekly (Mondays 9 AM UTC):
+- Checks all secrets against rotation schedule
+- Sends Slack notification for upcoming/overdue rotations
+- Creates GitHub issues for overdue secrets
+
+**Workflow:** `.github/workflows/secrets-rotation-reminder.yml`
+
+## Monitoring
+
+### Grafana Dashboard
+
+Import `infra/monitoring/dashboards/secrets-rotation.json` to view:
+- Overdue secrets count
+- Days until rotation by secret
+- Rotation history
+- Secrets inventory table
+
+### Prometheus Alerts
+
+Deploy `infra/monitoring/alerts/secrets-rotation.yaml` for:
+- `SecretRotationOverdue` (critical)
+- `SecretRotationDue7Days` (warning)
+- `SecretRotationDue14Days` (info)
+- `TooManyOverdueSecrets` (critical)
+
+## Cross-Project Coordination
+
+Some secrets are shared between Janua and Enclii:
+
+### JWT Keys
+1. Janua owns the JWT signing keys
+2. Enclii uses public key for OIDC verification
+3. Rotation requires coordination:
+   - Rotate Janua keys with 24h grace period
+   - Notify Enclii team
+   - Enclii sessions continue working during grace period
+
+### GHCR Credentials
+1. Single PAT may serve both projects
+2. Rotation order: Janua → verify → Enclii → verify → revoke old
+
+## Emergency Procedures
+
+For suspected compromise:
 
 ```bash
-# 1. Generate new password
-NEW_PASS=$(openssl rand -base64 32)
+# View emergency runbook
+cat docs/runbooks/secrets/EMERGENCY_ROTATION.md
 
-# 2. Update PostgreSQL
-docker exec janua-postgres psql -U postgres -c \
-  "ALTER USER janua PASSWORD '$NEW_PASS';"
-
-# 3. Update .env.production
-sed -i "s/DATABASE_URL=.*/DATABASE_URL=postgresql:\/\/janua:$NEW_PASS@localhost:5432\/janua/" \
-  /opt/solarpunk/janua/.env.production
-
-# 4. Restart services
-docker restart janua-api
+# Quick reference
+./scripts/secrets/manage-secrets.sh emergency --critical
 ```
 
-### JWT Secret Rotation
+**Severity Levels:**
+- **CRITICAL** (immediate): JWT keys, DB passwords, payment keys
+- **HIGH** (4 hours): OAuth secrets, registry credentials
+- **MEDIUM** (24 hours): Monitoring tokens, non-prod secrets
 
-```bash
-# 1. Generate new secret
-NEW_SECRET=$(openssl rand -base64 64)
+## Adding New Secrets
 
-# 2. Update .env.production
-sed -i "s/JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$NEW_SECRET/" \
-  /opt/solarpunk/janua/.env.production
+1. Add entry to `infra/secrets/SECRETS_REGISTRY.yaml`
+2. Create runbook in `docs/runbooks/secrets/` if manual rotation
+3. Update `manage-secrets.sh` if automated rotation needed
+4. Test rotation procedure in staging
 
-# 3. Restart API (existing sessions will be invalidated)
-docker restart janua-api
+Example registry entry:
+```yaml
+- id: janua-new-secret
+  name: NEW_SECRET_NAME
+  description: "Purpose of this secret"
+  location: k8s/janua-secrets
+  environment: production
+  policy: annual
+  last_rotated: "2026-01-16"
+  next_rotation: "2027-01-16"
+  owner: infrastructure
+  procedure: new-secret-rotation
+  dependencies:
+    - janua-api
+  risk_level: medium
+  rotation_downtime: "none"
 ```
 
----
+## Best Practices
 
-## Security Checklist
+1. **Never commit secrets** to version control
+2. **Use Fine-grained PATs** over Classic tokens
+3. **Test rotations in staging** before production
+4. **Maintain grace periods** for keys with dependent services
+5. **Document all rotations** in the registry
+6. **Coordinate cross-project** secrets carefully
+7. **Monitor after rotation** for authentication errors
 
-- [ ] All secrets are at least 32 characters
-- [ ] `.env.production` has `600` permissions
-- [ ] No secrets in docker-compose.yml (use env_file)
-- [ ] No secrets in git history
-- [ ] Secrets rotated on schedule
-- [ ] Backup of secrets stored securely offline
-- [ ] Access to secrets is logged
+## Troubleshooting
 
----
+### Common Issues
 
-## Generating Secure Secrets
+**"Secret not found in registry"**
+- Verify secret ID matches exactly
+- Check project name (janua vs enclii)
 
-```bash
-# 32-character secret
-openssl rand -base64 32
+**"ImagePullBackOff after GHCR rotation"**
+- Token may not have `read:packages` permission
+- Check if correct repositories are selected
 
-# 64-character secret
-openssl rand -base64 64
+**"JWT validation failed after rotation"**
+- 24h grace period may have expired
+- Verify new public key is deployed to all services
 
-# Hex secret (for specific requirements)
-openssl rand -hex 32
+### Getting Help
 
-# URL-safe secret
-openssl rand -base64 32 | tr '+/' '-_'
-```
-
----
-
-## Emergency Response
-
-If secrets are compromised:
-
-1. **Immediately** rotate the compromised secret
-2. **Audit** access logs for unauthorized use
-3. **Invalidate** all sessions (restart API with new JWT secret)
-4. **Notify** affected users if data was accessed
-5. **Document** the incident and remediation
+- Slack: #infrastructure or #security
+- Runbooks: `docs/runbooks/secrets/`
+- Registry: `infra/secrets/SECRETS_REGISTRY.yaml`
 
 ---
 
-## References
-
-- [OWASP Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)
-- [Docker Secrets](https://docs.docker.com/engine/swarm/secrets/)
-- [HashiCorp Vault](https://www.vaultproject.io/)
+**Last Updated:** 2026-01-16
+**Owner:** Infrastructure & Security Teams

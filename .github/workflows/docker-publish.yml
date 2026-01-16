@@ -30,10 +30,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/madfam-org/janua
+          images: ghcr.io/madfam-org/janua-api
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=main-,format=short
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -67,14 +67,17 @@ jobs:
         id: sha
         run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
-      - name: Deploy to Kubernetes
+      - name: Deploy to Kubernetes (patch-only to preserve config)
         run: |
-          IMAGE="ghcr.io/madfam-org/janua:main-${{ steps.sha.outputs.short }}"
+          IMAGE="ghcr.io/madfam-org/janua-api:main-${{ steps.sha.outputs.short }}"
           echo "Deploying: $IMAGE"
-          kubectl set image deployment/janua-api janua-api=$IMAGE -n janua
+          # Use patch to update ONLY the image, preserving all other config (env vars, ports, etc.)
+          kubectl patch deployment janua-api -n janua \
+            --type='json' \
+            -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value": "'$IMAGE'"}]'
           kubectl rollout status deployment/janua-api -n janua --timeout=180s
 
       - name: Verify deployment
         run: |
           kubectl get pods -n janua -l app=janua-api -o wide
-          echo "Deployed: ghcr.io/madfam-org/janua:main-${{ steps.sha.outputs.short }}"
+          echo "Deployed: ghcr.io/madfam-org/janua-api:main-${{ steps.sha.outputs.short }}"

@@ -18,10 +18,12 @@ spec:
       labels:
         app: janua-dashboard
     spec:
+      imagePullSecrets:
+        - name: ghcr-credentials
       containers:
         - name: janua-dashboard
           image: ghcr.io/madfam-org/janua-dashboard:latest
-          imagePullPolicy: Never
+          imagePullPolicy: Always
           ports:
             - containerPort: 4101
               protocol: TCP

@@ -21,10 +21,10 @@ patches:
       name: janua-api
 
 # Image configuration for production
-# Base images already use ghcr.io/madfam-org/janua-* with :latest tag
+# All images follow convention: ghcr.io/madfam-org/janua-{service}:{tag}
 # Override tags here for specific deployments if needed
 images:
-  - name: ghcr.io/madfam-org/janua
+  - name: ghcr.io/madfam-org/janua-api
     newTag: latest
   - name: ghcr.io/madfam-org/janua-dashboard
     newTag: latest

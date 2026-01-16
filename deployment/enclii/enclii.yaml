@@ -25,7 +25,7 @@ metadata:
 services:
   # API Backend (FastAPI)
   janua-api:
-    image: janua/api:latest
+    image: ghcr.io/madfam-org/janua-api:latest
     port: 4100
     domain: api.janua.dev
     type: api
@@ -58,7 +58,7 @@ services:
 
   # User Dashboard (Next.js)
   janua-dashboard:
-    image: janua/dashboard:latest
+    image: ghcr.io/madfam-org/janua-dashboard:latest
     port: 4101
     domain: app.janua.dev
     type: web
@@ -82,7 +82,7 @@ services:
 
   # Admin Panel (Next.js)
   janua-admin:
-    image: janua/admin:latest
+    image: ghcr.io/madfam-org/janua-admin:latest
     port: 4102
     domain: admin.janua.dev
     type: web
@@ -113,7 +113,7 @@ services:
 
   # Documentation Site (Next.js/Fumadocs)
   janua-docs:
-    image: janua/docs:latest
+    image: ghcr.io/madfam-org/janua-docs:latest
     port: 4103
     domain: docs.janua.dev
     type: web
@@ -138,7 +138,7 @@ services:
 
   # Marketing Website (Next.js)
   janua-website:
-    image: janua/website:latest
+    image: ghcr.io/madfam-org/janua-website:latest
     port: 4104
     domain: janua.dev
     type: web

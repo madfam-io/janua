@@ -20,7 +20,7 @@ spec:
         autoDeploy: true
 
   runtime:
-    port: 8000
+    port: 4100
     replicas: 3
     resources:
       requests:
@@ -42,7 +42,7 @@ spec:
 
   env:
     - name: PORT
-      value: "8000"
+      value: "4100"
     - name: NODE_ENV
       value: production
     - name: LOG_LEVEL

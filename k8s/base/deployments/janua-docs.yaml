@@ -18,10 +18,12 @@ spec:
       labels:
         app: janua-docs
     spec:
+      imagePullSecrets:
+        - name: ghcr-credentials
       containers:
         - name: janua-docs
           image: ghcr.io/madfam-org/janua-docs:latest
-          imagePullPolicy: Never
+          imagePullPolicy: Always
           ports:
             - containerPort: 4103
               protocol: TCP

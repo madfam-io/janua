@@ -27,9 +27,11 @@ spec:
         prometheus.io/port: "4100"
         prometheus.io/path: "/metrics"
     spec:
+      imagePullSecrets:
+        - name: ghcr-credentials
       containers:
         - name: janua-api
-          image: ghcr.io/madfam-org/janua:latest
+          image: ghcr.io/madfam-org/janua-api:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4100

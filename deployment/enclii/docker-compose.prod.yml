@@ -23,7 +23,7 @@ services:
 
   # API Service (FastAPI Backend)
   janua-api:
-    image: janua/api:latest
+    image: ghcr.io/madfam-org/janua-api:latest
     container_name: janua-api
     restart: unless-stopped
     network_mode: host
@@ -66,7 +66,7 @@ services:
 
   # Dashboard Frontend (app.janua.dev)
   janua-dashboard:
-    image: janua/dashboard:latest
+    image: ghcr.io/madfam-org/janua-dashboard:latest
     container_name: janua-dashboard
     restart: unless-stopped
     network_mode: host
@@ -103,7 +103,7 @@ services:
 
   # Admin Panel (admin.janua.dev)
   janua-admin:
-    image: janua/admin:latest
+    image: ghcr.io/madfam-org/janua-admin:latest
     container_name: janua-admin
     restart: unless-stopped
     network_mode: host
@@ -139,7 +139,7 @@ services:
 
   # Documentation Site (docs.janua.dev)
   janua-docs:
-    image: janua/docs:latest
+    image: ghcr.io/madfam-org/janua-docs:latest
     container_name: janua-docs
     restart: unless-stopped
     network_mode: host
@@ -174,7 +174,7 @@ services:
 
   # Public Website (janua.dev)
   janua-website:
-    image: janua/website:latest
+    image: ghcr.io/madfam-org/janua-website:latest
     container_name: janua-website
     restart: unless-stopped
     network_mode: host

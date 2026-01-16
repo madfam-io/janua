@@ -1,375 +1,529 @@
 #!/bin/bash
-# Janua Secrets Management Script
-# Usage: ./manage-secrets.sh [command] [options]
+# ═══════════════════════════════════════════════════════════════════════════════
+# MADFAM Secrets Management CLI
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Central command-line interface for secrets management operations.
+#
+# Usage:
+#   ./manage-secrets.sh <command> [options]
 #
 # Commands:
-#   export    - Export secrets from K8s to local files (encrypted)
-#   import    - Import secrets from local files to K8s
-#   generate  - Generate new secrets
-#   rotate    - Rotate specified secrets
-#   list      - List all secrets in K8s
-#   verify    - Verify secrets are properly configured
+#   status      Check rotation status of all secrets
+#   list        List all tracked secrets
+#   rotate      Rotate a specific secret
+#   audit       Run full security audit
+#   emergency   Emergency rotation procedures
+#   update      Update registry after rotation
+#   help        Show this help message
+#
+# ═══════════════════════════════════════════════════════════════════════════════
 
-set -e
+set -euo pipefail
 
-# Check for required tools
-check_requirements() {
-    local cmd="$1"
-
-    # Commands that require jq
-    case "$cmd" in
-        export|import)
-            if ! command -v jq &>/dev/null; then
-                echo -e "\033[0;31m[ERROR]\033[0m The '$cmd' command requires 'jq' (brew install jq or apt install jq)"
-                exit 1
-            fi
-            ;;
-    esac
-}
-
-# Configuration
-NAMESPACE="${NAMESPACE:-janua}"
-SECRET_NAME="${SECRET_NAME:-janua-secrets}"
-SECRETS_DIR="${SECRETS_DIR:-$HOME/.janua-secrets}"
-SSH_HOST="${SSH_HOST:-ssh.madfam.io}"
-GPG_RECIPIENT="${GPG_RECIPIENT:-}"
+# Script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REGISTRY_PATH="$PROJECT_ROOT/infra/secrets/SECRETS_REGISTRY.yaml"
+RUNBOOKS_PATH="$PROJECT_ROOT/docs/runbooks/secrets"
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-# Logging functions
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+# Logging
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
+log_header() { echo -e "\n${CYAN}═══ $1 ═══${NC}\n"; }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Help
+# ═══════════════════════════════════════════════════════════════════════════════
+
+show_help() {
+    cat << 'EOF'
+MADFAM Secrets Management CLI
+
+Usage: manage-secrets.sh <command> [options]
+
+Commands:
+  status [--json]           Check rotation status (overdue, due soon, upcoming)
+  list [--project NAME]     List all tracked secrets
+  rotate <secret-id>        Rotate a specific secret
+  audit                     Run full security audit
+  emergency [--critical]    Emergency rotation procedures
+  update <secret-id>        Update registry after manual rotation
+  verify                    Verify all secrets are accessible
+  help                      Show this help message
+
+Examples:
+  # Check what needs rotation
+  ./manage-secrets.sh status
+
+  # Rotate database password for Janua
+  ./manage-secrets.sh rotate janua-postgres-password
+
+  # Update registry after manual OAuth rotation
+  ./manage-secrets.sh update janua-oauth-google-secret
+
+  # Emergency rotation of all critical secrets
+  ./manage-secrets.sh emergency --critical
+
+Environment Variables:
+  SECRETS_REGISTRY_PATH     Override default registry location
+  DRY_RUN=1                 Preview actions without making changes
+
+EOF
 }
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
+# ═══════════════════════════════════════════════════════════════════════════════
+# Status Command
+# ═══════════════════════════════════════════════════════════════════════════════
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+cmd_status() {
+    local format="text"
 
-# Parse global flags
-REMOTE="false"
-parse_global_flags() {
-    for arg in "$@"; do
-        case "$arg" in
-            --remote)
-                REMOTE="true"
-                ;;
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --json) format="json"; shift ;;
+            *) log_error "Unknown option: $1"; exit 1 ;;
         esac
     done
-}
 
-# Execute kubectl command (local or remote)
-kubectl_cmd() {
-    if [[ "$REMOTE" == "true" ]]; then
-        ssh "$SSH_HOST" "sudo kubectl $*"
+    log_header "Secrets Rotation Status"
+
+    if [[ ! -f "$REGISTRY_PATH" ]]; then
+        log_error "Registry not found: $REGISTRY_PATH"
+        exit 1
+    fi
+
+    if command -v python3 &> /dev/null; then
+        python3 "$SCRIPT_DIR/check-rotation-schedule.py" --output "$format" --registry "$REGISTRY_PATH"
     else
-        kubectl "$@"
+        log_error "Python 3 required for status check"
+        log_info "Install: brew install python3 (macOS) or apt install python3 (Linux)"
+        exit 1
     fi
 }
 
-# List all secrets
+# ═══════════════════════════════════════════════════════════════════════════════
+# List Command
+# ═══════════════════════════════════════════════════════════════════════════════
+
 cmd_list() {
-    log_info "Listing secrets in namespace: $NAMESPACE"
-    kubectl_cmd get secrets -n "$NAMESPACE" -o wide
-}
+    local project_filter=""
 
-# Export secrets to local encrypted files
-cmd_export() {
-    log_info "Exporting secrets from K8s..."
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --project) project_filter="$2"; shift 2 ;;
+            *) log_error "Unknown option: $1"; exit 1 ;;
+        esac
+    done
 
-    # Create secrets directory
-    mkdir -p "$SECRETS_DIR"
-    chmod 700 "$SECRETS_DIR"
+    log_header "Tracked Secrets"
 
-    # Get secret data
-    local secret_data
-    secret_data=$(kubectl_cmd get secret "$SECRET_NAME" -n "$NAMESPACE" -o json 2>/dev/null)
-
-    if [[ -z "$secret_data" ]]; then
-        log_error "Failed to get secret $SECRET_NAME from namespace $NAMESPACE"
+    if [[ ! -f "$REGISTRY_PATH" ]]; then
+        log_error "Registry not found: $REGISTRY_PATH"
         exit 1
     fi
 
-    # Export each key
-    local timestamp
-    timestamp=$(date +%Y%m%d_%H%M%S)
-    local export_file="$SECRETS_DIR/${SECRET_NAME}_${timestamp}.json"
+    # Simple YAML parsing with grep/awk
+    echo "Project     | Secret ID                        | Policy      | Owner"
+    echo "------------|----------------------------------|-------------|-------------"
 
-    echo "$secret_data" | jq '.data | to_entries | map({(.key): (.value | @base64d)}) | add' > "$export_file"
-    chmod 600 "$export_file"
+    if command -v python3 &> /dev/null; then
+        python3 << EOF
+import yaml
+with open("$REGISTRY_PATH") as f:
+    registry = yaml.safe_load(f)
 
-    # Optionally encrypt with GPG
-    if [[ -n "$GPG_RECIPIENT" ]]; then
-        gpg --encrypt --recipient "$GPG_RECIPIENT" "$export_file"
-        rm "$export_file"
-        export_file="${export_file}.gpg"
-    fi
-
-    log_info "Secrets exported to: $export_file"
-}
-
-# Import secrets from local file to K8s
-cmd_import() {
-    local import_file="$1"
-
-    if [[ -z "$import_file" ]]; then
-        log_error "Usage: $0 import <secrets-file.json>"
-        exit 1
-    fi
-
-    if [[ ! -f "$import_file" ]]; then
-        log_error "File not found: $import_file"
-        exit 1
-    fi
-
-    log_info "Importing secrets from: $import_file"
-
-    # Decrypt if encrypted
-    local json_file="$import_file"
-    if [[ "$import_file" == *.gpg ]]; then
-        json_file="${import_file%.gpg}"
-        gpg --decrypt "$import_file" > "$json_file"
-    fi
-
-    # Read and encode secrets
-    local secret_yaml
-    secret_yaml=$(cat <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: $SECRET_NAME
-  namespace: $NAMESPACE
-type: Opaque
-data:
-$(jq -r 'to_entries | map("  \(.key): \(.value | @base64)") | .[]' "$json_file")
+for project, secrets in registry.get("secrets", {}).items():
+    if "$project_filter" and project != "$project_filter":
+        continue
+    for secret in secrets:
+        sid = secret.get("id", "unknown")[:32]
+        policy = secret.get("policy", "unknown")[:11]
+        owner = secret.get("owner", "unknown")[:12]
+        print(f"{project:11} | {sid:32} | {policy:11} | {owner}")
 EOF
-)
-
-    # Apply to K8s
-    echo "$secret_yaml" | kubectl_cmd apply -f -
-
-    # Cleanup decrypted file if we decrypted it
-    if [[ "$import_file" == *.gpg ]]; then
-        rm "$json_file"
+    else
+        log_warn "Python not available, showing raw registry"
+        cat "$REGISTRY_PATH"
     fi
-
-    log_info "Secrets imported successfully"
 }
 
-# Generate new secrets
-cmd_generate() {
-    log_info "Generating new secrets..."
+# ═══════════════════════════════════════════════════════════════════════════════
+# Rotate Command
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    local jwt_secret=$(openssl rand -base64 32)
-    local secret_key=$(openssl rand -base64 32)
-    local api_key=$(openssl rand -hex 32)
-
-    echo ""
-    echo "Generated secrets:"
-    echo "=================="
-    echo "jwt-secret:       $jwt_secret"
-    echo "secret-key:       $secret_key"
-    echo "internal-api-key: $api_key"
-    echo ""
-
-    log_warn "These secrets need to be added to your secrets file manually"
-    log_warn "Database and Redis URLs need to be configured separately"
-}
-
-# Rotate specific secrets
 cmd_rotate() {
-    local key="$1"
-
-    if [[ -z "$key" ]]; then
-        log_error "Usage: $0 rotate <secret-key>"
-        log_info "Available keys: jwt-secret, secret-key, internal-api-key"
+    if [[ $# -lt 1 ]]; then
+        log_error "Usage: manage-secrets.sh rotate <secret-id>"
         exit 1
     fi
 
-    log_info "Rotating secret: $key"
+    local secret_id="$1"
+    local dry_run="${DRY_RUN:-0}"
 
-    local new_value
-    case "$key" in
-        jwt-secret|secret-key)
-            new_value=$(openssl rand -base64 32)
+    log_header "Rotate Secret: $secret_id"
+
+    # Determine rotation script based on secret ID
+    case "$secret_id" in
+        *-postgres-password|*-db-password)
+            local project
+            project=$(echo "$secret_id" | cut -d'-' -f1)
+            log_info "Detected database password rotation for project: $project"
+
+            if [[ "$dry_run" == "1" ]]; then
+                "$SCRIPT_DIR/rotate-db-password.sh" --project "$project" --dry-run
+            else
+                "$SCRIPT_DIR/rotate-db-password.sh" --project "$project"
+            fi
             ;;
-        internal-api-key)
-            new_value=$(openssl rand -hex 32)
+
+        *-jwt-private-key|*-jwt-public-key)
+            local project
+            project=$(echo "$secret_id" | cut -d'-' -f1)
+            log_info "Detected JWT key rotation for project: $project"
+
+            if [[ "$dry_run" == "1" ]]; then
+                "$SCRIPT_DIR/rotate-jwt-keys.sh" --project "$project" --dry-run
+            else
+                "$SCRIPT_DIR/rotate-jwt-keys.sh" --project "$project"
+            fi
             ;;
+
+        *-ghcr-credentials)
+            log_info "GHCR credential rotation requires manual steps"
+            log_info "See runbook: $RUNBOOKS_PATH/ghcr-pat-rotation.md"
+            ;;
+
+        *-oauth-google*)
+            log_info "Google OAuth rotation requires manual steps"
+            log_info "See runbook: $RUNBOOKS_PATH/oauth-google-rotation.md"
+            ;;
+
+        *-oauth-github*)
+            log_info "GitHub OAuth rotation requires manual steps"
+            log_info "See runbook: $RUNBOOKS_PATH/oauth-github-rotation.md"
+            ;;
+
+        *-stripe*)
+            log_info "Stripe key rotation requires manual steps"
+            log_info "See runbook: $RUNBOOKS_PATH/stripe-rotation.md"
+            ;;
+
         *)
-            log_error "Unknown secret key: $key"
-            exit 1
+            log_warn "No automated rotation script for: $secret_id"
+            log_info "Check runbooks at: $RUNBOOKS_PATH/"
+            log_info "After manual rotation, run: ./manage-secrets.sh update $secret_id"
             ;;
     esac
-
-    # Update in K8s
-    local encoded_value
-    encoded_value=$(echo -n "$new_value" | base64)
-
-    kubectl_cmd patch secret "$SECRET_NAME" -n "$NAMESPACE" \
-        --type='json' \
-        -p="[{\"op\": \"replace\", \"path\": \"/data/$key\", \"value\":\"$encoded_value\"}]"
-
-    log_info "Secret $key rotated successfully"
-    log_warn "Remember to restart pods to pick up new secret: kubectl rollout restart deployment/janua-api -n $NAMESPACE"
 }
 
-# Verify secrets are configured correctly
-cmd_verify() {
-    log_info "Verifying secrets configuration..."
+# ═══════════════════════════════════════════════════════════════════════════════
+# Update Command
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    local required_keys=("database-url" "jwt-secret" "secret-key" "redis-url")
-    local missing=()
+cmd_update() {
+    if [[ $# -lt 1 ]]; then
+        log_error "Usage: manage-secrets.sh update <secret-id>"
+        exit 1
+    fi
 
-    # Get secret keys using kubectl jsonpath and parse with grep (no jq dependency)
-    local secret_data
-    secret_data=$(kubectl_cmd get secret "$SECRET_NAME" -n "$NAMESPACE" -o "jsonpath={.data}" 2>/dev/null)
+    local secret_id="$1"
+    local today
+    today=$(date +%Y-%m-%d)
 
-    # Extract keys from JSON using grep/sed (works without jq)
-    local secret_keys
-    secret_keys=$(echo "$secret_data" | grep -oE '"[^"]+":' | tr -d '":' | sort)
+    log_header "Update Registry: $secret_id"
 
-    for key in "${required_keys[@]}"; do
-        if ! echo "$secret_keys" | grep -q "^$key$"; then
-            missing+=("$key")
+    if [[ ! -f "$REGISTRY_PATH" ]]; then
+        log_error "Registry not found: $REGISTRY_PATH"
+        exit 1
+    fi
+
+    log_info "Updating last_rotated to: $today"
+
+    # Calculate next rotation based on policy
+    if command -v python3 &> /dev/null; then
+        python3 << EOF
+import yaml
+from datetime import datetime, timedelta
+
+with open("$REGISTRY_PATH") as f:
+    registry = yaml.safe_load(f)
+
+# Find secret and its policy
+found = False
+for project, secrets in registry.get("secrets", {}).items():
+    for secret in secrets:
+        if secret.get("id") == "$secret_id":
+            policy = secret.get("policy", "annual")
+            policy_days = registry.get("rotation_policies", {}).get(policy, {}).get("days", 365)
+
+            if policy_days:
+                next_date = datetime.now() + timedelta(days=policy_days)
+                print(f"Policy: {policy} ({policy_days} days)")
+                print(f"Next rotation: {next_date.strftime('%Y-%m-%d')}")
+            found = True
+            break
+    if found:
+        break
+
+if not found:
+    print(f"Secret '{secret_id}' not found in registry")
+EOF
+    fi
+
+    echo ""
+    log_warn "Manual update required in SECRETS_REGISTRY.yaml:"
+    echo ""
+    echo "  - id: $secret_id"
+    echo "    last_rotated: \"$today\""
+    echo "    next_rotation: \"YYYY-MM-DD\"  # Calculate from policy"
+    echo ""
+    log_info "Then commit and push the changes:"
+    echo "  git add infra/secrets/SECRETS_REGISTRY.yaml"
+    echo "  git commit -m \"chore: update rotation date for $secret_id\""
+    echo "  git push"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Audit Command
+# ═══════════════════════════════════════════════════════════════════════════════
+
+cmd_audit() {
+    log_header "Security Audit"
+
+    local issues=0
+
+    # Check registry exists
+    log_info "Checking registry..."
+    if [[ -f "$REGISTRY_PATH" ]]; then
+        log_success "Registry found"
+    else
+        log_error "Registry not found: $REGISTRY_PATH"
+        ((issues++))
+    fi
+
+    # Check rotation status
+    log_info "Checking rotation status..."
+    if command -v python3 &> /dev/null; then
+        local overdue
+        overdue=$(python3 -c "
+import yaml
+from datetime import date
+
+with open('$REGISTRY_PATH') as f:
+    registry = yaml.safe_load(f)
+
+today = date.today()
+count = 0
+for project, secrets in registry.get('secrets', {}).items():
+    if not isinstance(secrets, list):
+        continue
+    for secret in secrets:
+        next_rot = secret.get('next_rotation')
+        if next_rot:
+            from datetime import datetime
+            next_date = datetime.fromisoformat(next_rot).date()
+            if (next_date - today).days < 0:
+                count += 1
+print(count)
+" 2>/dev/null || echo "0")
+
+        if [[ "$overdue" =~ ^[0-9]+$ ]] && [[ "$overdue" -gt 0 ]]; then
+            log_error "$overdue secrets are overdue for rotation"
+            ((issues++))
+        else
+            log_success "No overdue secrets"
+        fi
+    fi
+
+    # Check kubectl access
+    log_info "Checking Kubernetes access..."
+    if kubectl cluster-info &> /dev/null; then
+        log_success "Kubernetes cluster accessible"
+
+        # Check secrets exist in namespaces
+        for ns in janua enclii; do
+            if kubectl get namespace "$ns" &> /dev/null; then
+                local secret_count
+                secret_count=$(kubectl get secrets -n "$ns" --no-headers 2>/dev/null | wc -l)
+                log_info "  $ns namespace: $secret_count secrets"
+            fi
+        done
+    else
+        log_warn "Kubernetes cluster not accessible (skip K8s checks)"
+    fi
+
+    # Check runbooks exist
+    log_info "Checking runbooks..."
+    local required_runbooks=("EMERGENCY_ROTATION.md" "oauth-google-rotation.md" "ghcr-pat-rotation.md")
+    for runbook in "${required_runbooks[@]}"; do
+        if [[ -f "$RUNBOOKS_PATH/$runbook" ]]; then
+            log_success "  $runbook exists"
+        else
+            log_warn "  $runbook missing"
         fi
     done
 
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        log_error "Missing required secrets: ${missing[*]}"
-        exit 1
-    fi
-
-    log_info "All required secrets are present"
-
-    # Check if secrets are being used by pods
-    # Note: This is a simplified check - pods may use secrets via envFrom or volume mounts
-    log_info "Checking pods in namespace..."
-    local pods
-    pods=$(kubectl_cmd get pods -n "$NAMESPACE" -o name 2>/dev/null | sed 's/pod\///')
-
-    if [[ -z "$pods" ]]; then
-        log_warn "No pods found in namespace $NAMESPACE"
+    # Summary
+    echo ""
+    if [[ $issues -eq 0 ]]; then
+        log_success "Audit complete: No critical issues found"
     else
-        log_info "Pods in namespace (secrets may be used via envFrom or volumes):"
-        echo "$pods"
+        log_error "Audit complete: $issues issues found"
+        exit 1
     fi
 }
 
-# Template for .env file
-cmd_template() {
-    cat <<'EOF'
-# Janua API Environment Variables Template
-# Copy this to .env and fill in values
+# ═══════════════════════════════════════════════════════════════════════════════
+# Emergency Command
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# Database Configuration
-DATABASE_URL=postgresql://janua:PASSWORD@localhost:5432/janua
-REDIS_URL=redis://localhost:6379
+cmd_emergency() {
+    local critical_only=false
 
-# Security Keys (generate with: openssl rand -base64 32)
-JWT_SECRET=
-SECRET_KEY=
-INTERNAL_API_KEY=
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --critical) critical_only=true; shift ;;
+            *) log_error "Unknown option: $1"; exit 1 ;;
+        esac
+    done
 
-# Email Provider (resend, ses, smtp, sendgrid)
-EMAIL_PROVIDER=resend
-RESEND_API_KEY=
+    log_header "EMERGENCY SECRET ROTATION"
 
-# OAuth Providers (optional)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
+    echo -e "${RED}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  WARNING: This will rotate secrets and may cause disruption!   ║${NC}"
+    echo -e "${RED}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
 
-# Application Settings
-ENVIRONMENT=production
-LOG_LEVEL=info
-CORS_ORIGINS=https://app.janua.dev,https://admin.janua.dev
-EOF
+    log_info "Emergency runbook: $RUNBOOKS_PATH/EMERGENCY_ROTATION.md"
+    echo ""
+
+    if [[ "$critical_only" == true ]]; then
+        log_warn "Critical secrets that would be rotated:"
+        echo "  - JWT signing keys (24h grace period)"
+        echo "  - Database passwords"
+        echo ""
+        log_warn "Secrets requiring manual rotation:"
+        echo "  - Stripe API keys (rotate in Stripe Dashboard)"
+        echo "  - OAuth secrets (rotate in provider consoles)"
+    else
+        log_info "For emergency rotation, run with explicit confirmation:"
+        echo ""
+        echo "  # Rotate critical secrets only"
+        echo "  ./manage-secrets.sh rotate janua-jwt-private-key"
+        echo "  ./manage-secrets.sh rotate janua-postgres-password"
+        echo ""
+        echo "  # Or see emergency runbook for full procedure"
+        echo "  cat $RUNBOOKS_PATH/EMERGENCY_ROTATION.md"
+    fi
+
+    echo ""
+    read -p "Open emergency runbook? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if command -v open &> /dev/null; then
+            open "$RUNBOOKS_PATH/EMERGENCY_ROTATION.md"
+        elif command -v xdg-open &> /dev/null; then
+            xdg-open "$RUNBOOKS_PATH/EMERGENCY_ROTATION.md"
+        else
+            cat "$RUNBOOKS_PATH/EMERGENCY_ROTATION.md"
+        fi
+    fi
 }
 
-# Help
-cmd_help() {
-    cat <<EOF
-Janua Secrets Management Script
+# ═══════════════════════════════════════════════════════════════════════════════
+# Verify Command
+# ═══════════════════════════════════════════════════════════════════════════════
 
-Usage: $0 <command> [options]
+cmd_verify() {
+    log_header "Verify Secrets Accessibility"
 
-Commands:
-  list        List all secrets in K8s namespace
-  export      Export secrets to local encrypted file
-  import      Import secrets from file to K8s
-  generate    Generate new secret values
-  rotate      Rotate a specific secret
-  verify      Verify all required secrets are present
-  template    Print .env template
-
-Options:
-  --remote    Execute against remote K8s cluster via SSH tunnel
-  --namespace Set namespace (default: janua)
-  --secret    Set secret name (default: janua-secrets)
-
-Environment Variables:
-  NAMESPACE       K8s namespace (default: janua)
-  SECRET_NAME     K8s secret name (default: janua-secrets)
-  SECRETS_DIR     Local directory for exported secrets
-  SSH_HOST        SSH host for remote operations
-  GPG_RECIPIENT   GPG recipient for encryption
-
-Examples:
-  $0 list --remote
-  $0 export
-  $0 import secrets.json
-  $0 rotate jwt-secret
-  $0 verify
-EOF
-}
-
-# Parse global flags first from all arguments
-parse_global_flags "$@"
-
-# Parse command
-cmd="${1:-help}"
-shift || true
-
-# Check requirements for the command
-check_requirements "$cmd"
-
-case "$cmd" in
-    list)
-        cmd_list "$@"
-        ;;
-    export)
-        cmd_export "$@"
-        ;;
-    import)
-        cmd_import "$@"
-        ;;
-    generate)
-        cmd_generate "$@"
-        ;;
-    rotate)
-        cmd_rotate "$@"
-        ;;
-    verify)
-        cmd_verify "$@"
-        ;;
-    template)
-        cmd_template "$@"
-        ;;
-    help|--help|-h)
-        cmd_help
-        ;;
-    *)
-        log_error "Unknown command: $cmd"
-        cmd_help
+    if ! kubectl cluster-info &> /dev/null; then
+        log_error "Cannot connect to Kubernetes cluster"
         exit 1
-        ;;
-esac
+    fi
+
+    local namespaces=("janua" "enclii")
+    local all_ok=true
+
+    for ns in "${namespaces[@]}"; do
+        log_info "Checking namespace: $ns"
+
+        if ! kubectl get namespace "$ns" &> /dev/null; then
+            log_warn "  Namespace $ns not found, skipping"
+            continue
+        fi
+
+        # List secrets
+        local secrets
+        secrets=$(kubectl get secrets -n "$ns" -o name 2>/dev/null)
+
+        for secret in $secrets; do
+            local secret_name
+            secret_name=$(echo "$secret" | cut -d'/' -f2)
+
+            # Skip service account tokens
+            if [[ "$secret_name" == *"token"* ]] || [[ "$secret_name" == "default-"* ]]; then
+                continue
+            fi
+
+            # Try to read secret
+            if kubectl get "$secret" -n "$ns" &> /dev/null; then
+                log_success "  $secret_name: accessible"
+            else
+                log_error "  $secret_name: NOT ACCESSIBLE"
+                all_ok=false
+            fi
+        done
+    done
+
+    echo ""
+    if [[ "$all_ok" == true ]]; then
+        log_success "All secrets verified accessible"
+    else
+        log_error "Some secrets are not accessible"
+        exit 1
+    fi
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Main
+# ═══════════════════════════════════════════════════════════════════════════════
+
+main() {
+    if [[ $# -lt 1 ]]; then
+        show_help
+        exit 0
+    fi
+
+    local command="$1"
+    shift
+
+    case "$command" in
+        status)     cmd_status "$@" ;;
+        list)       cmd_list "$@" ;;
+        rotate)     cmd_rotate "$@" ;;
+        update)     cmd_update "$@" ;;
+        audit)      cmd_audit "$@" ;;
+        emergency)  cmd_emergency "$@" ;;
+        verify)     cmd_verify "$@" ;;
+        help|--help|-h) show_help ;;
+        *)
+            log_error "Unknown command: $command"
+            echo "Run './manage-secrets.sh help' for usage"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
