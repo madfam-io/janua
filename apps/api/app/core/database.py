@@ -219,18 +219,23 @@ async def bootstrap_admin_user():
     """Bootstrap the admin user and default organization if ADMIN_BOOTSTRAP_PASSWORD is set.
 
     This creates:
-    1. admin@madfam.io with is_admin=True and email_verified=True
-    2. MADFAM organization with the admin as owner
+    1. Admin user with is_admin=True and email_verified=True
+    2. Default organization with the admin as owner
 
     Both operations are idempotent - they only run if the resources don't exist.
+
+    Environment variables:
+    - ADMIN_BOOTSTRAP_PASSWORD: Required to enable bootstrap
+    - ADMIN_BOOTSTRAP_EMAIL: Admin email (default: admin@janua.dev)
+    - DEFAULT_ORG_SLUG: Organization slug (default: janua)
     """
     admin_password = os.environ.get("ADMIN_BOOTSTRAP_PASSWORD")
     if not admin_password:
         logger.debug("ADMIN_BOOTSTRAP_PASSWORD not set, skipping admin bootstrap")
         return
 
-    admin_email = "admin@madfam.io"
-    default_org_slug = "madfam"
+    admin_email = os.environ.get("ADMIN_BOOTSTRAP_EMAIL", "admin@janua.dev")
+    default_org_slug = os.environ.get("DEFAULT_ORG_SLUG", "janua")
 
     try:
         # Import here to avoid circular imports

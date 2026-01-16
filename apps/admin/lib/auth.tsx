@@ -26,8 +26,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const ALLOWED_ROLES = ['superadmin', 'admin']
-// Allow both @janua.dev (Janua staff) and @madfam.io (organization owners)
-const ALLOWED_EMAIL_DOMAINS = ['@janua.dev', '@madfam.io']
+// Allow @janua.dev (Janua staff) and custom domains from environment
+// Set NEXT_PUBLIC_ALLOWED_EMAIL_DOMAINS to add additional domains (comma-separated)
+const DEFAULT_DOMAINS = ['@janua.dev']
+const customDomains = process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAINS?.split(',').map(d => d.trim()) || []
+const ALLOWED_EMAIL_DOMAINS = [...DEFAULT_DOMAINS, ...customDomains]
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)

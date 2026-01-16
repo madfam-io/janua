@@ -1,12 +1,14 @@
 # Janua - Self-Hosted Authentication
 
-**Open-source authentication for developers who want to own their auth infrastructure.**
-
-AGPL v3 licensed. No features locked behind paid tiers. No SaaS required.
+> **The Auth0 alternative you can run on your own infrastructure.**
+> *95%+ feature parity. Zero per-user pricing. Complete control.*
 
 [![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)](https://fastapi.tiangolo.com)
+[![Production Ready](https://img.shields.io/badge/status-production%20ready-brightgreen)](https://janua.dev)
+
+**Website:** [janua.dev](https://janua.dev) | **Docs:** [docs.janua.dev](https://docs.janua.dev) | **Demo:** [demo.janua.dev](https://demo.janua.dev)
 
 ---
 
@@ -14,25 +16,42 @@ AGPL v3 licensed. No features locked behind paid tiers. No SaaS required.
 
 A self-hosted authentication platform built with FastAPI and modern web technologies. Think Auth0 or Clerk, but you run it on your own infrastructure and the source code is yours.
 
-**What works:**
-- ✅ Email/password authentication
-- ✅ OAuth (Google, GitHub, Microsoft, etc.)
-- ✅ SAML 2.0 SSO
-- ✅ TOTP/SMS multi-factor authentication
-- ✅ WebAuthn/Passkeys (FIDO2)
-- ✅ Multi-tenancy with organizations and RBAC
-- ✅ REST API with SDKs for React, Vue, Next.js, Python, Go, Flutter
+**✅ Production-Ready Features:**
 
-**What's still rough:**
-- ⚠️ Documentation is incomplete in places
-- ⚠️ Not battle-tested at massive scale yet
-- ⚠️ Some edge cases probably exist (file issues!)
-- ⚠️ UI components need polish
+**Authentication Methods:**
+- ✅ Email/password authentication with secure hashing
+- ✅ OAuth 2.0 Social Login (Google, GitHub, Microsoft, Apple, Discord, Twitter, LinkedIn, Slack)
+- ✅ SAML 2.0 SSO for enterprise IdPs
+- ✅ OIDC Provider with full OpenID Connect compliance
+- ✅ Magic Links (passwordless email authentication)
 
-**What doesn't exist:**
-- ❌ Managed hosting (you need to self-host)
-- ❌ Enterprise support contracts
-- ❌ SOC 2 compliance reports
+**Multi-Factor Authentication:**
+- ✅ TOTP (Authenticator apps - Google, Authy, 1Password)
+- ✅ WebAuthn/Passkeys (FIDO2) - Biometric & hardware keys
+- ✅ Backup Codes (10 recovery codes in XXXX-XXXX format)
+
+**Enterprise Features:**
+- ✅ Multi-tenancy with organization hierarchy
+- ✅ RBAC with granular permissions
+- ✅ SCIM 2.0 user provisioning
+- ✅ Webhooks for event notifications
+- ✅ JIT (Just-In-Time) provisioning
+
+**Developer Experience:**
+- ✅ 202 REST API endpoints
+- ✅ SDKs: React, Vue, Next.js, Python, Go, Flutter, React Native
+- ✅ RS256 JWT with automatic key rotation
+- ✅ OpenAPI documentation at `/docs`
+
+**What we're improving:**
+- ⚠️ Documentation completeness (ongoing)
+- ⚠️ Scale testing beyond 100K users (planned)
+- ⚠️ UI component polish (ongoing)
+
+**Not available (by design):**
+- ❌ Managed SaaS hosting (self-host only - that's the point)
+- ❌ Enterprise support contracts (community-driven)
+- ❌ SOC 2 compliance reports (open source audit instead)
 
 ---
 

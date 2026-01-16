@@ -277,7 +277,7 @@ def _generate_id_token(
 ) -> str:
     """Generate an OpenID Connect ID Token."""
     now = datetime.now(timezone.utc)
-    issuer = settings.BASE_URL or "https://auth.madfam.io"
+    issuer = settings.BASE_URL or os.getenv("DEFAULT_ISSUER", "https://api.janua.dev")
 
     claims = {
         "iss": issuer,

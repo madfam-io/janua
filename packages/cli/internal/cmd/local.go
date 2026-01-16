@@ -337,7 +337,11 @@ func printServiceTable() {
 	fmt.Println("│ Enclii UI           │ 4201  │ http://localhost:4201           │")
 	fmt.Println("└─────────────────────┴───────┴─────────────────────────────────┘")
 	fmt.Println()
-	fmt.Println("Admin credentials: admin@madfam.io / YS9V9CK!qmR2s&")
+	adminEmail := os.Getenv("ADMIN_BOOTSTRAP_EMAIL")
+	if adminEmail == "" {
+		adminEmail = "admin@janua.dev"
+	}
+	fmt.Printf("Admin credentials: %s / (set via ADMIN_BOOTSTRAP_PASSWORD)\n", adminEmail)
 }
 
 // ============================================

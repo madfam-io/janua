@@ -455,9 +455,6 @@ allowed_hosts = [
     # Docker internal hostnames for container-to-container communication
     "janua-api",
     "janua-api:4100",
-    # Production domains (madfam.io infrastructure)
-    "auth.madfam.io",
-    "*.madfam.io",
     # Kubernetes internal networking (service names)
     "janua-api.janua.svc.cluster.local",
     "janua-api.janua.svc.cluster.local:4100",
@@ -465,6 +462,10 @@ allowed_hosts = [
     # TrustedHostMiddleware doesn't support IP wildcards (10.42.*.*).
     # If health checks fail, configure probes to use service hostname.
 ]
+# Add custom domain aliases from environment (e.g., auth.madfam.io for MADFAM deployment)
+custom_domain = os.getenv("JANUA_CUSTOM_DOMAIN")
+if custom_domain:
+    allowed_hosts.extend([custom_domain, f"*.{custom_domain.split('.', 1)[-1] if '.' in custom_domain else custom_domain}"])
 # Add test host for integration tests
 if settings.ENVIRONMENT == "test":
     allowed_hosts.extend(["test", "testserver", "testclient"])
