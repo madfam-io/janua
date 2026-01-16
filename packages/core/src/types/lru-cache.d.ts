@@ -66,9 +66,9 @@ declare module 'lru-cache' {
     lengthCalculator: (value: V, key: K) => number;
 
     // Event emitters
-    on(event: string, listener: Function): this;
-    once(event: string, listener: Function): this;
-    off(event: string, listener: Function): this;
+    on(event: string, listener: (...args: unknown[]) => void): this;
+    once(event: string, listener: (...args: unknown[]) => void): this;
+    off(event: string, listener: (...args: unknown[]) => void): this;
     removeAllListeners(event?: string): this;
 
     // Info methods
