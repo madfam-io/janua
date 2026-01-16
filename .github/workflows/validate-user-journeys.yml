@@ -4,6 +4,7 @@ name: Validate User Journeys
 # Runs on changes to landing pages, API, SDKs, or journey documentation
 
 on:
+  workflow_dispatch:  # Allow manual triggering
   push:
     branches: [main, develop]
     paths:
