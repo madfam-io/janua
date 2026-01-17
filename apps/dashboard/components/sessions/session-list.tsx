@@ -173,13 +173,13 @@ export function SessionList() {
   const getStatusColor = (status: Session['status']) => {
     switch (status) {
       case 'active':
-        return 'bg-green-100 text-green-800'
+        return 'bg-green-500/10 text-green-600 dark:text-green-400'
       case 'expired':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
       case 'revoked':
-        return 'bg-red-100 text-red-800'
+        return 'bg-destructive/10 text-destructive'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-muted text-muted-foreground'
     }
   }
 

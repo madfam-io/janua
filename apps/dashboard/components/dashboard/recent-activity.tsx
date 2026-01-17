@@ -126,13 +126,13 @@ export function RecentActivity() {
     switch (type) {
       case 'signin':
       case 'passkey':
-        return 'text-green-600'
+        return 'text-green-600 dark:text-green-400'
       case 'signup':
-        return 'text-blue-600'
+        return 'text-primary'
       case 'session':
-        return 'text-yellow-600'
+        return 'text-yellow-600 dark:text-yellow-400'
       case 'error':
-        return 'text-red-600'
+        return 'text-destructive'
       default:
         return 'text-muted-foreground'
     }
@@ -174,11 +174,11 @@ export function RecentActivity() {
 
   if (error) {
     return (
-      <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-        <p className="text-sm text-red-600">Error loading recent activity: {error}</p>
-        <button 
+      <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-md">
+        <p className="text-sm text-destructive">Error loading recent activity: {error}</p>
+        <button
           onClick={fetchActivities}
-          className="mt-2 text-sm text-red-700 underline hover:no-underline"
+          className="mt-2 text-sm text-destructive underline hover:no-underline"
         >
           Try again
         </button>

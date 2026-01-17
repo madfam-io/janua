@@ -22,15 +22,15 @@ interface HealthMetrics {
 }
 
 function getStatusColor(value: number, thresholds: { good: number; warning: number }): string {
-  if (value <= thresholds.good) return 'text-green-600'
-  if (value <= thresholds.warning) return 'text-yellow-600'
-  return 'text-red-600'
+  if (value <= thresholds.good) return 'text-green-600 dark:text-green-400'
+  if (value <= thresholds.warning) return 'text-yellow-600 dark:text-yellow-400'
+  return 'text-destructive'
 }
 
 function getPercentColor(value: number): string {
-  if (value >= 90) return 'text-green-600'
-  if (value >= 70) return 'text-yellow-600'
-  return 'text-red-600'
+  if (value >= 90) return 'text-green-600 dark:text-green-400'
+  if (value >= 70) return 'text-yellow-600 dark:text-yellow-400'
+  return 'text-destructive'
 }
 
 export function SystemHealth() {
@@ -92,7 +92,7 @@ export function SystemHealth() {
   if (error && !metrics) {
     return (
       <div className="space-y-4">
-        <div className="text-sm text-red-600 flex items-center gap-2">
+        <div className="text-sm text-destructive flex items-center gap-2">
           <Activity className="h-4 w-4" />
           <span>Unable to load metrics</span>
         </div>
@@ -151,7 +151,7 @@ export function SystemHealth() {
       {/* Status indicator and refresh */}
       <div className="pt-2 border-t flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${metrics?.status === 'healthy' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+          <div className={`h-2 w-2 rounded-full ${metrics?.status === 'healthy' ? 'bg-green-500 dark:bg-green-400' : 'bg-yellow-500 dark:bg-yellow-400'}`}></div>
           <span>{metrics?.status === 'healthy' ? 'All systems operational' : 'Degraded'}</span>
         </div>
         <Button

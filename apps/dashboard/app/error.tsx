@@ -28,7 +28,7 @@ export default function Error({
                       error.message?.toLowerCase().includes('forbidden')
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Card className="max-w-lg w-full">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -46,12 +46,12 @@ export default function Error({
 
         <CardContent>
           {process.env.NODE_ENV === 'development' && (
-            <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
-              <p className="text-sm font-mono text-gray-700 dark:text-gray-300 break-all">
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-sm font-mono text-foreground break-all">
                 {error.message}
               </p>
               {error.digest && (
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   Error ID: {error.digest}
                 </p>
               )}

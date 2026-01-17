@@ -59,10 +59,10 @@ interface SCIMSyncStatusResponse {
 }
 
 const statusIcons = {
-  active: <CheckCircle2 className="h-4 w-4 text-green-500" />,
-  pending: <AlertCircle className="h-4 w-4 text-yellow-500" />,
-  disabled: <XCircle className="h-4 w-4 text-gray-500" />,
-  error: <XCircle className="h-4 w-4 text-red-500" />,
+  active: <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />,
+  pending: <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />,
+  disabled: <XCircle className="h-4 w-4 text-muted-foreground" />,
+  error: <XCircle className="h-4 w-4 text-destructive" />,
 }
 
 const providerLabels: Record<string, string> = {
@@ -275,10 +275,10 @@ export default function SCIMSettingsPage() {
 
         {/* New Token Display */}
         {newToken && (
-          <Card className="border-green-500 bg-green-50">
+          <Card className="border-green-500/30 bg-green-500/10">
             <CardHeader>
-              <CardTitle className="text-green-800">New Bearer Token Generated</CardTitle>
-              <CardDescription className="text-green-700">
+              <CardTitle className="text-green-700 dark:text-green-300">New Bearer Token Generated</CardTitle>
+              <CardDescription className="text-green-600 dark:text-green-400">
                 Copy this token now - it won't be shown again!
               </CardDescription>
             </CardHeader>
@@ -450,7 +450,7 @@ export default function SCIMSettingsPage() {
                         </div>
                         <div className="flex items-center gap-4">
                           {op.error_message && (
-                            <span className="text-red-500 text-xs">{op.error_message}</span>
+                            <span className="text-destructive text-xs">{op.error_message}</span>
                           )}
                           {op.synced_at && (
                             <span className="text-muted-foreground text-xs">

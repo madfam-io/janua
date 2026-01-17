@@ -135,11 +135,11 @@ export function DashboardStats() {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {error && (
-        <div className="col-span-full p-4 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-sm text-red-600">Error loading dashboard stats: {error}</p>
-          <button 
+        <div className="col-span-full p-4 bg-destructive/10 border border-destructive/30 rounded-md">
+          <p className="text-sm text-destructive">Error loading dashboard stats: {error}</p>
+          <button
             onClick={fetchStats}
-            className="mt-2 text-sm text-red-700 underline hover:no-underline"
+            className="mt-2 text-sm text-destructive underline hover:no-underline"
           >
             Try again
           </button>
@@ -158,13 +158,13 @@ export function DashboardStats() {
             <div className="text-2xl font-bold">{stat.value}</div>
             <p className="text-xs text-muted-foreground flex items-center">
               {stat.trend === 'up' ? (
-                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
+                <TrendingUp className="h-3 w-3 text-green-600 dark:text-green-400 mr-1" />
               ) : stat.trend === 'down' ? (
-                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
+                <TrendingDown className="h-3 w-3 text-destructive mr-1" />
               ) : null}
               <span className={
-                stat.trend === 'up' ? 'text-green-500' : 
-                stat.trend === 'down' ? 'text-red-500' : 
+                stat.trend === 'up' ? 'text-green-600 dark:text-green-400' :
+                stat.trend === 'down' ? 'text-destructive' :
                 'text-muted-foreground'
               }>
                 {stat.change}

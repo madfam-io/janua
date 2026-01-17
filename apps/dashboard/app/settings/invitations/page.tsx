@@ -47,10 +47,10 @@ interface InvitationStats {
 }
 
 const statusConfig = {
-  pending: { icon: Clock, color: 'text-yellow-500', badge: 'secondary' as const },
-  accepted: { icon: CheckCircle2, color: 'text-green-500', badge: 'default' as const },
-  expired: { icon: AlertCircle, color: 'text-gray-500', badge: 'outline' as const },
-  revoked: { icon: XCircle, color: 'text-red-500', badge: 'destructive' as const },
+  pending: { icon: Clock, color: 'text-yellow-600 dark:text-yellow-400', badge: 'secondary' as const },
+  accepted: { icon: CheckCircle2, color: 'text-green-600 dark:text-green-400', badge: 'default' as const },
+  expired: { icon: AlertCircle, color: 'text-muted-foreground', badge: 'outline' as const },
+  revoked: { icon: XCircle, color: 'text-destructive', badge: 'destructive' as const },
 }
 
 export default function InvitationsPage() {
@@ -216,19 +216,19 @@ export default function InvitationsPage() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+              <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pending}</div>
               <p className="text-sm text-muted-foreground">Pending</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-green-600">{stats.accepted}</div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.accepted}</div>
               <p className="text-sm text-muted-foreground">Accepted</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-gray-600">{stats.expired}</div>
+              <div className="text-2xl font-bold text-muted-foreground">{stats.expired}</div>
               <p className="text-sm text-muted-foreground">Expired</p>
             </CardContent>
           </Card>

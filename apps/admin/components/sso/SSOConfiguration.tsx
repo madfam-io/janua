@@ -265,7 +265,7 @@ export function SSOConfiguration({ organizationId }: SSOConfigurationProps) {
                     <div className="space-y-2">
                       <Label>Service Provider URLs</Label>
                       <div className="space-y-2 text-sm">
-                        <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center justify-between p-2 bg-muted rounded">
                           <span>Entity ID:</span>
                           <div className="flex items-center space-x-2">
                             <code>{config.samlEntityId}</code>
@@ -278,7 +278,7 @@ export function SSOConfiguration({ organizationId }: SSOConfigurationProps) {
                             </Button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center justify-between p-2 bg-muted rounded">
                           <span>ACS URL:</span>
                           <div className="flex items-center space-x-2">
                             <code>{config.samlAcsUrl}</code>
@@ -342,7 +342,7 @@ export function SSOConfiguration({ organizationId }: SSOConfigurationProps) {
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Just-In-Time (JIT) Provisioning</Label>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     Automatically create user accounts on first SSO login
                   </p>
                 </div>
@@ -383,7 +383,7 @@ export function SSOConfiguration({ organizationId }: SSOConfigurationProps) {
                       {domain}
                       <button
                         onClick={() => handleRemoveDomain(domain)}
-                        className="ml-2 text-xs hover:text-red-600"
+                        className="ml-2 text-xs hover:text-destructive"
                       >
                         ×
                       </button>

@@ -302,11 +302,11 @@ export default function AuditLogsPage() {
                   <div
                     key={log.id}
                     className={`flex items-start justify-between p-4 border rounded-lg ${
-                      !log.success ? 'border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800' : ''
+                      !log.success ? 'border-destructive/30 bg-destructive/5' : ''
                     }`}
                   >
                     <div className="flex items-start gap-4">
-                      <div className={`p-2 rounded-full bg-muted ${!log.success ? 'bg-red-100 dark:bg-red-900' : ''}`}>
+                      <div className={`p-2 rounded-full bg-muted ${!log.success ? 'bg-destructive/10' : ''}`}>
                         {getEventIcon(log.event_type)}
                       </div>
                       <div>

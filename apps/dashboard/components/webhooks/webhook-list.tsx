@@ -187,7 +187,7 @@ export function WebhookList() {
           <div className="text-sm text-muted-foreground">Total Endpoints</div>
         </div>
         <div>
-          <div className="text-2xl font-bold text-green-600">
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
             {webhooks.filter(w => w.is_active).length}
           </div>
           <div className="text-sm text-muted-foreground">Active</div>
@@ -259,13 +259,13 @@ export function WebhookList() {
                       {webhook.events.slice(0, 2).map(event => (
                         <span
                           key={event}
-                          className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded"
+                          className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded"
                         >
                           {event}
                         </span>
                       ))}
                       {webhook.events.length > 2 && (
-                        <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
+                        <span className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded">
                           +{webhook.events.length - 2} more
                         </span>
                       )}
@@ -303,8 +303,8 @@ export function WebhookList() {
                   <td className="p-4">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                       webhook.is_active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
+                        ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                        : 'bg-muted text-muted-foreground'
                     }`}>
                       {webhook.is_active ? (
                         <><CheckCircle2 className="h-3 w-3 mr-1" /> Active</>

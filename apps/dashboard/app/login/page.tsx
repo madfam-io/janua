@@ -128,9 +128,9 @@ function LoginForm() {
       </CardHeader>
       <CardContent>
         {sessionMessage && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-800">{sessionMessage}</p>
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-md flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-700 dark:text-amber-300">{sessionMessage}</p>
           </div>
         )}
 
@@ -181,7 +181,7 @@ function LoginForm() {
           </div>
 
           {error && (
-            <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md flex items-start gap-2">
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md flex items-start gap-2">
               <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>

@@ -56,8 +56,8 @@ export default function Error({
                          error.message?.toLowerCase().includes('fatal')
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-950">
-      <Card className="max-w-lg w-full border-red-200 dark:border-red-900">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+      <Card className="max-w-lg w-full border-destructive/30">
         <CardHeader>
           <div className="flex items-center gap-2">
             <ShieldAlert className={`h-5 w-5 ${isCriticalError ? 'text-red-600' : 'text-amber-500'}`} />
@@ -80,19 +80,19 @@ export default function Error({
 
         <CardContent className="space-y-4">
           {/* Always show error details in admin panel */}
-          <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-lg">
-            <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">
+          <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
+            <p className="text-sm font-semibold text-destructive mb-1">
               Error Details:
             </p>
-            <p className="text-sm font-mono text-red-600 dark:text-red-500 break-all">
+            <p className="text-sm font-mono text-destructive/90 break-all">
               {error.message}
             </p>
             {error.stack && process.env.NODE_ENV === 'development' && (
               <details className="mt-2">
-                <summary className="text-xs text-red-500 cursor-pointer">
+                <summary className="text-xs text-destructive/80 cursor-pointer">
                   Stack Trace
                 </summary>
-                <pre className="mt-1 text-xs font-mono text-red-500 overflow-auto max-h-32">
+                <pre className="mt-1 text-xs font-mono text-destructive/80 overflow-auto max-h-32">
                   {error.stack}
                 </pre>
               </details>
@@ -109,8 +109,8 @@ export default function Error({
           </div>
 
           {isCriticalError && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg">
-              <p className="text-sm text-amber-700 dark:text-amber-400">
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <p className="text-sm text-yellow-600 dark:text-yellow-400">
                 ⚠️ The technical team has been automatically notified of this issue.
               </p>
             </div>
