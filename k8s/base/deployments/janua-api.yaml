@@ -24,7 +24,7 @@ spec:
         app: janua-api
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "4100"
+        prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
       imagePullSecrets:
@@ -34,7 +34,7 @@ spec:
           image: ghcr.io/madfam-org/janua-api:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 4100
+            - containerPort: 8000
               name: http
               protocol: TCP
           env:
@@ -61,7 +61,7 @@ spec:
                   key: secret-key
             # Configuration
             - name: PORT
-              value: "4100"
+              value: "8000"
             - name: ENVIRONMENT
               value: production
             - name: LOG_LEVEL
@@ -99,21 +99,30 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 4100
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /health
-              port: 4100
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
           startupProbe:
             httpGet:
               path: /health
-              port: 4100
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 30
