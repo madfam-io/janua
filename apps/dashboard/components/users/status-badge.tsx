@@ -1,24 +1,22 @@
 'use client'
 
+/**
+ * Re-export StatusBadge from @janua/ui shared library
+ * This file exists for backward compatibility with existing imports
+ */
+
 import { CheckCircle2, Clock, XCircle } from 'lucide-react'
-import { Badge } from '@janua/ui'
+import { StatusBadge as SharedStatusBadge, type StatusConfigMap } from '@janua/ui'
 import type { UserStatus } from './types'
 
-const statusConfig = {
-  active: { icon: CheckCircle2, className: 'badge-active', label: 'Active' },
-  inactive: { icon: Clock, className: 'badge-inactive', label: 'Inactive' },
-  banned: { icon: XCircle, className: 'badge-banned', label: 'Banned' },
-  pending: { icon: Clock, className: 'badge-pending', label: 'Pending' },
+// Custom config for user status with icons
+const userStatusConfig: StatusConfigMap<UserStatus> = {
+  active: { label: 'Active', variant: 'success', icon: CheckCircle2 },
+  inactive: { label: 'Inactive', variant: 'neutral', icon: Clock },
+  banned: { label: 'Banned', variant: 'error', icon: XCircle },
+  pending: { label: 'Pending', variant: 'warning', icon: Clock },
 }
 
 export function StatusBadge({ status }: { status: UserStatus }) {
-  const config = statusConfig[status]
-  const Icon = config.icon
-
-  return (
-    <Badge variant="outline" className={config.className}>
-      <Icon className="h-3 w-3 mr-1" />
-      {config.label}
-    </Badge>
-  )
+  return <SharedStatusBadge status={status} config={userStatusConfig} />
 }

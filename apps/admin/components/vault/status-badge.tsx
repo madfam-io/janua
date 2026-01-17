@@ -1,21 +1,28 @@
 'use client'
 
-import { Badge } from '@/components/ui/badge'
+/**
+ * Re-export StatusBadge from @janua/ui shared library
+ * Customized for vault secrets with Solarpunk styling
+ */
+
+import { StatusBadge as SharedStatusBadge, type StatusConfigMap } from '@janua/ui'
 import type { SecretStatus } from './types'
 
-const statusConfig: Record<SecretStatus, { className: string; label: string }> = {
-  active: { className: 'status-active', label: 'Active' },
-  rotating: { className: 'status-rotating', label: 'Rotating' },
-  expired: { className: 'status-expired', label: 'Expired' },
-  revoked: { className: 'status-revoked', label: 'Revoked' },
+// Custom config for vault secret status
+const vaultStatusConfig: StatusConfigMap<SecretStatus> = {
+  active: { label: 'Active', variant: 'success' },
+  rotating: { label: 'Rotating', variant: 'info' },
+  expired: { label: 'Expired', variant: 'warning' },
+  revoked: { label: 'Revoked', variant: 'error' },
 }
 
 export function VaultStatusBadge({ status }: { status: SecretStatus }) {
-  const config = statusConfig[status]
-
   return (
-    <Badge variant="outline" className={`${config.className} font-mono text-xs`}>
-      {config.label}
-    </Badge>
+    <SharedStatusBadge
+      status={status}
+      config={vaultStatusConfig}
+      showIcon={false}
+      className="font-mono text-xs"
+    />
   )
 }

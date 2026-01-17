@@ -51,7 +51,10 @@
     "test:journeys": "npm run test:journeys:setup && npx playwright test tests/e2e/journeys && npm run test:journeys:teardown",
     "test:journeys:local": "npx playwright test tests/e2e/journeys --headed --debug",
     "test:journeys:ci": "npx playwright test tests/e2e/journeys --reporter=github",
-    "test:journeys:report": "npx playwright show-report"
+    "test:journeys:report": "npx playwright show-report",
+    "test:visual": "npx playwright test tests-e2e/visual --headed",
+    "test:visual:ci": "npx playwright test tests-e2e/visual",
+    "test:visual:update": "npx playwright test tests-e2e/visual --update-snapshots"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.28.6",
