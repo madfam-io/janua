@@ -73,9 +73,9 @@ spec:
               value: resend
             - name: EMAIL_FROM
               value: noreply@janua.dev
-            # CORS
+            # CORS - All allowed frontend origins
             - name: CORS_ORIGINS
-              value: "https://admin.janua.dev,https://app.janua.dev,https://api.enclii.dev,https://app.enclii.dev"
+              value: "https://admin.janua.dev,https://app.janua.dev,https://api.enclii.dev,https://app.enclii.dev,https://auth.madfam.io"
             # Features
             - name: ENABLE_DOCS
               value: "true"
