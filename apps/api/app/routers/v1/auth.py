@@ -104,6 +104,7 @@ class UserResponse(BaseModel):
     first_name: Optional[str]
     last_name: Optional[str]
     profile_image_url: Optional[str]
+    is_admin: bool = False
     created_at: datetime
     updated_at: datetime
     last_sign_in_at: Optional[datetime]
@@ -812,6 +813,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         first_name=current_user.first_name,
         last_name=current_user.last_name,
         profile_image_url=current_user.profile_image_url,
+        is_admin=getattr(current_user, 'is_admin', False),
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         last_sign_in_at=current_user.last_sign_in_at,
