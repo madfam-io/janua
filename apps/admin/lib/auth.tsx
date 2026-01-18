@@ -36,6 +36,14 @@ const DEFAULT_DOMAINS = ['@janua.dev', '@madfam.io']
 const customDomains = process.env.NEXT_PUBLIC_ALLOWED_ADMIN_DOMAINS?.split(',').map(d => d.trim()) || []
 const ALLOWED_EMAIL_DOMAINS = [...new Set([...DEFAULT_DOMAINS, ...customDomains])]
 
+// Superadmin emails - configurable for self-hosters
+// NEXT_PUBLIC_SUPERADMIN_EMAILS: comma-separated list of emails with superadmin privilege
+// Default: admin@madfam.io (MADFAM deployment), self-hosters should set their own
+const DEFAULT_SUPERADMIN_EMAILS = ['admin@madfam.io']
+const SUPERADMIN_EMAILS = process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS
+  ? process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase())
+  : DEFAULT_SUPERADMIN_EMAILS
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -80,10 +88,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // If no roles array, derive from is_admin boolean
       if (!roles && (userData as any).is_admin) {
-        // SECURITY: Only admin@madfam.io gets superadmin (highest privilege)
-        // Other is_admin users get 'admin' role (lower privilege)
-        const SUPERADMIN_EMAIL = 'admin@madfam.io'
-        roles = userData.email === SUPERADMIN_EMAIL ? 'superadmin' : 'admin'
+        // SECURITY: Check if email is in configurable superadmin list
+        // Superadmins: emails in NEXT_PUBLIC_SUPERADMIN_EMAILS (highest privilege)
+        // Admins: other is_admin users (standard admin access)
+        const isSuperadmin = SUPERADMIN_EMAILS.includes(userData.email?.toLowerCase() || '')
+        roles = isSuperadmin ? 'superadmin' : 'admin'
       }
 
       // Get access token from localStorage (where SDK stores it)
