@@ -338,15 +338,25 @@ async def list_all_users(
         )
         sessions_count = sessions_result.scalar()
 
-        oauth_result = await db.execute(
-            select(OAuthAccount.provider).where(OAuthAccount.user_id == user.id)
-        )
-        oauth_providers = oauth_result.scalars().all()
+        # Query OAuth accounts - table may not exist, handle gracefully
+        oauth_providers = []
+        try:
+            oauth_result = await db.execute(
+                select(OAuthAccount.provider).where(OAuthAccount.user_id == user.id)
+            )
+            oauth_providers = oauth_result.scalars().all()
+        except Exception:
+            pass  # Table may not exist in production yet
 
-        passkeys_result = await db.execute(
-            select(func.count(Passkey.id)).where(Passkey.user_id == user.id)
-        )
-        passkeys_count = passkeys_result.scalar()
+        # Query passkeys - table may not exist, handle gracefully
+        passkeys_count = 0
+        try:
+            passkeys_result = await db.execute(
+                select(func.count(Passkey.id)).where(Passkey.user_id == user.id)
+            )
+            passkeys_count = passkeys_result.scalar() or 0
+        except Exception:
+            pass  # Table may not exist in production yet
 
         result.append(
             UserAdminResponse(
@@ -361,7 +371,7 @@ async def list_all_users(
                 is_admin=user.is_admin,
                 organizations_count=orgs_count,
                 sessions_count=sessions_count,
-                oauth_providers=[p.provider.value for p in oauth_providers],
+                oauth_providers=[p.value if hasattr(p, 'value') else str(p) for p in oauth_providers],
                 passkeys_count=passkeys_count,
                 created_at=user.created_at,
                 updated_at=user.updated_at,

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Users,
   Building2,
@@ -36,11 +36,21 @@ const sections = [
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
-export default function AdminPage() {
+function AdminPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, isAuthenticated, isLoading: authLoading, logout, checkSession } = useAuth()
-  const [activeSection, setActiveSection] = useState('overview')
   const [isCheckingSession, setIsCheckingSession] = useState(true)
+
+  // Get section from URL or default to 'overview'
+  const sectionFromUrl = searchParams.get('section') || 'overview'
+  const validSections = sections.map(s => s.id)
+  const activeSection = validSections.includes(sectionFromUrl) ? sectionFromUrl : 'overview'
+
+  // Navigate to section by updating URL
+  const setActiveSection = (sectionId: string) => {
+    router.push(`/?section=${sectionId}`, { scroll: false })
+  }
 
   // On mount, check for existing SSO session via cookies
   useEffect(() => {
@@ -167,5 +177,20 @@ export default function AdminPage() {
         </main>
       </div>
     </div>
+  )
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AdminPageContent />
+    </Suspense>
   )
 }
