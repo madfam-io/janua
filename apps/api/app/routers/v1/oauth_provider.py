@@ -32,7 +32,7 @@ from app.core.database import get_db
 from app.core.jwt_manager import jwt_manager
 from app.core.redis import get_redis, ResilientRedisClient
 from app.dependencies import get_current_user, get_current_user_optional
-from app.models import OAuthClient, User
+from app.models import OAuthClient, Organization, OrganizationMember, User
 from app.services.consent_service import ConsentService
 
 logger = structlog.get_logger()
@@ -78,6 +78,75 @@ async def _validate_csrf_token(
     # Delete token (single use)
     await redis.delete(key)
     return True
+
+
+# ============================================================================
+# User Entitlements Helper (Galaxy Membership Claims)
+# ============================================================================
+
+
+async def _get_user_entitlements(
+    user: User,
+    db: AsyncSession,
+) -> dict:
+    """
+    Fetch user entitlements for JWT enrichment.
+
+    Returns tier, roles, and subscription status for the Galaxy ecosystem.
+    This enables "one membership, all services" across Enclii, Dhanam, etc.
+
+    Returns:
+        dict with keys: tier, roles, sub_status, is_admin
+    """
+    # Default entitlements (community tier, no special roles)
+    entitlements = {
+        "tier": "community",
+        "roles": [],
+        "sub_status": "inactive",
+        "is_admin": user.is_admin if hasattr(user, 'is_admin') else False,
+    }
+
+    try:
+        # Get user's organization memberships
+        result = await db.execute(
+            select(OrganizationMember)
+            .where(OrganizationMember.user_id == user.id)
+        )
+        memberships = result.scalars().all()
+
+        if memberships:
+            # Collect all roles across organizations
+            roles = list(set([m.role for m in memberships if m.role]))
+            entitlements["roles"] = roles
+
+            # Get primary organization (first membership or tenant)
+            primary_org_id = memberships[0].organization_id
+            if hasattr(user, 'tenant_id') and user.tenant_id:
+                primary_org_id = user.tenant_id
+
+            # Fetch organization for subscription tier
+            org_result = await db.execute(
+                select(Organization).where(Organization.id == primary_org_id)
+            )
+            org = org_result.scalar_one_or_none()
+
+            if org:
+                entitlements["tier"] = org.subscription_tier or "community"
+                # Check if org has active subscription (simplified check)
+                entitlements["sub_status"] = "active" if org.subscription_tier and org.subscription_tier != "community" else "active"
+
+        # Add admin role if user is system admin
+        if entitlements["is_admin"] and "admin" not in entitlements["roles"]:
+            entitlements["roles"].append("admin")
+
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch user entitlements, using defaults",
+            user_id=str(user.id),
+            error=str(e),
+        )
+
+    return entitlements
 
 
 # ============================================================================
@@ -972,7 +1041,10 @@ async def _handle_authorization_code_grant(
             detail="invalid_grant: User not found",
         )
 
-    # Generate tokens
+    # Fetch user entitlements for Galaxy ecosystem (tier, roles, sub_status)
+    entitlements = await _get_user_entitlements(user, db)
+
+    # Generate tokens with enriched claims
     scope = code_data["scope"]
     access_token, _, _ = jwt_manager.create_access_token(
         user_id=str(user.id),
@@ -980,6 +1052,11 @@ async def _handle_authorization_code_grant(
         additional_claims={
             "client_id": client.client_id,
             "scope": scope,
+            # Galaxy membership claims
+            "tier": entitlements["tier"],
+            "roles": entitlements["roles"],
+            "sub_status": entitlements["sub_status"],
+            "is_admin": entitlements["is_admin"],
         },
     )
 
@@ -1050,7 +1127,10 @@ async def _handle_refresh_token_grant(
             detail="invalid_grant: User not found",
         )
 
-    # Generate new access token
+    # Fetch user entitlements for Galaxy ecosystem (tier, roles, sub_status)
+    entitlements = await _get_user_entitlements(user, db)
+
+    # Generate new access token with enriched claims
     scope = payload.get("scope", "openid")
     access_token, _, _ = jwt_manager.create_access_token(
         user_id=str(user.id),
@@ -1058,6 +1138,11 @@ async def _handle_refresh_token_grant(
         additional_claims={
             "client_id": client.client_id,
             "scope": scope,
+            # Galaxy membership claims
+            "tier": entitlements["tier"],
+            "roles": entitlements["roles"],
+            "sub_status": entitlements["sub_status"],
+            "is_admin": entitlements["is_admin"],
         },
     )
 
