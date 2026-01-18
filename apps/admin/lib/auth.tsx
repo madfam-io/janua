@@ -75,7 +75,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof document === 'undefined') return
 
     if (userData) {
-      const roles = userData.roles?.join(',') || ''
+      // Handle both roles array and is_admin boolean from API
+      let roles = userData.roles?.join(',') || ''
+      // If no roles but is_admin is true, treat as admin role
+      if (!roles && (userData as any).is_admin) {
+        roles = 'admin'
+      }
       // Get access token from localStorage (where SDK stores it)
       const accessToken = localStorage.getItem('janua_access_token') || ''
       document.cookie = `janua_token=${accessToken}; path=/; max-age=86400; SameSite=Strict`
