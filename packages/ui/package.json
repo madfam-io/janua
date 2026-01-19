@@ -76,7 +76,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^5.1.2",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "^4.0.17",
     "@vitest/ui": "^3.2.4",
     "jsdom": "^27.4.0",
     "psl": "^1.15.0",
