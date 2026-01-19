@@ -1,6 +1,6 @@
-"""Initial schema - complete Janua database schema
+"""Genesis schema - complete Janua database (flattened)
 
-Revision ID: 001
+Revision ID: 000
 Revises: None
 Create Date: 2025-12-09
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '001'
+revision: str = '000'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -1093,6 +1093,150 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('stripe_payment_id')
+    )
+
+    # === Migration 002 ===
+    op.add_column('users', sa.Column('failed_login_attempts', sa.Integer(), nullable=True, server_default='0'))
+    op.add_column('users', sa.Column('locked_until', sa.DateTime(), nullable=True))
+    op.add_column('users', sa.Column('last_failed_login', sa.DateTime(), nullable=True))
+
+    # === Migration 003 ===
+    op.add_column('sessions', sa.Column('device_fingerprint', sa.String(length=255), nullable=True))
+    op.add_column('sessions', sa.Column('is_trusted_device', sa.Boolean(), nullable=True, server_default='false'))
+    op.create_index(op.f('ix_sessions_device_fingerprint'), 'sessions', ['device_fingerprint'], unique=False)
+    op.create_table('trusted_devices',
+        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('device_fingerprint', sa.String(length=255), nullable=False),
+        sa.Column('device_name', sa.String(length=255), nullable=True),
+        sa.Column('user_agent', sa.Text(), nullable=True),
+        sa.Column('ip_address', sa.String(length=50), nullable=True),
+        sa.Column('last_ip_address', sa.String(length=50), nullable=True),
+        sa.Column('last_location', sa.String(length=255), nullable=True),
+        sa.Column('trust_expires_at', sa.DateTime(), nullable=True),
+        sa.Column('last_used_at', sa.DateTime(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_trusted_devices_user_id'), 'trusted_devices', ['user_id'], unique=False)
+    op.create_index(op.f('ix_trusted_devices_device_fingerprint'), 'trusted_devices', ['device_fingerprint'], unique=False)
+    op.create_unique_constraint(
+        'uq_trusted_devices_user_device',
+        'trusted_devices',
+        ['user_id', 'device_fingerprint']
+    )
+
+    # === Migration 004 ===
+    op.create_table('user_consents',
+        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('client_id', sa.String(length=255), nullable=False),
+        sa.Column('scopes', postgresql.JSONB(), nullable=False),
+        sa.Column('granted_at', sa.DateTime(), nullable=True),
+        sa.Column('expires_at', sa.DateTime(), nullable=True),
+        sa.Column('revoked_at', sa.DateTime(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.Column('updated_at', sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_user_consents_user_id'), 'user_consents', ['user_id'], unique=False)
+    op.create_index(op.f('ix_user_consents_client_id'), 'user_consents', ['client_id'], unique=False)
+    op.create_unique_constraint(
+        'uq_user_consents_user_client',
+        'user_consents',
+        ['user_id', 'client_id']
+    )
+
+    # === Migration 005 ===
+    op.create_table('oauth_client_secrets',
+        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('client_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('secret_hash', sa.String(length=255), nullable=False),
+        sa.Column('secret_prefix', sa.String(length=20), nullable=False),
+        sa.Column('is_primary', sa.Boolean(), nullable=True, server_default='true'),
+        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.Column('expires_at', sa.DateTime(), nullable=True),
+        sa.Column('revoked_at', sa.DateTime(), nullable=True),
+        sa.Column('last_used_at', sa.DateTime(), nullable=True),
+        sa.Column('created_by', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('revoked_by', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.ForeignKeyConstraint(['client_id'], ['oauth_clients.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
+        sa.ForeignKeyConstraint(['revoked_by'], ['users.id'], ),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_oauth_client_secrets_client_id'), 'oauth_client_secrets', ['client_id'], unique=False)
+    op.create_index(op.f('ix_oauth_client_secrets_is_primary'), 'oauth_client_secrets', ['is_primary'], unique=False)
+
+    # === Migration 006 ===
+    op.add_column(
+        "scim_configurations",
+        sa.Column("provider", sa.String(50), nullable=True, server_default="custom"),
+    )
+    op.create_unique_constraint(
+        "uq_scim_configurations_organization_id",
+        "scim_configurations",
+        ["organization_id"],
+    )
+    op.add_column(
+        "scim_resources",
+        sa.Column("external_id", sa.String(255), nullable=True),
+    )
+    op.add_column(
+        "scim_resources",
+        sa.Column("raw_attributes", postgresql.JSONB(astext_type=sa.Text()), nullable=True, server_default="{}"),
+    )
+    op.add_column(
+        "scim_resources",
+        sa.Column("sync_status", sa.String(50), nullable=True, server_default="pending"),
+    )
+    op.add_column(
+        "scim_resources",
+        sa.Column("last_synced_at", sa.DateTime(), nullable=True),
+    )
+    op.create_table(
+        "scim_sync_logs",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("organization_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column("operation", sa.String(50), nullable=False),  # create, update, delete, patch
+        sa.Column("resource_type", sa.String(50), nullable=False),  # User, Group
+        sa.Column("scim_id", sa.String(255), nullable=True),
+        sa.Column("internal_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("status", sa.String(50), nullable=False),  # success, failed, partial
+        sa.Column("request_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True, server_default="{}"),
+        sa.Column("response_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True, server_default="{}"),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column("error_code", sa.String(50), nullable=True),
+        sa.Column("idp_request_id", sa.String(255), nullable=True),
+        sa.Column("synced_at", sa.DateTime(), server_default=sa.func.now()),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
+    )
+    op.create_index(
+        "ix_scim_sync_logs_organization_id",
+        "scim_sync_logs",
+        ["organization_id"],
+    )
+    op.create_index(
+        "ix_scim_sync_logs_synced_at",
+        "scim_sync_logs",
+        ["synced_at"],
+    )
+    op.create_index(
+        "ix_scim_sync_logs_status",
+        "scim_sync_logs",
+        ["status"],
+    )
+    op.create_index(
+        "ix_scim_resources_sync_status",
+        "scim_resources",
+        ["sync_status"],
+    )
+    op.create_index(
+        "ix_scim_resources_external_id",
+        "scim_resources",
+        ["external_id"],
     )
     # ### end Alembic commands ###
 
