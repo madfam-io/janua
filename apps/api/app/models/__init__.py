@@ -835,3 +835,11 @@ User.data_subject_requests = relationship(
 User.privacy_settings = relationship(
     "PrivacySettings", back_populates="user", uselist=False, foreign_keys="PrivacySettings.user_id"
 )
+
+# Import system settings models
+from .system_settings import (
+    AllowedCorsOrigin,
+    SettingKeys,
+    SystemSetting,
+    SystemSettingCategory,
+)

@@ -16,6 +16,7 @@ from app.config import settings
 from app.database import get_db
 from app.routers.v1.auth import get_current_user
 from app.services.account_lockout_service import AccountLockoutService
+from app.services.system_settings_service import SystemSettingsService, invalidate_cors_cache
 
 # Application start time for uptime calculation
 APPLICATION_START_TIME = time.time()
@@ -792,4 +793,317 @@ async def get_system_config(current_user: User = Depends(get_current_user)):
             "magic_link_expire_minutes": 15,
             "invitation_expire_days": 7,
         },
+    }
+
+
+# =============================================================================
+# System Settings Management
+# =============================================================================
+
+class CorsOriginCreate(BaseModel):
+    """Request to create a new CORS origin"""
+    origin: str = Field(..., description="The origin URL (e.g., https://app.example.com)")
+    description: Optional[str] = Field(None, description="Human-readable description")
+    organization_id: Optional[str] = Field(None, description="Organization ID for tenant-specific origins (null for system-level)")
+
+
+class CorsOriginResponse(BaseModel):
+    """CORS origin response"""
+    id: str
+    origin: str
+    organization_id: Optional[str]
+    scope: str  # "system" or "organization"
+    description: Optional[str]
+    is_active: bool
+    created_at: Optional[str]
+
+
+class SystemSettingCreate(BaseModel):
+    """Request to create/update a system setting"""
+    key: str = Field(..., description="Setting key (e.g., 'oidc.custom_domain')")
+    value: Any = Field(..., description="Setting value (string or JSON)")
+    category: Optional[str] = Field("features", description="Setting category")
+    description: Optional[str] = Field(None, description="Human-readable description")
+    is_sensitive: bool = Field(False, description="Hide value in API responses")
+
+
+class SystemSettingResponse(BaseModel):
+    """System setting response"""
+    id: str
+    key: str
+    value: Any
+    category: str
+    description: Optional[str]
+    is_sensitive: bool
+    is_readonly: bool
+    updated_at: Optional[str]
+
+
+@router.get("/settings/cors", response_model=List[CorsOriginResponse])
+async def list_cors_origins(
+    organization_id: Optional[str] = Query(None, description="Filter by organization"),
+    include_inactive: bool = Query(False, description="Include deactivated origins"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    List all CORS origins.
+
+    System-level origins (organization_id=null) apply globally.
+    Organization-level origins apply only to that tenant's white-label setup.
+    """
+    check_admin_permission(current_user)
+
+    service = SystemSettingsService(db)
+    org_uuid = uuid.UUID(organization_id) if organization_id else None
+
+    origins = await service.list_cors_origins(
+        organization_id=org_uuid,
+        include_inactive=include_inactive,
+        include_system=True
+    )
+
+    return [CorsOriginResponse(**o) for o in origins]
+
+
+@router.post("/settings/cors", response_model=CorsOriginResponse)
+async def add_cors_origin(
+    request: CorsOriginCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Add a new CORS origin.
+
+    - System-level (organization_id=null): Allows requests from this origin to the API
+    - Organization-level: Allows requests for that tenant's white-label deployment
+    """
+    check_admin_permission(current_user)
+
+    service = SystemSettingsService(db)
+    org_uuid = uuid.UUID(request.organization_id) if request.organization_id else None
+
+    try:
+        cors_origin = await service.add_cors_origin(
+            origin=request.origin,
+            organization_id=org_uuid,
+            description=request.description,
+            created_by=current_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Invalidate global CORS cache
+    invalidate_cors_cache()
+
+    return CorsOriginResponse(
+        id=str(cors_origin.id),
+        origin=cors_origin.origin,
+        organization_id=str(cors_origin.organization_id) if cors_origin.organization_id else None,
+        scope="organization" if cors_origin.organization_id else "system",
+        description=cors_origin.description,
+        is_active=cors_origin.is_active,
+        created_at=cors_origin.created_at.isoformat() if cors_origin.created_at else None,
+    )
+
+
+@router.delete("/settings/cors/{origin_id}")
+async def remove_cors_origin(
+    origin_id: str,
+    permanent: bool = Query(False, description="Permanently delete instead of deactivating"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove a CORS origin (soft delete by default)"""
+    check_admin_permission(current_user)
+
+    # Look up the origin by ID
+    from app.models.system_settings import AllowedCorsOrigin
+
+    try:
+        origin_uuid = uuid.UUID(origin_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid origin ID")
+
+    result = await db.execute(
+        select(AllowedCorsOrigin).where(AllowedCorsOrigin.id == origin_uuid)
+    )
+    cors_origin = result.scalar_one_or_none()
+
+    if not cors_origin:
+        raise HTTPException(status_code=404, detail="CORS origin not found")
+
+    service = SystemSettingsService(db)
+
+    if permanent:
+        success = await service.delete_cors_origin(
+            cors_origin.origin,
+            organization_id=cors_origin.organization_id
+        )
+    else:
+        success = await service.remove_cors_origin(
+            cors_origin.origin,
+            organization_id=cors_origin.organization_id
+        )
+
+    if not success:
+        raise HTTPException(status_code=404, detail="CORS origin not found")
+
+    # Invalidate global CORS cache
+    invalidate_cors_cache()
+
+    return {"message": f"CORS origin {'deleted' if permanent else 'deactivated'}", "origin": cors_origin.origin}
+
+
+@router.get("/settings/cors/cache-status")
+async def get_cors_cache_status(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get CORS cache status for debugging.
+    Shows cache state, age, and number of cached origins.
+    """
+    check_admin_permission(current_user)
+
+    try:
+        from app.middleware.dynamic_cors import get_cors_cache_status as get_cache_status
+        return get_cache_status()
+    except ImportError:
+        return {"error": "Dynamic CORS middleware not available", "cached": False}
+
+
+@router.post("/settings/cors/invalidate-cache")
+async def invalidate_cors_cache_endpoint(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Manually invalidate the CORS origins cache.
+    Use this after making direct database changes to CORS origins.
+    """
+    check_admin_permission(current_user)
+
+    invalidate_cors_cache()
+    return {"message": "CORS cache invalidated successfully"}
+
+
+@router.get("/settings", response_model=List[SystemSettingResponse])
+async def list_system_settings(
+    category: Optional[str] = Query(None, description="Filter by category"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all system settings"""
+    check_admin_permission(current_user)
+
+    service = SystemSettingsService(db)
+    settings_list = await service.get_all_settings(
+        category=category,
+        include_sensitive=False  # Never expose sensitive values
+    )
+
+    return [SystemSettingResponse(**s) for s in settings_list]
+
+
+@router.put("/settings/{key:path}")
+async def update_system_setting(
+    key: str,
+    request: SystemSettingCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create or update a system setting"""
+    check_admin_permission(current_user)
+
+    service = SystemSettingsService(db)
+
+    # Check if setting is read-only
+    existing = await service.get_setting(key)
+    if existing and isinstance(existing, dict) and existing.get("is_readonly"):
+        raise HTTPException(status_code=403, detail="This setting is read-only")
+
+    setting = await service.set_setting(
+        key=key,
+        value=request.value,
+        category=request.category or "features",
+        description=request.description,
+        is_sensitive=request.is_sensitive,
+        updated_by=current_user.id
+    )
+
+    # Invalidate CORS cache if CORS-related setting
+    if key.startswith("cors."):
+        invalidate_cors_cache()
+
+    return {
+        "message": "Setting updated",
+        "key": setting.key,
+        "value": setting.get_value() if not setting.is_sensitive else "***REDACTED***"
+    }
+
+
+@router.delete("/settings/{key:path}")
+async def delete_system_setting(
+    key: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a system setting"""
+    check_admin_permission(current_user)
+
+    service = SystemSettingsService(db)
+    success = await service.delete_setting(key)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Setting not found")
+
+    # Invalidate CORS cache if CORS-related setting
+    if key.startswith("cors."):
+        invalidate_cors_cache()
+
+    return {"message": "Setting deleted", "key": key}
+
+
+@router.get("/settings/oidc/custom-domain")
+async def get_custom_domain(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get the current custom OIDC issuer domain"""
+    check_admin_permission(current_user)
+
+    service = SystemSettingsService(db)
+    domain = await service.get_custom_domain()
+
+    return {
+        "custom_domain": domain,
+        "issuer": f"https://{domain}" if domain else settings.JWT_ISSUER,
+        "source": "database" if domain else "config"
+    }
+
+
+@router.put("/settings/oidc/custom-domain")
+async def set_custom_domain(
+    domain: str = Query(..., description="Custom domain (e.g., auth.madfam.io)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Set the custom OIDC issuer domain.
+
+    This allows white-label deployments to issue tokens with a custom issuer
+    (e.g., auth.madfam.io instead of api.janua.dev).
+    """
+    check_admin_permission(current_user)
+
+    service = SystemSettingsService(db)
+
+    try:
+        setting = await service.set_custom_domain(domain, updated_by=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "message": "Custom domain updated",
+        "custom_domain": setting.value,
+        "issuer": f"https://{setting.value}"
     }
