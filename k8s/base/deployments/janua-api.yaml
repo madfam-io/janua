@@ -8,6 +8,10 @@ metadata:
     app.kubernetes.io/name: janua-api
     app.kubernetes.io/component: api
     app.kubernetes.io/part-of: janua
+  annotations:
+    # Prevent Switchyard from overriding our deployment
+    # janua-api uses K8s secrets (janua-secrets) for env vars, NOT Switchyard's database
+    enclii.dev/reconcile: "disabled"
 spec:
   replicas: 2
   selector:

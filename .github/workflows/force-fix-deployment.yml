@@ -73,6 +73,15 @@ jobs:
           kubectl apply -f k8s/base/deployments/janua-api.yaml
           sleep 5
 
+      - name: Ensure opt-out annotation is set
+        run: |
+          echo "=== Ensuring reconciliation opt-out annotation is set ==="
+          # This annotation tells Switchyard's reconciler to skip this deployment
+          kubectl annotate deployment janua-api -n $NAMESPACE \
+            "enclii.dev/reconcile=disabled" \
+            --overwrite
+          echo "Annotation set: enclii.dev/reconcile=disabled"
+
       - name: Verify secrets exist
         run: |
           echo "=== Verifying required secrets ==="
@@ -164,8 +173,18 @@ jobs:
           fi
           echo ""
 
-          echo "--- Deployment Labels (should NOT have enclii.dev labels) ---"
+          echo "--- Deployment Labels (should NOT have enclii.dev management labels) ---"
           kubectl get deployment janua-api -n $NAMESPACE -o jsonpath='{.metadata.labels}' | jq .
+          echo ""
+
+          echo "--- Deployment Annotations (should have enclii.dev/reconcile=disabled) ---"
+          RECONCILE_ANNOTATION=$(kubectl get deployment janua-api -n $NAMESPACE -o jsonpath='{.metadata.annotations.enclii\.dev/reconcile}' 2>/dev/null || echo "not-set")
+          echo "enclii.dev/reconcile = $RECONCILE_ANNOTATION"
+          if [ "$RECONCILE_ANNOTATION" == "disabled" ]; then
+            echo "Opt-out annotation is correctly set - Switchyard will NOT override this deployment"
+          else
+            echo "WARNING: Opt-out annotation not set - Switchyard may still override this deployment!"
+          fi
           echo ""
 
       - name: Health check
