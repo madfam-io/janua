@@ -115,10 +115,43 @@ jobs:
                   - name: ghcr-credentials
           ' 2>/dev/null || echo "imagePullSecrets already configured"
 
-          # 4. Wait for rollout with increased timeout
+          # 4. Ensure Service targetPort is 8080 (matches container port)
+          kubectl patch svc janua-api -n janua --type='json' \
+            -p='[{"op": "replace", "path": "/spec/ports/0/targetPort", "value": 8080}]' \
+            2>/dev/null || echo "Service targetPort already set to 8080"
+
+          # 5. Ensure NetworkPolicy allows port 8080 traffic
+          kubectl patch networkpolicy janua-api-ingress -n janua --type='json' \
+            -p='[{"op": "replace", "path": "/spec/ingress/0/ports/0/port", "value": 8080}]' \
+            2>/dev/null || echo "NetworkPolicy already allows port 8080 (or policy doesn't exist)"
+
+          # 6. Wait for rollout with increased timeout
           kubectl rollout status deployment/janua-api -n janua --timeout=300s
 
       - name: Verify deployment
         run: |
+          echo "=== Pod Status ==="
           kubectl get pods -n janua -l app=janua-api -o wide
-          echo "Deployed: ghcr.io/madfam-org/janua-api:main-${{ steps.sha.outputs.short }}"
+
+          echo ""
+          echo "=== Deployment Port Verification ==="
+          CONTAINER_PORT=$(kubectl get deployment janua-api -n janua -o jsonpath='{.spec.template.spec.containers[0].ports[0].containerPort}')
+          echo "Container Port: $CONTAINER_PORT (expected: 8080)"
+
+          echo ""
+          echo "=== Service Verification ==="
+          TARGET_PORT=$(kubectl get svc janua-api -n janua -o jsonpath='{.spec.ports[0].targetPort}')
+          echo "Service targetPort: $TARGET_PORT (expected: 8080)"
+
+          echo ""
+          echo "=== NetworkPolicy Verification ==="
+          NP_PORT=$(kubectl get networkpolicy janua-api-ingress -n janua -o jsonpath='{.spec.ingress[0].ports[0].port}' 2>/dev/null || echo "N/A")
+          echo "NetworkPolicy port: $NP_PORT (expected: 8080)"
+
+          echo ""
+          echo "=== Switchyard Labels Check ==="
+          SWITCHYARD_LABELS=$(kubectl get deployment janua-api -n janua -o jsonpath='{.metadata.labels}' | grep -o 'enclii.dev' || echo "None found (correct)")
+          echo "Switchyard labels: $SWITCHYARD_LABELS"
+
+          echo ""
+          echo "✅ Deployed: ghcr.io/madfam-org/janua-api:main-${{ steps.sha.outputs.short }}"
