@@ -100,10 +100,10 @@ jobs:
             enclii.dev/deployment- \
             --overwrite 2>/dev/null || true
 
-          # 2. Patch deployment with correct image, port, and imagePullSecrets
+          # 2. Patch deployment with correct image (port 8080 is now the default in Dockerfile)
           kubectl patch deployment janua-api -n janua --type='json' -p='[
             {"op": "replace", "path": "/spec/template/spec/containers/0/image", "value": "'$IMAGE'"},
-            {"op": "replace", "path": "/spec/template/spec/containers/0/ports/0/containerPort", "value": 4100}
+            {"op": "replace", "path": "/spec/template/spec/containers/0/ports/0/containerPort", "value": 8080}
           ]'
 
           # 3. Ensure imagePullSecrets is set (add if missing)

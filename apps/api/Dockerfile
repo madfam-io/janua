@@ -54,17 +54,22 @@ RUN useradd -m -u 1001 janua && \
 USER janua
 
 # Environment variables (inject via Docker Compose/K8s)
+# PORT defaults to 8080 for K8s compatibility but can be overridden
 # Note: Don't set EMAIL_PROVIDER here - let it use default from config.py
 ENV DATABASE_URL="" \
     JWT_SECRET="" \
     CORS_ORIGINS="" \
-    LOG_LEVEL="info"
+    LOG_LEVEL="info" \
+    PORT="8080"
 
-EXPOSE 4100
+# Expose both common ports - actual port determined by PORT env var
+EXPOSE 8080 4100
 
+# Healthcheck uses PORT env var for flexibility
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:4100/health')" || exit 1
+  CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"8080\")}/health')" || exit 1
 
 # Use entrypoint for database migrations before app start
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4100"]
+# CMD respects PORT env var via shell expansion
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

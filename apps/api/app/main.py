@@ -449,14 +449,18 @@ allowed_hosts = [
     "docs.janua.dev",
     "localhost",
     "localhost:4100",
+    "localhost:8080",
     "127.0.0.1",
     "127.0.0.1:4100",
+    "127.0.0.1:8080",
     # Docker internal hostnames for container-to-container communication
     "janua-api",
     "janua-api:4100",
+    "janua-api:8080",
     # Kubernetes internal networking (service names)
     "janua-api.janua.svc.cluster.local",
     "janua-api.janua.svc.cluster.local:4100",
+    "janua-api.janua.svc.cluster.local:8080",
     # K8s health probe IPs - allow internal cluster network
     # Starlette TrustedHostMiddleware supports fnmatch-style wildcards
     "10.*",
