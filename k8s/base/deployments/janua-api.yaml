@@ -54,6 +54,16 @@ spec:
                 secretKeyRef:
                   name: janua-secrets
                   key: jwt-secret
+            - name: JWT_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: jwt-private-key
+            - name: JWT_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: jwt-public-key
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
@@ -73,9 +83,12 @@ spec:
               value: resend
             - name: EMAIL_FROM
               value: noreply@janua.dev
+            # Custom domain for white-label OIDC issuer (auth.madfam.io instead of api.janua.dev)
+            - name: JANUA_CUSTOM_DOMAIN
+              value: auth.madfam.io
             # CORS - All allowed frontend origins
             - name: CORS_ORIGINS
-              value: "https://admin.janua.dev,https://app.janua.dev,https://api.enclii.dev,https://app.enclii.dev,https://auth.madfam.io"
+              value: "https://admin.janua.dev,https://app.janua.dev,https://api.enclii.dev,https://app.enclii.dev,https://admin.enclii.dev,https://auth.madfam.io,https://app.dhan.am"
             # Features
             - name: ENABLE_DOCS
               value: "true"
