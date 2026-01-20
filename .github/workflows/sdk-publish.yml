@@ -38,7 +38,8 @@ on:
           - prerelease
 
 env:
-  NODE_VERSION: "18"
+  NODE_VERSION: "20"
+  PNPM_VERSION: "9"
   PYTHON_VERSION: "3.9"
   GO_VERSION: "1.21"
   JAVA_VERSION: "11"
@@ -86,6 +87,11 @@ jobs:
             fi
           fi
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Calculate version
         id: version
         run: |
@@ -97,12 +103,12 @@ jobs:
             version="${version#v}"  # Remove 'v' prefix if present
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             # Bump version based on input
-            npm install -g semver
-            version=$(semver -i ${{ github.event.inputs.version_bump }} $current_version)
+            pnpm add -g semver
+            version=$(pnpm exec semver -i ${{ github.event.inputs.version_bump }} $current_version)
           else
             # Auto-increment patch version
-            npm install -g semver
-            version=$(semver -i patch $current_version)
+            pnpm add -g semver
+            version=$(pnpm exec semver -i patch $current_version)
           fi
 
           echo "version=$version" >> $GITHUB_OUTPUT
@@ -164,43 +170,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://npm.madfam.io"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: |
           cd packages/javascript
-          npm ci
+          pnpm install --frozen-lockfile
 
       - name: Run tests
         run: |
           cd packages/javascript
-          npm test
+          pnpm test
 
       - name: Lint
         run: |
           cd packages/javascript
-          npm run lint
+          pnpm lint
 
       - name: Build
         run: |
           cd packages/javascript
-          npm run build
+          pnpm build
 
       - name: Update version
         run: |
           cd packages/javascript
-          npm version ${{ needs.validate.outputs.version }} --no-git-tag-version
+          pnpm version ${{ needs.validate.outputs.version }} --no-git-tag-version
 
       - name: Publish to NPM
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_MADFAM_TOKEN }}
         run: |
           cd packages/javascript
-          npm publish --access restricted
+          pnpm publish --access restricted --no-git-checks
 
   # Go SDK (github.com/madfam-org/janua-go)
   publish-go:

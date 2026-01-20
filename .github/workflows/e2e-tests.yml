@@ -8,7 +8,8 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
 
 jobs:
   e2e-tests:
@@ -23,17 +24,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Setup Python (for API)
         uses: actions/setup-python@v5
@@ -94,7 +100,7 @@ jobs:
           cat apps/api/api.log 2>/dev/null || echo "API logs not found"
 
       - name: Run Playwright E2E tests
-        run: npx playwright test
+        run: pnpm exec playwright test
         continue-on-error: false
 
       - name: Upload test results

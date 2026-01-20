@@ -15,6 +15,10 @@ on:
     # Run weekly on Monday at 9am UTC
     - cron: '0 9 * * 1'
 
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
 jobs:
   validate-structure:
     name: Validate Documentation Structure
@@ -24,17 +28,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: |
-          npm install -g glob chalk
-          npm ci
+          pnpm add -g glob chalk
+          pnpm install --frozen-lockfile
 
       - name: Check documentation structure
         run: |

@@ -10,7 +10,8 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
 
 jobs:
   # Static Application Security Testing (SAST)
@@ -21,24 +22,24 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    
+
     strategy:
       matrix:
         language: ['javascript', 'python', 'typescript']
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           queries: security-and-quality
-      
+
       - name: Autobuild
         uses: github/codeql-action/autobuild@v4
-      
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
 
@@ -46,40 +47,40 @@ jobs:
   python-security:
     name: Python Security Scan
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      
+
       - name: Install system dependencies for xmlsec
         run: |
           sudo apt-get update
           sudo apt-get install -y libxmlsec1-dev pkg-config
-      
+
       - name: Install dependencies
         run: |
           pip install bandit safety pip-audit
           cd apps/api && pip install -r requirements.txt
-      
+
       - name: Run Bandit Security Scan
         run: |
           bandit -r apps/api/app -f json -o bandit-report.json
         continue-on-error: true
-      
+
       - name: Run Safety Check
         run: |
           cd apps/api && safety check --json > safety-report.json
         continue-on-error: true
-      
+
       - name: Run pip-audit
         run: |
           cd apps/api && pip-audit --format json --output pip-audit-report.json
         continue-on-error: true
-      
+
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
         with:
@@ -93,22 +94,28 @@ jobs:
   javascript-security:
     name: JavaScript Security Scan
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      
+          cache: 'pnpm'
+
       - name: Install dependencies
-        run: npm ci
-      
-      - name: Run npm audit
-        run: npm audit --json > npm-audit-report.json
+        run: pnpm install --frozen-lockfile
+
+      - name: Run pnpm audit
+        run: pnpm audit --json > pnpm-audit-report.json
         continue-on-error: true
-      
+
       - name: Run Snyk Security Scan
         uses: snyk/actions/node@master
         continue-on-error: true
@@ -116,13 +123,13 @@ jobs:
           args: --all-projects --json-file-output=snyk-report.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      
+
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
         with:
           name: javascript-security-reports
           path: |
-            npm-audit-report.json
+            pnpm-audit-report.json
             snyk-report.json
 
   # Secrets Detection
@@ -152,7 +159,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -161,7 +168,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM'
-      
+
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         continue-on-error: true  # Code Scanning must be enabled in repo settings
@@ -214,33 +221,33 @@ jobs:
     runs-on: ubuntu-latest
     needs: [sast-codeql, python-security, javascript-security, secrets-scan, container-scan]
     if: always()
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
-      
+
       - name: Generate Security Report
         run: |
           echo "# Security Scan Summary" > security-summary.md
           echo "Date: $(date)" >> security-summary.md
           echo "Commit: ${{ github.sha }}" >> security-summary.md
           echo "" >> security-summary.md
-          
+
           echo "## Scan Results" >> security-summary.md
           echo "- CodeQL: ${{ needs.sast-codeql.result }}" >> security-summary.md
           echo "- Python Security: ${{ needs.python-security.result }}" >> security-summary.md
           echo "- JavaScript Security: ${{ needs.javascript-security.result }}" >> security-summary.md
           echo "- Secrets Scan: ${{ needs.secrets-scan.result }}" >> security-summary.md
           echo "- Container Scan: ${{ needs.container-scan.result }}" >> security-summary.md
-      
+
       - name: Upload Security Summary
         uses: actions/upload-artifact@v4
         with:
           name: security-summary
           path: security-summary.md
-      
+
       - name: Comment PR with Security Results
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
