@@ -28,7 +28,6 @@ import hashlib
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -497,10 +496,12 @@ app.add_middleware(TenantMiddleware)
 # Add comprehensive error handling middleware (add last so it catches everything)
 app.add_middleware(ErrorHandlingMiddleware)
 
-# Configure CORS
+# Configure Dynamic CORS (loads origins from config + database)
+# This supports multi-tenant CORS origins managed via Admin API
+from app.middleware.dynamic_cors import DynamicCORSMiddleware
+
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    DynamicCORSMiddleware,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=[
@@ -515,10 +516,16 @@ app.add_middleware(
         "Cache-Control",
         "X-Mx-ReqToken",
         "Keep-Alive",
-        "X-Requested-With",
         "If-Modified-Since",
         "X-CSRF-Token",
     ],
+    expose_headers=[
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Reset",
+    ],
+    max_age=600,
+    enable_database_origins=True,
 )
 
 # Direct Redis connection using Railway environment variables
