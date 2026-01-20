@@ -67,6 +67,21 @@ jobs:
         id: sha
         run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
+      - name: Update GHCR credentials in K8s (prevents 502 on deploy)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create docker-registry secret with fresh GITHUB_TOKEN
+          # This prevents ImagePullBackOff errors that cause 502 during rolling updates
+          kubectl delete secret ghcr-credentials -n janua --ignore-not-found
+          kubectl create secret docker-registry ghcr-credentials \
+            --namespace=janua \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=$GITHUB_TOKEN \
+            --docker-email=ci@janua.dev
+          echo "✅ GHCR credentials updated in K8s"
+
       - name: Deploy to Kubernetes (patch-only to preserve config)
         run: |
           IMAGE="ghcr.io/madfam-org/janua-api:main-${{ steps.sha.outputs.short }}"
