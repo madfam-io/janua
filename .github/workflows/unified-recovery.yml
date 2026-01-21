@@ -118,6 +118,16 @@ jobs:
             -p='[{"op": "replace", "path": "/spec/ports/0/targetPort", "value": 8080}]' \
             2>/dev/null || echo "Service targetPort already set to 8080"
 
+          # Fix NetworkPolicy to allow port 8080 traffic from cloudflared
+          kubectl patch networkpolicy janua-api-ingress -n janua --type='json' \
+            -p='[{"op": "replace", "path": "/spec/ingress/0/ports/0/port", "value": 8080}]' \
+            2>/dev/null || echo "NetworkPolicy already allows port 8080 (or policy doesn't exist)"
+
+          # Show current configuration for verification
+          echo "=== Current janua-api configuration ==="
+          kubectl get svc janua-api -n janua -o yaml | grep -A5 "ports:"
+          kubectl get networkpolicy janua-api-ingress -n janua -o yaml 2>/dev/null | grep -A10 "ingress:" || echo "No NetworkPolicy found"
+
           echo "Waiting for janua-api rollout..."
           kubectl rollout status deployment/janua-api -n janua --timeout=300s || {
             echo "=== Janua rollout failed - checking pod status ==="
