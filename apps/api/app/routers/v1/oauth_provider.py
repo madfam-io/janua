@@ -460,9 +460,12 @@ async def authorize_get(
     # If user not authenticated, redirect to login
     if not current_user:
         # Store auth request in session/query params and redirect to login
+        # Use request host to preserve white-label domain (e.g., auth.madfam.io)
+        scheme = "https" if settings.ENVIRONMENT == "production" else request.url.scheme
+        request_host = request.headers.get("host", urlparse(settings.API_BASE_URL).netloc)
         login_params = urlencode(
             {
-                "next": f"{settings.API_BASE_URL}{request.url.path}?{request.url.query}",
+                "next": f"{scheme}://{request_host}{request.url.path}?{request.url.query}",
                 "client_id": client_id,
                 "client_name": client.name,
             }
