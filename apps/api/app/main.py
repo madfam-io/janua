@@ -442,38 +442,46 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 # Add trusted host middleware
 # Port 4100 per PORT_ALLOCATION.md in solarpunk-foundry (Janua block: 4100-4199)
-allowed_hosts = [
-    "janua.dev",
-    "*.janua.dev",
-    "api.janua.dev",
-    "docs.janua.dev",
-    "localhost",
-    "localhost:4100",
-    "localhost:8080",
-    "127.0.0.1",
-    "127.0.0.1:4100",
-    "127.0.0.1:8080",
-    # Docker internal hostnames for container-to-container communication
-    "janua-api",
-    "janua-api:4100",
-    "janua-api:8080",
-    # Kubernetes internal networking (service names)
-    "janua-api.janua.svc.cluster.local",
-    "janua-api.janua.svc.cluster.local:4100",
-    "janua-api.janua.svc.cluster.local:8080",
-    # K8s health probe IPs - allow internal cluster network
-    # Starlette TrustedHostMiddleware supports fnmatch-style wildcards
-    "10.*",
-    "10.*.*.*",
-    "10.42.*.*",
-]
-# Add custom domain aliases from environment (e.g., auth.madfam.io for MADFAM deployment)
-custom_domain = os.getenv("JANUA_CUSTOM_DOMAIN")
-if custom_domain:
-    allowed_hosts.extend([custom_domain, f"*.{custom_domain.split('.', 1)[-1] if '.' in custom_domain else custom_domain}"])
-# Add test host for integration tests
-if settings.ENVIRONMENT == "test":
-    allowed_hosts.extend(["test", "testserver", "testclient"])
+#
+# In Kubernetes environments (behind reverse proxy/ingress), host validation is
+# handled at the network layer. Use TRUST_ALL_HOSTS=true to allow all hosts.
+# This is safe because:
+# 1. Cloudflare tunnel handles external host validation
+# 2. K8s NetworkPolicy restricts internal access
+# 3. Health probes come from various internal IPs
+trust_all_hosts = os.getenv("TRUST_ALL_HOSTS", "false").lower() == "true"
+
+if trust_all_hosts:
+    allowed_hosts = ["*"]
+else:
+    allowed_hosts = [
+        "janua.dev",
+        "*.janua.dev",
+        "api.janua.dev",
+        "docs.janua.dev",
+        "localhost",
+        "localhost:4100",
+        "localhost:8080",
+        "127.0.0.1",
+        "127.0.0.1:4100",
+        "127.0.0.1:8080",
+        # Docker internal hostnames for container-to-container communication
+        "janua-api",
+        "janua-api:4100",
+        "janua-api:8080",
+        # Kubernetes internal networking (service names)
+        "janua-api.janua.svc.cluster.local",
+        "janua-api.janua.svc.cluster.local:4100",
+        "janua-api.janua.svc.cluster.local:8080",
+    ]
+    # Add custom domain aliases from environment (e.g., auth.madfam.io for MADFAM deployment)
+    custom_domain = os.getenv("JANUA_CUSTOM_DOMAIN")
+    if custom_domain:
+        allowed_hosts.extend([custom_domain, f"*.{custom_domain.split('.', 1)[-1] if '.' in custom_domain else custom_domain}"])
+    # Add test host for integration tests
+    if settings.ENVIRONMENT == "test":
+        allowed_hosts.extend(["test", "testserver", "testclient"])
+
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
 # Add security headers middleware
