@@ -676,8 +676,8 @@ class SecurityValidator:
         total_checks = len(self.results)
         critical_failed = len([c for c in self.results if c.severity == 'CRITICAL' and c.status == 'FAILED'])
         high_failed = len([c for c in self.results if c.severity == 'HIGH' and c.status == 'FAILED'])
-        by_status['PASSED']
-        
+        passed_count = by_status['PASSED']  # Store passed count for potential reporting
+
         # Security score calculation (weighted by severity)
         score_deductions = (critical_failed * 20) + (high_failed * 10) + (by_status['FAILED'] * 5)
         max_possible_score = total_checks * 10

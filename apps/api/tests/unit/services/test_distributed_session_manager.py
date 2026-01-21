@@ -397,7 +397,7 @@ class TestSessionRefresh:
     @pytest.mark.asyncio
     async def test_refresh_rotates_token(self, session_manager, mock_redis, sample_session_data):
         """Test that refresh generates new token"""
-        sample_session_data["token_hash"]
+        _ = sample_session_data["token_hash"]  # Save original token hash for comparison
         mock_redis.get.return_value = json.dumps(sample_session_data).encode()
 
         result = await session_manager.refresh_session("test-session-123")

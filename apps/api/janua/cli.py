@@ -175,7 +175,7 @@ async def create_user(email: str, password: Optional[str] = None, admin: bool = 
         if not password:
             password = getpass.getpass("Enter password: ")
 
-        AuthService()
+        _auth_service = AuthService()  # Keep reference for potential use
 
         # This would need to be implemented with proper database session
         print(f"Creating user: {email}")

@@ -704,8 +704,9 @@ def test_user_with_mfa():
 # Import and register fixtures from async_fixtures.py
 try:
     from fixtures.async_fixtures import (
-        async_redis_client
+        async_redis_client as _async_redis_client  # noqa: F401 - pytest fixture registration
     )
+    async_redis_client = _async_redis_client  # Re-export for fixture registration
 except ImportError:
     # Fallback if fixtures not found
     @pytest.fixture

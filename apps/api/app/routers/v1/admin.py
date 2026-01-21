@@ -702,9 +702,6 @@ async def revoke_all_sessions_admin(
             raise HTTPException(status_code=400, detail="Invalid user ID")
     else:
         # Revoke all sessions except admin's current session
-        pass
-
-
         # Get current session JTI from the access token
         # Note: We need the request object to extract the token
         # For now, revoke all non-admin sessions to be safe

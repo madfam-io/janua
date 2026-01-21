@@ -169,8 +169,6 @@ async def setup_oidc_provider(
     Microsoft, Okta, etc. - just provide issuer and credentials.
     """
     try:
-        pass
-
         from app.sso.domain.services.oidc_discovery import OIDCDiscoveryService
 
         # Discover configuration

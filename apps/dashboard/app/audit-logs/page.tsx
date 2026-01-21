@@ -352,16 +352,8 @@ export default function AuditLogsPage() {
                 <Button
                   variant="outline"
                   onClick={() => setPage((p) => p + 1)}
-                  disabled={loading}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    'Load More'
-                  )}
+                  Load More
                 </Button>
               </div>
             )}
