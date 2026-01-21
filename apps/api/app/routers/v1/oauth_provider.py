@@ -14,6 +14,7 @@ Based on RFC 6749 (OAuth 2.0) and OpenID Connect Core 1.0
 
 import hashlib
 import json
+import os
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
