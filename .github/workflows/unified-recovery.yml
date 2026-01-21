@@ -90,6 +90,8 @@ jobs:
           kubectl delete rs -n janua -l app=janua-api --ignore-not-found
 
           # Patch deployment with correct configuration
+          # TRUST_ALL_HOSTS=true is required because K8s health probes use internal IPs
+          # that don't match domain patterns in TrustedHostMiddleware
           kubectl patch deployment janua-api -n janua --type='strategic' -p='
           spec:
             replicas: 2
@@ -104,6 +106,9 @@ jobs:
                   - name: janua-api
                     image: ghcr.io/madfam-org/janua-api:latest
                     imagePullPolicy: Always
+                    env:
+                      - name: TRUST_ALL_HOSTS
+                        value: "true"
           '
 
           echo "Waiting for janua-api rollout..."
