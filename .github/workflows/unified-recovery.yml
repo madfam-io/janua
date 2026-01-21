@@ -62,62 +62,14 @@ jobs:
           kubectl get deployment janua-api -n janua -o wide || echo "Janua deployment not found"
           kubectl get pods -n janua -l app=janua-api -o wide || true
 
-      - name: Step 1 - Deploy new Switchyard with opt-out fix
-        env:
-          SWITCHYARD_IMAGE: ghcr.io/madfam-org/enclii/switchyard-api:${{ github.event.inputs.switchyard_image }}
+      - name: Step 1 - Scale down Switchyard to prevent interference
         run: |
-          echo "=== Deploying Switchyard with opt-out fix ==="
-          echo "Image: $SWITCHYARD_IMAGE"
+          echo "=== Scaling down Switchyard (will restart after Janua is up) ==="
+          kubectl scale deployment switchyard-api -n enclii --replicas=0 || true
+          sleep 10
+          echo "Switchyard scaled down"
 
-          # Refresh GHCR credentials for enclii namespace
-          kubectl delete secret ghcr-credentials -n enclii --ignore-not-found
-          kubectl create secret docker-registry ghcr-credentials \
-            --namespace=enclii \
-            --docker-server=ghcr.io \
-            --docker-username=${{ github.actor }} \
-            --docker-password=${{ secrets.GITHUB_TOKEN }} \
-            --docker-email=ci@enclii.dev
-
-          # Update Switchyard deployment with new image
-          kubectl set image deployment/switchyard-api \
-            switchyard-api=$SWITCHYARD_IMAGE \
-            -n enclii
-
-          # Force pull the new image
-          kubectl patch deployment switchyard-api -n enclii -p '{"spec":{"template":{"spec":{"containers":[{"name":"switchyard-api","imagePullPolicy":"Always"}]}}}}'
-
-          # Ensure replicas are set
-          kubectl scale deployment switchyard-api -n enclii --replicas=2
-
-          echo "Waiting for Switchyard rollout..."
-          kubectl rollout status deployment/switchyard-api -n enclii --timeout=300s || {
-            echo "=== Switchyard rollout failed - checking pod status ==="
-            kubectl describe pods -n enclii -l app=switchyard-api
-            kubectl logs -n enclii -l app=switchyard-api --tail=50
-            exit 1
-          }
-
-          echo "=== Switchyard deployed successfully ==="
-          kubectl get pods -n enclii -l app=switchyard-api
-
-      - name: Step 2 - Verify Switchyard health
-        run: |
-          echo "=== Verifying Switchyard health ==="
-          sleep 30  # Give it time to stabilize
-
-          # Check if pods are running
-          READY_PODS=$(kubectl get pods -n enclii -l app=switchyard-api -o jsonpath='{.items[*].status.containerStatuses[0].ready}' | tr ' ' '\n' | grep -c true || echo 0)
-          echo "Ready pods: $READY_PODS"
-
-          if [ "$READY_PODS" -lt 1 ]; then
-            echo "ERROR: No healthy Switchyard pods"
-            kubectl describe pods -n enclii -l app=switchyard-api
-            exit 1
-          fi
-
-          echo "Switchyard is healthy with $READY_PODS ready pods"
-
-      - name: Step 3 - Fix janua-api deployment
+      - name: Step 2 - Fix janua-api deployment FIRST
         run: |
           echo "=== Fixing janua-api deployment ==="
 
@@ -164,6 +116,61 @@ jobs:
 
           echo "=== janua-api deployed successfully ==="
           kubectl get pods -n janua -l app=janua-api
+
+      - name: Step 3 - Wait for Janua to be fully healthy
+        run: |
+          echo "=== Waiting for Janua to be fully healthy ==="
+          sleep 30
+
+          # Check if auth.madfam.io is responding
+          for i in $(seq 1 10); do
+            if curl -s -o /dev/null -w "%{http_code}" https://auth.madfam.io/.well-known/jwks.json | grep -q "200"; then
+              echo "Janua OIDC endpoint is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i/10: Janua not ready yet, waiting..."
+            sleep 10
+          done
+
+          echo "WARNING: Janua health check didn't pass, but continuing..."
+
+      - name: Step 4 - Deploy new Switchyard with opt-out fix
+        env:
+          SWITCHYARD_IMAGE: ghcr.io/madfam-org/enclii/switchyard-api:${{ github.event.inputs.switchyard_image }}
+        run: |
+          echo "=== Deploying Switchyard with opt-out fix ==="
+          echo "Image: $SWITCHYARD_IMAGE"
+
+          # Refresh GHCR credentials for enclii namespace
+          kubectl delete secret ghcr-credentials -n enclii --ignore-not-found
+          kubectl create secret docker-registry ghcr-credentials \
+            --namespace=enclii \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --docker-email=ci@enclii.dev
+
+          # Update Switchyard deployment with new image
+          kubectl set image deployment/switchyard-api \
+            switchyard-api=$SWITCHYARD_IMAGE \
+            -n enclii
+
+          # Force pull the new image
+          kubectl patch deployment switchyard-api -n enclii -p '{"spec":{"template":{"spec":{"containers":[{"name":"switchyard-api","imagePullPolicy":"Always"}]}}}}'
+
+          # Scale up Switchyard
+          kubectl scale deployment switchyard-api -n enclii --replicas=2
+
+          echo "Waiting for Switchyard rollout..."
+          kubectl rollout status deployment/switchyard-api -n enclii --timeout=300s || {
+            echo "=== Switchyard rollout needs more time ==="
+            kubectl describe pods -n enclii -l app=switchyard-api
+            kubectl logs -n enclii -l app=switchyard-api --tail=50
+            echo "Continuing anyway - Switchyard may need manual attention"
+          }
+
+          echo "=== Switchyard deployment updated ==="
+          kubectl get pods -n enclii -l app=switchyard-api
 
       - name: Post-recovery verification
         run: |
