@@ -346,7 +346,15 @@ def _generate_id_token(
 ) -> str:
     """Generate an OpenID Connect ID Token."""
     now = datetime.now(timezone.utc)
-    issuer = settings.BASE_URL or os.getenv("DEFAULT_ISSUER", "https://api.janua.dev")
+    # Use JANUA_CUSTOM_DOMAIN as issuer if set (for white-label deployments like auth.madfam.io)
+    # This must match the issuer in /.well-known/openid-configuration
+    custom_domain_issuer = os.getenv("JANUA_CUSTOM_DOMAIN")
+    if custom_domain_issuer:
+        issuer = f"https://{custom_domain_issuer}".rstrip("/")
+    elif settings.API_BASE_URL:
+        issuer = settings.API_BASE_URL.rstrip("/")
+    else:
+        issuer = settings.BASE_URL or "https://api.janua.dev"
 
     claims = {
         "iss": issuer,
