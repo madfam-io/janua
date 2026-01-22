@@ -17,7 +17,7 @@ class CreateOrganizationRequest(BaseModel):
     billing_email: Optional[str] = Field(None, description="Billing email address")
 
     @validator('slug')
-    def validate_slug(cls, v):
+    def validate_slug(cls, v):  # noqa: N805 - pydantic validators use cls
         """Ensure slug is lowercase and valid"""
         return v.lower()
 
@@ -62,7 +62,7 @@ class InviteMemberRequest(BaseModel):
     message: Optional[str] = Field(None, max_length=1000, description="Optional invitation message")
 
     @validator('email')
-    def validate_email(cls, v):
+    def validate_email(cls, v):  # noqa: N805 - pydantic validators use cls
         """Validate email format"""
         import re
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'

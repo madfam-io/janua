@@ -35,8 +35,9 @@ def _mask_sensitive(value: str, visible_chars: int = 8) -> str:
 async def authentication_examples():
     """Examples of authentication operations"""
 
-    # Initialize client
-    async with JanuaClient(base_url="https://api.janua.com") as client:
+    # Initialize client - API key can be set via JANUA_API_KEY env var
+    api_key = os.environ.get("JANUA_API_KEY", "your-api-key-here")
+    async with JanuaClient(api_key=api_key, base_url="https://api.janua.dev") as client:
 
         # Sign up a new user
         try:

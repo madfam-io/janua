@@ -4,6 +4,7 @@ Centralized email service for all MADFAM applications via Resend
 """
 
 from typing import Any, Dict, List, Optional
+import re
 
 import structlog
 from app.services.resend_email_service import ResendEmailService as ResendService
@@ -373,8 +374,10 @@ async def render_template(template_id: str, variables: Dict[str, Any]) -> str:
     """
     Render an email template with variables.
     Templates are stored in templates/emails/ directory.
+
+    Security: This function validates template_id against a whitelist and uses
+    Path.resolve() with base directory validation to prevent path traversal attacks.
     """
-    import re
     from pathlib import Path
 
     # Security: Validate template_id is a known template to prevent path injection
@@ -385,17 +388,23 @@ async def render_template(template_id: str, variables: Dict[str, Any]) -> str:
     if not re.match(r'^[a-zA-Z0-9/_-]+$', template_id):
         raise ValueError(f"Invalid template ID format: {template_id}")
 
-    # Define the templates base directory
+    # Define the templates base directory and resolve to absolute path
     templates_base = (
         Path(__file__).parent.parent.parent.parent / "templates" / "emails"
     ).resolve()
 
     # Build template filename (replace / with _ for filesystem safety)
     template_filename = f"{template_id.replace('/', '_')}.html"
+
+    # Security: Use resolve() and verify the resolved path is within the templates directory
+    # This prevents path traversal attacks (e.g., ../../../etc/passwd)
     template_path = (templates_base / template_filename).resolve()
 
     # Security: Verify the resolved path is within the templates directory (prevent path traversal)
-    if not str(template_path).startswith(str(templates_base)):
+    try:
+        template_path.relative_to(templates_base)
+    except ValueError:
+        # Path is outside templates_base - this is a path traversal attempt
         raise ValueError(f"Invalid template path: {template_id}")
 
     if template_path.exists():

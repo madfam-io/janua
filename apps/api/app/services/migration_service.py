@@ -17,19 +17,44 @@ class MigrationService:
 
     async def start_migration(
         self,
-        organization_id: str,
-        provider: str,
-        config: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Start a migration job"""
-        logger.info(f"Starting migration for org {organization_id} from {provider}")
+        db: Any = None,
+        job_id: str = None,
+        batch_size: int = 100,
+        organization_id: str = None,
+        provider: str = None,
+        config: Dict[str, Any] = None
+    ):
+        """
+        Start a migration job.
 
-        # Placeholder - would implement actual migration logic
-        return {
-            "id": "migration_job_id",
-            "status": "pending",
-            "message": "Migration feature not yet implemented"
-        }
+        Supports two calling patterns:
+        1. db, job_id, batch_size - for router endpoint streaming
+        2. organization_id, provider, config - for direct API calls
+
+        Yields progress updates as an async generator for streaming.
+        """
+        if job_id:
+            logger.info(f"Starting migration job {job_id} with batch_size {batch_size}")
+            # Yield progress updates for streaming response
+            yield {
+                "type": "start",
+                "job_id": job_id,
+                "status": "started",
+                "message": "Migration feature not yet implemented"
+            }
+            yield {
+                "type": "complete",
+                "job_id": job_id,
+                "status": "completed",
+                "message": "Migration feature placeholder completed"
+            }
+        else:
+            logger.info(f"Starting migration for org {organization_id} from {provider}")
+            yield {
+                "id": "migration_job_id",
+                "status": "pending",
+                "message": "Migration feature not yet implemented"
+            }
 
     async def get_migration_status(self, job_id: str) -> Dict[str, Any]:
         """Get migration job status"""

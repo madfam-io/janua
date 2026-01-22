@@ -18,10 +18,12 @@ from .types import (
     UpdateUserRequest,
     OrganizationInfo,
     OrganizationMembership,
-    JanuaError,
+    JanuaError as JanuaErrorModel,  # Renamed to avoid conflict with exception
 )
 from .exceptions import (
+    JanuaError,
     JanuaAPIError,
+    ConfigurationError,
     AuthenticationError,
     ValidationError,
     NotFoundError,
@@ -32,6 +34,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "JanuaClient",
+    "create_client",
     "AuthClient",
     "UserClient",
     "OrganizationClient",
@@ -47,8 +50,22 @@ __all__ = [
     "OrganizationMembership",
     "JanuaError",
     "JanuaAPIError",
+    "ConfigurationError",
     "AuthenticationError",
     "ValidationError",
     "NotFoundError",
     "RateLimitError",
 ]
+
+
+def create_client(**kwargs) -> JanuaClient:
+    """
+    Convenience function to create a JanuaClient instance.
+
+    Args:
+        **kwargs: Arguments to pass to JanuaClient constructor
+
+    Returns:
+        JanuaClient instance
+    """
+    return JanuaClient(**kwargs)

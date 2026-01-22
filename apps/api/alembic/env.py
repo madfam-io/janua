@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import application components
 from app.config import settings
 from app.core.database import Base
-from app.models import *  # noqa: Import all models to ensure they're registered
+from app.models import *  # noqa: F401, F403 - Import all models to ensure they're registered
 
 # Alembic Config object
 config = context.config

@@ -111,8 +111,9 @@ class InvitationService:
         
         # Log audit event
         await self.audit_logger.log(
-            action=AuditAction.INVITATION_CREATE,
-            user_id=str(invited_by.id),
+            event_type=AuditAction.INVITATION_CREATE,
+            tenant_id=tenant_id,
+            identity_id=str(invited_by.id),
             resource_type="invitation",
             resource_id=str(invitation.id),
             details={
@@ -257,8 +258,9 @@ class InvitationService:
         
         # Log audit event
         await self.audit_logger.log(
-            action=AuditAction.INVITATION_ACCEPT,
-            user_id=str(user.id),
+            event_type=AuditAction.INVITATION_ACCEPT,
+            tenant_id=str(invitation.tenant_id) if hasattr(invitation, 'tenant_id') else "",
+            identity_id=str(user.id),
             resource_type="invitation",
             resource_id=str(invitation.id),
             details={
@@ -301,8 +303,9 @@ class InvitationService:
         
         # Log audit event
         await self.audit_logger.log(
-            action=AuditAction.INVITATION_REVOKE,
-            user_id=str(revoked_by.id),
+            event_type=AuditAction.INVITATION_REVOKE,
+            tenant_id=str(invitation.tenant_id) if hasattr(invitation, 'tenant_id') else "",
+            identity_id=str(revoked_by.id),
             resource_type="invitation",
             resource_id=str(invitation.id),
             details={
@@ -340,8 +343,9 @@ class InvitationService:
         
         # Log audit event
         await self.audit_logger.log(
-            action=AuditAction.INVITATION_RESEND,
-            user_id=str(resent_by.id),
+            event_type=AuditAction.INVITATION_RESEND,
+            tenant_id=str(invitation.tenant_id) if hasattr(invitation, 'tenant_id') else "",
+            identity_id=str(resent_by.id),
             resource_type="invitation",
             resource_id=str(invitation.id),
             details={

@@ -9,6 +9,29 @@ interface TOCItem {
   level: number;
 }
 
+/**
+ * Sanitize a string for safe use as an HTML ID attribute.
+ * Only allows alphanumeric characters, hyphens, and underscores.
+ */
+function sanitizeId(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-_]/g, '') // Remove unsafe characters
+    .replace(/\s+/g, '-')          // Replace spaces with hyphens
+    .replace(/-+/g, '-')           // Collapse multiple hyphens
+    .replace(/^-|-$/g, '');        // Trim leading/trailing hyphens
+}
+
+/**
+ * Sanitize text content for display.
+ * Escapes HTML entities to prevent XSS.
+ */
+function sanitizeText(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 export function TableOfContents() {
   const [headings, setHeadings] = useState<TOCItem[]>([]);
   const [activeId, setActiveId] = useState<string>('');
@@ -20,16 +43,18 @@ export function TableOfContents() {
 
     const headingElements = article.querySelectorAll('h2, h3, h4');
     const items: TOCItem[] = Array.from(headingElements).map((heading) => {
-      const id = heading.id || heading.textContent?.toLowerCase().replace(/\s+/g, '-') || '';
-      
-      // Ensure heading has an ID for linking
-      if (!heading.id) {
-        heading.id = id;
+      // Sanitize the heading text before using it as an ID
+      const rawText = heading.textContent || '';
+      const sanitizedId = heading.id || sanitizeId(rawText);
+
+      // Ensure heading has a safe ID for linking
+      if (!heading.id && sanitizedId) {
+        heading.id = sanitizedId;
       }
 
       return {
-        id,
-        text: heading.textContent || '',
+        id: sanitizedId,
+        text: rawText, // Store raw text, will sanitize on render
         level: parseInt(heading.tagName[1]),
       };
     });
@@ -81,13 +106,17 @@ export function TableOfContents() {
         {headings.map((heading) => (
           <a
             key={heading.id}
-            href={`#${heading.id}`}
+            href={`#${encodeURIComponent(heading.id)}`}
             onClick={(e) => {
               e.preventDefault();
-              document.getElementById(heading.id)?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-              });
+              // Use getElementById which is safe - id is already sanitized
+              const element = document.getElementById(heading.id);
+              if (element) {
+                element.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                });
+              }
             }}
             className={cn(
               'block text-sm transition-colors',

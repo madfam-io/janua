@@ -427,8 +427,9 @@ async def export_audit_logs(
     # Log export action
     audit_logger = AuditLogger(db)
     await audit_logger.log(
-        action=AuditAction.AUDIT_EXPORT,
-        user_id=str(current_user.id),
+        event_type=AuditAction.AUDIT_EXPORT,
+        tenant_id=str(current_user.tenant_id) if hasattr(current_user, 'tenant_id') else "",
+        identity_id=str(current_user.id),
         resource_type="audit_logs",
         details={
             "format": export_request.format,
@@ -477,8 +478,9 @@ async def cleanup_old_audit_logs(
     # Log cleanup action
     audit_logger = AuditLogger(db)
     await audit_logger.log(
-        action=AuditAction.AUDIT_CLEANUP,
-        user_id=str(current_user.id),
+        event_type=AuditAction.AUDIT_CLEANUP,
+        tenant_id=str(current_user.tenant_id) if hasattr(current_user, 'tenant_id') else "",
+        identity_id=str(current_user.id),
         resource_type="audit_logs",
         details={
             "deleted_count": count,

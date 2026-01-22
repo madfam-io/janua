@@ -48,6 +48,43 @@ export interface DataSubjectRequestFormProps {
   existingRequests?: DataSubjectRequest[]
 }
 
+/**
+ * Validate email address using a safe regex pattern that avoids ReDoS.
+ * This pattern is more restrictive but safe from catastrophic backtracking.
+ */
+function isValidEmail(email: string): boolean {
+  // Simple email validation that avoids polynomial ReDoS
+  // Validates: local-part@domain.tld format with reasonable restrictions
+  if (!email || email.length > 254) return false
+
+  const atIndex = email.indexOf('@')
+  if (atIndex < 1 || atIndex > 64) return false
+
+  const localPart = email.substring(0, atIndex)
+  const domain = email.substring(atIndex + 1)
+
+  if (!localPart || !domain || domain.length > 253) return false
+  if (!domain.includes('.')) return false
+
+  // Check for valid characters in local part (no consecutive dots, no leading/trailing dots)
+  if (/^\.|\.$|\.\./.test(localPart)) return false
+
+  // Check for valid characters in domain (letters, numbers, hyphens, dots)
+  // Avoid complex nested quantifiers that cause ReDoS
+  const domainParts = domain.split('.')
+  for (const part of domainParts) {
+    if (part.length === 0 || part.length > 63) return false
+    if (/^-|-$/.test(part)) return false
+    if (!/^[a-zA-Z0-9-]+$/.test(part)) return false
+  }
+
+  // Last domain part must be at least 2 characters (TLD)
+  const tld = domainParts[domainParts.length - 1]
+  if (tld.length < 2) return false
+
+  return true
+}
+
 export function DataSubjectRequestForm({
   className,
   userId,
@@ -120,8 +157,8 @@ export function DataSubjectRequestForm({
     setError(null)
     setSuccess(false)
 
-    // Validation
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // Validation using safe email validation function
+    if (!email || !isValidEmail(email)) {
       setError('Please enter a valid email address')
       return
     }

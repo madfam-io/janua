@@ -2,6 +2,84 @@
  * URL and HTTP utilities
  */
 
+/**
+ * List of allowed URL schemes for security validation
+ */
+const ALLOWED_SCHEMES = ['http:', 'https:'];
+
+/**
+ * Validate and sanitize a URL to prevent open redirect and other URL-based attacks.
+ * Returns the sanitized URL or null if the URL is invalid/unsafe.
+ */
+function validateUrl(url: string, allowedHosts?: string[]): string | null {
+  if (!url || typeof url !== 'string') return null;
+
+  try {
+    const urlObj = new URL(url);
+
+    // Check for allowed schemes only (prevent javascript:, data:, etc.)
+    if (!ALLOWED_SCHEMES.includes(urlObj.protocol)) {
+      return null;
+    }
+
+    // If allowedHosts is provided, verify the hostname matches exactly
+    // Using exact match, not substring match to prevent bypass attacks
+    if (allowedHosts && allowedHosts.length > 0) {
+      const hostname = urlObj.hostname.toLowerCase();
+      const isAllowed = allowedHosts.some(host => {
+        const allowedHost = host.toLowerCase();
+        // Exact match or subdomain match (e.g., api.example.com matches example.com)
+        return hostname === allowedHost ||
+               hostname.endsWith(`.${allowedHost}`);
+      });
+
+      if (!isAllowed) {
+        return null;
+      }
+    }
+
+    return urlObj.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a URL is safe for redirect (same origin or allowed hosts)
+ */
+function isSafeRedirectUrl(url: string, currentOrigin: string, allowedHosts?: string[]): boolean {
+  if (!url || typeof url !== 'string') return false;
+
+  try {
+    const urlObj = new URL(url);
+    const originObj = new URL(currentOrigin);
+
+    // Check for allowed schemes only
+    if (!ALLOWED_SCHEMES.includes(urlObj.protocol)) {
+      return false;
+    }
+
+    // Same origin is always safe
+    if (urlObj.origin === originObj.origin) {
+      return true;
+    }
+
+    // Check against allowed hosts if provided
+    if (allowedHosts && allowedHosts.length > 0) {
+      const hostname = urlObj.hostname.toLowerCase();
+      return allowedHosts.some(host => {
+        const allowedHost = host.toLowerCase();
+        return hostname === allowedHost ||
+               hostname.endsWith(`.${allowedHost}`);
+      });
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export class UrlUtils {
   /**
    * Build a URL with path and optional query parameters
@@ -26,7 +104,7 @@ export class UrlUtils {
    */
   static buildQueryString(params: Record<string, any>): string {
     return Object.entries(params)
-      .filter(([_, value]) => value !== undefined && value !== null)
+      .filter(([_key, value]) => value !== undefined && value !== null)
       .map(([key, value]) => {
         if (Array.isArray(value)) {
           return value.map(v => `${encodeURIComponent(key)}=${encodeURIComponent(v)}`).join('&');
@@ -90,7 +168,8 @@ export class UrlUtils {
   }
 
   /**
-   * Extract domain from URL
+   * Extract domain from URL safely
+   * Uses URL parsing instead of substring matching to avoid bypass attacks
    */
   static extractDomain(url: string): string {
     try {
@@ -102,10 +181,16 @@ export class UrlUtils {
   }
 
   /**
-   * Check if URL is absolute
+   * Check if URL is absolute (starts with http:// or https://)
    */
   static isAbsoluteUrl(url: string): boolean {
-    return /^https?:\/\//.test(url);
+    // Use URL parsing for security instead of regex substring matching
+    try {
+      const urlObj = new URL(url);
+      return ALLOWED_SCHEMES.includes(urlObj.protocol);
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -124,6 +209,56 @@ export class UrlUtils {
     const urlObj = new URL(url);
     urlObj.searchParams.delete(key);
     return urlObj.toString();
+  }
+
+  /**
+   * Validate and sanitize a URL for security.
+   * Returns the sanitized URL or null if invalid/unsafe.
+   *
+   * @param url - The URL to validate
+   * @param allowedHosts - Optional list of allowed hostnames (exact match or parent domain)
+   * @returns Sanitized URL string or null if invalid
+   */
+  static validateUrl(url: string, allowedHosts?: string[]): string | null {
+    return validateUrl(url, allowedHosts);
+  }
+
+  /**
+   * Check if a URL is safe for redirect (same origin or allowed hosts).
+   * Use this to prevent open redirect vulnerabilities.
+   *
+   * @param url - The redirect URL to check
+   * @param currentOrigin - The current page origin (e.g., https://example.com)
+   * @param allowedHosts - Optional list of additional allowed hostnames
+   * @returns true if the URL is safe for redirect
+   */
+  static isSafeRedirectUrl(url: string, currentOrigin: string, allowedHosts?: string[]): boolean {
+    return isSafeRedirectUrl(url, currentOrigin, allowedHosts);
+  }
+
+  /**
+   * Check if a hostname matches an allowed pattern.
+   * Uses exact matching, not substring matching to prevent bypass attacks.
+   *
+   * @param hostname - The hostname to check
+   * @param allowedHost - The allowed host pattern
+   * @returns true if the hostname matches
+   */
+  static isHostnameAllowed(hostname: string, allowedHost: string): boolean {
+    const normalizedHostname = hostname.toLowerCase();
+    const normalizedAllowed = allowedHost.toLowerCase();
+
+    // Exact match
+    if (normalizedHostname === normalizedAllowed) {
+      return true;
+    }
+
+    // Subdomain match (e.g., api.example.com matches example.com)
+    if (normalizedHostname.endsWith(`.${normalizedAllowed}`)) {
+      return true;
+    }
+
+    return false;
   }
 }
 

@@ -236,7 +236,7 @@ async def create_scim_config(
     await db.refresh(scim_config)
 
     # Use parameterized logging to prevent log injection
-    logger.info("Created SCIM config for org %s", org_id)
+    logger.info("Created SCIM config for org_id=%s", str(org_id))
 
     return SCIMConfigResponse(
         id=str(scim_config.id),
@@ -323,7 +323,7 @@ async def update_scim_config(
     await db.refresh(scim_config)
 
     # Use parameterized logging to prevent log injection
-    logger.info("Updated SCIM config for org %s", org_id)
+    logger.info("Updated SCIM config for org_id=%s", str(org_id))
 
     token_prefix = None
     if scim_config.bearer_token:
@@ -367,7 +367,7 @@ async def delete_scim_config(
     await db.commit()
 
     # Use parameterized logging to prevent log injection
-    logger.info("Deleted SCIM config for org %s", org_id)
+    logger.info("Deleted SCIM config for org_id=%s", str(org_id))
 
 
 @router.post("/config/token", response_model=SCIMTokenResponse)
@@ -399,7 +399,7 @@ async def rotate_scim_token(
     await db.commit()
 
     # Use parameterized logging to prevent log injection
-    logger.info("Rotated SCIM token for org %s", org_id)
+    logger.info("Rotated SCIM token for org_id=%s", str(org_id))
 
     return SCIMTokenResponse(
         bearer_token=new_token,

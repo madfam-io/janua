@@ -42,7 +42,7 @@ class OrganizationCreateRequest(BaseModel):
     billing_email: Optional[str] = None
 
     @validator("slug")
-    def validate_slug(cls, v):
+    def validate_slug(cls, v):  # noqa: N805 - pydantic validators use cls
         """Ensure slug is lowercase and valid"""
         return v.lower()
 

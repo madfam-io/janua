@@ -41,6 +41,16 @@ export interface InvitationAcceptProps {
   currentUserId?: string
 }
 
+/**
+ * Generate a cryptographically secure random string for security-sensitive operations
+ * Uses crypto.getRandomValues for browser compatibility
+ */
+function generateSecureToken(): string {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export function InvitationAccept({
   className,
   token,
@@ -61,6 +71,8 @@ export function InvitationAccept({
   const [name, setName] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [confirmPassword, setConfirmPassword] = React.useState('')
+  // Generate a secure request ID for tracking
+  const [_requestId] = React.useState(() => generateSecureToken())
 
   // Validate token on mount
   React.useEffect(() => {

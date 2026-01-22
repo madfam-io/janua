@@ -4,10 +4,9 @@ Comprehensive Janua → Janua rebranding script
 Handles case-sensitive replacements across the entire codebase
 """
 
-import os
 import re
 from pathlib import Path
-from typing import Set, List, Tuple
+from typing import List, Tuple
 
 # Directories to exclude
 EXCLUDE_DIRS = {

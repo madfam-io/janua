@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 # Type variables for generic responses
-T = TypeVar('T')
+T = TypeVar('T')  # noqa: F841 - exported for use by SDK consumers
 DataT = TypeVar('DataT')
 
 

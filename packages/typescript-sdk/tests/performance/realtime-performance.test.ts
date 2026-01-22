@@ -9,7 +9,7 @@
  * - Connection stability
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { JanuaClient } from '../../src/index';
 import { WebSocketClient } from '../../src/websocket';
 
@@ -214,9 +214,10 @@ describe('WebSocket Performance Tests', () => {
             resolve();
           });
 
-          client.on('error', (error) => {
-            metrics.recordError('connection', error.message);
-            reject(error);
+          client.on('error', (error: unknown) => {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            metrics.recordError('connection', errorMessage);
+            reject(error instanceof Error ? error : new Error(errorMessage));
           });
 
           // Timeout after 5 seconds
@@ -249,7 +250,7 @@ describe('WebSocket Performance Tests', () => {
       const connectionStats = metrics.calculateStats(finalMetrics.connectionTimes);
       expect(connectionStats.p95).toBeLessThan(PERF_CONFIG.latency_threshold.p95);
 
-      console.log('\n🔍 Light Load Test Results:');
+      console.log('\n[Performance] Light Load Test Results:');
       console.log(metrics.getReport());
     }, 15000); // 15 second timeout
 
@@ -271,9 +272,10 @@ describe('WebSocket Performance Tests', () => {
             resolve();
           });
 
-          client.on('error', (error) => {
-            metrics.recordError('connection', error.message);
-            reject(error);
+          client.on('error', (error: unknown) => {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            metrics.recordError('connection', errorMessage);
+            reject(error instanceof Error ? error : new Error(errorMessage));
           });
 
           setTimeout(() => reject(new Error('Connection timeout')), 10000);
@@ -306,7 +308,7 @@ describe('WebSocket Performance Tests', () => {
       const connectionStats = metrics.calculateStats(finalMetrics.connectionTimes);
       expect(connectionStats.p95).toBeLessThan(PERF_CONFIG.latency_threshold.p95);
 
-      console.log('\n🔍 Medium Load Test Results:');
+      console.log('\n[Performance] Medium Load Test Results:');
       console.log(metrics.getReport());
     }, 30000);
 
@@ -334,9 +336,10 @@ describe('WebSocket Performance Tests', () => {
               resolve();
             });
 
-            client.on('error', (error) => {
-              metrics.recordError('connection', error.message);
-              reject(error);
+            client.on('error', (error: unknown) => {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              metrics.recordError('connection', errorMessage);
+              reject(error instanceof Error ? error : new Error(errorMessage));
             });
 
             setTimeout(() => reject(new Error('Connection timeout')), 15000);
@@ -367,7 +370,7 @@ describe('WebSocket Performance Tests', () => {
       const memoryStats = metrics.calculateStats(finalMetrics.memoryUsage);
       expect(memoryStats.max).toBeLessThan(PERF_CONFIG.memory_threshold.max_heap_mb);
 
-      console.log('\n🔍 Heavy Load Test Results:');
+      console.log('\n[Performance] Heavy Load Test Results:');
       console.log(metrics.getReport());
     }, 60000);
   });
@@ -390,14 +393,16 @@ describe('WebSocket Performance Tests', () => {
       // Wait for connection
       await new Promise<void>((resolve, reject) => {
         client.on('connected', () => resolve());
-        client.on('error', (error) => reject(error));
+        client.on('error', (error: unknown) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        });
         client.connect();
         setTimeout(() => reject(new Error('Connection timeout')), 5000);
       });
 
       // Subscribe to test channel
       const receivedMessages: Array<{ id: number; receivedAt: number }> = [];
-      await client.subscribe('perf-test', (message) => {
+      await client.subscribe('perf-test', (message: { id: number }) => {
         const receivedAt = Date.now();
         receivedMessages.push({ id: message.id, receivedAt });
       });
@@ -451,7 +456,7 @@ describe('WebSocket Performance Tests', () => {
       const messageStats = metrics.calculateStats(finalMetrics.messageTimes);
       expect(messageStats.p95).toBeLessThan(PERF_CONFIG.latency_threshold.p95);
 
-      console.log('\n🔍 Message Throughput Test Results:');
+      console.log('\n[Performance] Message Throughput Test Results:');
       console.log(metrics.getReport());
       console.log(`Target: ${messagesPerSecond} msg/s, Actual: ${actualThroughput.toFixed(2)} msg/s`);
       console.log(`Delivery Rate: ${((receivedMessages.length / totalMessages) * 100).toFixed(2)}%`);
@@ -470,13 +475,15 @@ describe('WebSocket Performance Tests', () => {
 
       await new Promise<void>((resolve, reject) => {
         client.on('connected', () => resolve());
-        client.on('error', (error) => reject(error));
+        client.on('error', (error: unknown) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        });
         client.connect();
         setTimeout(() => reject(new Error('Connection timeout')), 5000);
       });
 
       const receivedMessages: number[] = [];
-      await client.subscribe('burst-test', (message) => {
+      await client.subscribe('burst-test', (message: { id: number }) => {
         receivedMessages.push(message.id);
       });
 
@@ -520,7 +527,7 @@ describe('WebSocket Performance Tests', () => {
       expect(deliveryRate).toBeGreaterThan(90); // At least 90% delivery rate
       expect(finalMetrics.errors.length).toBe(0);
 
-      console.log('\n🔍 Burst Traffic Test Results:');
+      console.log('\n[Performance] Burst Traffic Test Results:');
       console.log(metrics.getReport());
       console.log(`Delivery Rate: ${deliveryRate.toFixed(2)}%`);
     }, 30000);
@@ -529,13 +536,14 @@ describe('WebSocket Performance Tests', () => {
   describe('Connection Stability', () => {
     it('should maintain stable connection over time', async () => {
       const durationMinutes = PERF_CONFIG.stability_test.duration_minutes;
-      const pingInterval = PERF_CONFIG.stability_test.ping_interval_ms;
-      const expectedPings = (durationMinutes * 60 * 1000) / pingInterval;
+      const pingIntervalMs = PERF_CONFIG.stability_test.ping_interval_ms;
+      // Expected pings calculated for validation purposes
+      const _expectedPings = (durationMinutes * 60 * 1000) / pingIntervalMs;
 
       const client = new WebSocketClient(MOCK_WS_URL, {
         token: MOCK_AUTH_TOKEN,
         autoReconnect: true,
-        heartbeatInterval: pingInterval,
+        heartbeatInterval: pingIntervalMs,
       });
       clients.push(client);
 
@@ -551,12 +559,12 @@ describe('WebSocket Performance Tests', () => {
         metrics.recordError('disconnect', 'Unexpected disconnection');
       });
 
-      client.on('reconnecting', (attempt) => {
+      client.on('reconnecting', (attempt: number) => {
         metrics.recordError('reconnect', `Reconnection attempt ${attempt}`);
       });
 
       // Mock ping/pong mechanism
-      const pingInterval = setInterval(() => {
+      let pingIntervalHandle: ReturnType<typeof setInterval> | null = setInterval(() => {
         const pingTime = Date.now();
         pingCount++;
 
@@ -569,11 +577,13 @@ describe('WebSocket Performance Tests', () => {
         }, Math.random() * 50 + 10); // 10-60ms latency
 
         metrics.recordMemoryUsage(getMemoryUsageMB());
-      }, pingInterval);
+      }, pingIntervalMs);
 
       await new Promise<void>((resolve, reject) => {
         client.on('connected', () => resolve());
-        client.on('error', (error) => reject(error));
+        client.on('error', (error: unknown) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        });
         client.connect();
         setTimeout(() => reject(new Error('Connection timeout')), 5000);
       });
@@ -581,7 +591,10 @@ describe('WebSocket Performance Tests', () => {
       // Run stability test for specified duration
       await sleep(durationMinutes * 60 * 1000);
 
-      clearInterval(pingInterval);
+      if (pingIntervalHandle) {
+        clearInterval(pingIntervalHandle);
+        pingIntervalHandle = null;
+      }
 
       const finalMetrics = metrics.finalize();
       const pongRate = (pongCount / pingCount) * 100;
@@ -593,7 +606,7 @@ describe('WebSocket Performance Tests', () => {
       const latencyStats = metrics.calculateStats(latencies);
       expect(latencyStats.p95).toBeLessThan(PERF_CONFIG.latency_threshold.p95);
 
-      console.log('\n🔍 Connection Stability Test Results:');
+      console.log('\n[Performance] Connection Stability Test Results:');
       console.log(metrics.getReport());
       console.log(`Pings: ${pingCount}, Pongs: ${pongCount}, Rate: ${pongRate.toFixed(2)}%`);
       console.log(`Latency P95: ${latencyStats.p95.toFixed(2)}ms, P99: ${latencyStats.p99.toFixed(2)}ms`);
@@ -616,7 +629,9 @@ describe('WebSocket Performance Tests', () => {
 
         await new Promise<void>((resolve, reject) => {
           client.on('connected', () => resolve());
-          client.on('error', (error) => reject(error));
+          client.on('error', (error: unknown) => {
+            reject(error instanceof Error ? error : new Error(String(error)));
+          });
           client.connect();
           setTimeout(() => reject(new Error('Connection timeout')), 5000);
         });
@@ -647,7 +662,7 @@ describe('WebSocket Performance Tests', () => {
       const memoryGrowth = finalMemory - initialMemory;
       const growthPercentage = (memoryGrowth / initialMemory) * 100;
 
-      console.log('\n🔍 Memory Leak Test Results:');
+      console.log('\n[Performance] Memory Leak Test Results:');
       console.log(`Initial Memory: ${initialMemory.toFixed(2)} MB`);
       console.log(`Final Memory: ${finalMemory.toFixed(2)} MB`);
       console.log(`Growth: ${memoryGrowth.toFixed(2)} MB (${growthPercentage.toFixed(2)}%)`);
@@ -699,11 +714,11 @@ describe('GraphQL Subscription Performance Tests', () => {
           `,
           { id: i },
           {
-            next: (data) => {
+            next: (data: { testEvent: { timestamp: number } }) => {
               const latency = Date.now() - data.testEvent.timestamp;
               metrics.recordMessageTime(latency);
             },
-            error: (error) => {
+            error: (error: Error) => {
               metrics.recordError('subscription', error.message);
             },
           }
@@ -717,7 +732,7 @@ describe('GraphQL Subscription Performance Tests', () => {
       // Simulate messages for each subscription
       const messagePromises: Promise<void>[] = [];
       for (let sub = 0; sub < subscriptionCount; sub++) {
-        for (let msg = 0; msg < messagesPerSubscription; msg++) {
+        for (let _msg = 0; _msg < messagesPerSubscription; _msg++) {
           messagePromises.push(
             (async () => {
               // Simulate server pushing subscription data
@@ -742,7 +757,7 @@ describe('GraphQL Subscription Performance Tests', () => {
       expect(subscriptionStats.p95).toBeLessThan(PERF_CONFIG.latency_threshold.p95);
       expect(messageStats.p95).toBeLessThan(PERF_CONFIG.latency_threshold.p95);
 
-      console.log('\n🔍 GraphQL Subscription Performance:');
+      console.log('\n[Performance] GraphQL Subscription Performance:');
       console.log(metrics.getReport());
     }, 30000);
 
@@ -764,7 +779,7 @@ describe('GraphQL Subscription Performance Tests', () => {
         `,
         {},
         {
-          next: (data) => {
+          next: (data: { rapidUpdates: { timestamp: number } }) => {
             receivedUpdates++;
             const latency = Date.now() - data.rapidUpdates.timestamp;
             metrics.recordMessageTime(latency);
@@ -773,7 +788,7 @@ describe('GraphQL Subscription Performance Tests', () => {
               metrics.recordMemoryUsage(getMemoryUsageMB());
             }
           },
-          error: (error) => {
+          error: (error: Error) => {
             metrics.recordError('subscription', error.message);
           },
         }
@@ -797,7 +812,7 @@ describe('GraphQL Subscription Performance Tests', () => {
       expect(deliveryRate).toBeGreaterThan(90); // At least 90% delivery
       expect(messageStats.p95).toBeLessThan(PERF_CONFIG.latency_threshold.p95);
 
-      console.log('\n🔍 High-Frequency Subscription Results:');
+      console.log('\n[Performance] High-Frequency Subscription Results:');
       console.log(metrics.getReport());
       console.log(`Delivery Rate: ${deliveryRate.toFixed(2)}%`);
       console.log(`Expected: ${expectedUpdates}, Received: ${receivedUpdates}`);

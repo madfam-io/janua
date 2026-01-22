@@ -14,7 +14,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-# revision identifiers, used by Alembic.
+# revision identifiers, used by Alembic.  # noqa: F841 - required by Alembic
 revision: str = '001'
 down_revision: Union[str, None] = '000'
 branch_labels: Union[str, Sequence[str], None] = None

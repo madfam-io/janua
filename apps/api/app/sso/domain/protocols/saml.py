@@ -8,17 +8,17 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 try:
-    from lxml import etree
-    from onelogin.saml2.auth import OneLogin_Saml2_Auth
-    from onelogin.saml2.settings import OneLogin_Saml2_Settings
-    from onelogin.saml2.utils import OneLogin_Saml2_Utils
+    from lxml import etree  # noqa: F401 - used dynamically when SAML_AVAILABLE
+    from onelogin.saml2.auth import OneLogin_Saml2_Auth  # noqa: F401
+    from onelogin.saml2.settings import OneLogin_Saml2_Settings  # noqa: F401
+    from onelogin.saml2.utils import OneLogin_Saml2_Utils  # noqa: F401
     SAML_AVAILABLE = True
 except ImportError:
     SAML_AVAILABLE = False
-    etree = None
-    OneLogin_Saml2_Auth = None
-    OneLogin_Saml2_Settings = None
-    OneLogin_Saml2_Utils = None
+    etree = None  # noqa: F841
+    OneLogin_Saml2_Auth = None  # noqa: F841
+    OneLogin_Saml2_Settings = None  # noqa: F841
+    OneLogin_Saml2_Utils = None  # noqa: F841
 
 from .base import SSOProtocol
 from ...exceptions import AuthenticationError, ValidationError

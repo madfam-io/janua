@@ -161,13 +161,13 @@ async def get_admin_stats(
 
     result = await db.execute(
         select(func.count(UserSession.id)).where(
-            UserSession.revoked_at == None, UserSession.expires_at > datetime.utcnow()
+            UserSession.revoked_at.is_(None), UserSession.expires_at > datetime.utcnow()
         )
     )
     active_sessions = result.scalar()
 
     # Security statistics - MFA enabled users count
-    result = await db.execute(select(func.count(User.id)).where(User.mfa_enabled == True))
+    result = await db.execute(select(func.count(User.id)).where(User.mfa_enabled.is_(True)))
     mfa_enabled_users = result.scalar() or 0
 
     # OAuth accounts - table may not exist yet, so skip if query fails
@@ -330,7 +330,7 @@ async def list_all_users(
 
         sessions_result = await db.execute(
             select(func.count(UserSession.id)).where(
-                UserSession.user_id == user.id, UserSession.revoked_at == None
+                UserSession.user_id == user.id, UserSession.revoked_at.is_(None)
             )
         )
         sessions_count = sessions_result.scalar()

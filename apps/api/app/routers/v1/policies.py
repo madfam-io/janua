@@ -56,8 +56,9 @@ async def create_policy(
     # Log audit event
     audit_logger = AuditLogger(db)
     await audit_logger.log(
-        action=AuditAction.POLICY_CREATE,
-        user_id=str(current_user.id),
+        event_type=AuditAction.POLICY_CREATE,
+        tenant_id=str(current_user.tenant_id) if hasattr(current_user, 'tenant_id') else "",
+        identity_id=str(current_user.id),
         resource_type="policy",
         resource_id=str(policy.id),
         details={"policy_name": policy.name}
@@ -338,7 +339,7 @@ async def list_roles(
         stmt = stmt.where(
             or_(
                 Role.organization_id == organization_id,
-                Role.organization_id == None  # Include tenant-level roles
+                Role.organization_id.is_(None)  # Include tenant-level roles
             )
         )
 

@@ -44,10 +44,10 @@ audit_logger = None
 webhook_dispatcher = None
 
 try:
-    from app.core.test_config import TestDataFactory, TestUtils
+    from app.core.test_config import TestDataFactory, TestUtils  # noqa: F401
 except ImportError:
-    TestDataFactory = None
-    TestUtils = None
+    TestDataFactory = None  # noqa: F841
+    TestUtils = None  # noqa: F841
 
 
 class TestTenantContext:

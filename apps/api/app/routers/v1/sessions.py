@@ -108,7 +108,7 @@ async def list_sessions(
     # Get all active sessions
     result = await db.execute(select(UserSession).where(
         UserSession.user_id == current_user.id,
-        UserSession.revoked_at == None,
+        UserSession.revoked_at.is_(None),
         UserSession.expires_at > datetime.utcnow()
     ).order_by(UserSession.last_activity_at.desc()))
     sessions = result.scalars().all()
@@ -243,7 +243,7 @@ async def revoke_all_sessions(
     # Revoke all sessions except current
     result = await db.execute(select(UserSession).where(
         UserSession.user_id == current_user.id,
-        UserSession.revoked_at == None,
+        UserSession.revoked_at.is_(None),
         UserSession.access_token_jti != current_jti
     ))
     sessions = result.scalars().all()
@@ -276,10 +276,10 @@ async def refresh_session(
     result = await db.execute(select(UserSession).where(
         UserSession.id == session_uuid,
         UserSession.user_id == current_user.id,
-        UserSession.revoked_at == None
+        UserSession.revoked_at.is_(None)
     ))
     session = result.scalar_one_or_none()
-    
+
     if not session:
         raise HTTPException(status_code=404, detail="Session not found or revoked")
     
@@ -334,7 +334,7 @@ async def get_security_alerts(
     # Check for sessions from new locations
     result = await db.execute(select(UserSession).where(
         UserSession.user_id == current_user.id,
-        UserSession.revoked_at == None
+        UserSession.revoked_at.is_(None)
     ))
     sessions = result.scalars().all()
     

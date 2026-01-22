@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { RedisService, getRedis } from './redis.service';
 import { getMultiTenancyService, MultiTenancyService } from './multi-tenancy.service';
@@ -1067,11 +1068,11 @@ export class BillingService extends EventEmitter {
 
   // Stripe Integration Methods (stubs)
   private async createStripeProduct(_plan: BillingPlan): Promise<any> {
-    return { id: `prod_${Math.random().toString(36).substring(2)}` };
+    return { id: `prod_${crypto.randomBytes(8).toString('hex')}` };
   }
 
   private async createStripePrice(_plan: BillingPlan, _productId: string): Promise<any> {
-    return { id: `price_${Math.random().toString(36).substring(2)}` };
+    return { id: `price_${crypto.randomBytes(8).toString('hex')}` };
   }
 
   private async createStripeSubscription(
@@ -1081,8 +1082,8 @@ export class BillingService extends EventEmitter {
     _trialDays?: number
   ): Promise<any> {
     return {
-      id: `sub_${Math.random().toString(36).substring(2)}`,
-      customer: `cus_${Math.random().toString(36).substring(2)}`
+      id: `sub_${crypto.randomBytes(8).toString('hex')}`,
+      customer: `cus_${crypto.randomBytes(8).toString('hex')}`
     };
   }
 
@@ -1105,7 +1106,7 @@ export class BillingService extends EventEmitter {
   }
 
   private async getOrCreateStripeCustomer(_organizationId: string): Promise<any> {
-    return { id: `cus_${Math.random().toString(36).substring(2)}` };
+    return { id: `cus_${crypto.randomBytes(8).toString('hex')}` };
   }
 
   private async updateStripeCustomer(customerId: string, updates: Record<string, any>): Promise<any> {
@@ -1133,7 +1134,7 @@ export class BillingService extends EventEmitter {
     _successUrl: string,
     _cancelUrl: string
   ): Promise<any> {
-    return { id: `cs_${Math.random().toString(36).substring(2)}` };
+    return { id: `cs_${crypto.randomBytes(8).toString('hex')}` };
   }
 
   private async handleCheckoutComplete(_session: any): Promise<void> {
@@ -1158,27 +1159,27 @@ export class BillingService extends EventEmitter {
   
   // ID Generation
   private generatePlanId(): string {
-    return `plan_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `plan_${Date.now()}_${crypto.randomBytes(8).toString('hex').substring(0, 7)}`;
   }
   
   private generateSubscriptionId(): string {
-    return `sub_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `sub_${Date.now()}_${crypto.randomBytes(8).toString('hex').substring(0, 7)}`;
   }
   
   private generatePaymentMethodId(): string {
-    return `pm_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `pm_${Date.now()}_${crypto.randomBytes(8).toString('hex').substring(0, 7)}`;
   }
   
   private generateUsageRecordId(): string {
-    return `usage_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `usage_${Date.now()}_${crypto.randomBytes(8).toString('hex').substring(0, 7)}`;
   }
   
   private generateAlertId(): string {
-    return `alert_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `alert_${Date.now()}_${crypto.randomBytes(8).toString('hex').substring(0, 7)}`;
   }
   
   private generateSessionId(): string {
-    return `cs_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `cs_${Date.now()}_${crypto.randomBytes(8).toString('hex').substring(0, 7)}`;
   }
 }
 

@@ -730,6 +730,7 @@ except ImportError:
 
 # Import all fixtures from fixtures package (Week 1 Foundation Sprint)
 # Enable database-dependent fixtures for integration tests
+# noqa: F401, F403 - Star imports needed for pytest fixture discovery
 from tests.fixtures.users import *  # noqa: F401, F403
 from tests.fixtures.organizations import *  # noqa: F401, F403
 from tests.fixtures.sessions import *  # noqa: F401, F403

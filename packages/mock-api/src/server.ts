@@ -29,7 +29,7 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or Postman)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -45,14 +45,25 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Rate limiting
-const limiter = rateLimit({
+// Rate limiting for auth routes
+const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-app.use('/api/v1/auth', limiter);
+// Rate limiting for authenticated API routes
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Higher limit for authenticated users
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/v1/auth', authLimiter);
 
 // Health check endpoints
 app.get('/health', (req: Request, res: Response) => {
@@ -60,7 +71,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 app.get('/ready', (req: Request, res: Response) => {
-  res.json({ 
+  res.json({
     status: 'ready',
     database: true,
     redis: true,
@@ -101,26 +112,26 @@ app.get('/.well-known/openid-configuration', (req: Request, res: Response) => {
   });
 });
 
-// API Routes
+// API Routes - apply rate limiting to authenticated routes
 app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/users', authenticateToken, usersRouter);
-app.use('/api/v1/sessions', authenticateToken, sessionsRouter);
-app.use('/api/v1/organizations', authenticateToken, organizationsRouter);
-app.use('/api/v1/mfa', authenticateToken, mfaRouter);
-app.use('/api/v1/passkeys', passkeysRouter);
+app.use('/api/v1/users', apiLimiter, authenticateToken, usersRouter);
+app.use('/api/v1/sessions', apiLimiter, authenticateToken, sessionsRouter);
+app.use('/api/v1/organizations', apiLimiter, authenticateToken, organizationsRouter);
+app.use('/api/v1/mfa', apiLimiter, authenticateToken, mfaRouter);
+app.use('/api/v1/passkeys', apiLimiter, passkeysRouter);
 
 // Error handling middleware
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   // Error handled silently in production
-  
+
   if (err.name === 'UnauthorizedError') {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  
+
   if (err.name === 'ValidationError') {
     return res.status(400).json({ error: err.message });
   }
-  
+
   res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -131,7 +142,7 @@ app.use((req: Request, res: Response) => {
 
 // Start server
 app.listen(PORT, () => {
-  
+
   // Initialize database
   db.init();
 });

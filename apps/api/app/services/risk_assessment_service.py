@@ -8,18 +8,18 @@ from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 try:
-    import numpy as np
-    from sklearn.ensemble import IsolationForest
-    import user_agents
+    import numpy as np  # noqa: F401 - used dynamically when ML_AVAILABLE
+    from sklearn.ensemble import IsolationForest  # noqa: F401
+    import user_agents  # noqa: F401
     ML_AVAILABLE = True
     # Type aliases for when ML is available
     NDArray = np.ndarray
 except ImportError:
     ML_AVAILABLE = False
-    np = None
-    IsolationForest = None
+    np = None  # noqa: F841
+    IsolationForest = None  # noqa: F841
     # Fallback type alias when ML is not available
-    NDArray = Any
+    NDArray = Any  # noqa: F841
 
 from ..models import User, Session
 try:

@@ -1,15 +1,29 @@
-class JanuaAPIError(Exception):
+class JanuaError(Exception):
+    """Base exception for all Janua errors"""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
+class ConfigurationError(JanuaError):
+    """Raised when there's a configuration error"""
+
+    def __init__(self, message: str = "Configuration error"):
+        super().__init__(message)
+
+
+class JanuaAPIError(JanuaError):
     """Base exception for Janua API errors"""
-    
+
     def __init__(
-        self, 
-        message: str, 
-        code: str = "UNKNOWN_ERROR", 
-        status_code: int = None, 
+        self,
+        message: str,
+        code: str = "UNKNOWN_ERROR",
+        status_code: int = None,
         details: dict = None
     ):
         super().__init__(message)
-        self.message = message
         self.code = code
         self.status_code = status_code
         self.details = details or {}

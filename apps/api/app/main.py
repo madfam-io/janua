@@ -18,8 +18,6 @@ try:
                 password = password[:72]
             return bcrypt._original_hashpw(password, salt)
 
-            return bcrypt._original_hashpw(password, salt)
-
         bcrypt.hashpw = _patched_hashpw
 except ImportError:
     pass
@@ -497,7 +495,7 @@ if redis_url or settings.ENVIRONMENT != "test":
 if settings.ENVIRONMENT != "test":
     # Disable strict validation in test environment to avoid test complexity
     # Tests verify validation logic in unit tests
-    input_validation_middleware_instance = create_input_validation_middleware(
+    _input_validation_middleware_instance = create_input_validation_middleware(
         app, strict_mode=not settings.DEBUG
     )
 

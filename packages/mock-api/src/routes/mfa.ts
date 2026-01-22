@@ -1,6 +1,24 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 
 export const mfaRouter = Router();
+
+/**
+ * Generate a cryptographically secure random string
+ * Uses crypto.randomBytes for security-critical random generation
+ */
+function generateSecureRandom(length: number): string {
+  return crypto.randomBytes(length).toString('base64url').slice(0, length);
+}
+
+/**
+ * Generate a cryptographically secure backup code
+ */
+function generateBackupCode(): string {
+  const part1 = crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 4);
+  const part2 = crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 4);
+  return `BACKUP-${part1}-${part2}`;
+}
 
 // Get MFA status
 mfaRouter.get('/status', (_req: Request, res: Response) => {
@@ -14,22 +32,22 @@ mfaRouter.get('/status', (_req: Request, res: Response) => {
 // Enable MFA
 mfaRouter.post('/enable', (req: Request, res: Response) => {
   const { method } = req.body;
-  
+
   if (!method || !['totp', 'sms'].includes(method)) {
     return res.status(400).json({ error: 'Invalid MFA method' });
   }
-  
-  // Generate secret for TOTP
-  const secret = 'MOCK_SECRET_' + Math.random().toString(36).substring(7);
-  
+
+  // Generate cryptographically secure secret for TOTP
+  const secret = generateSecureRandom(20);
+
   res.json({
     method,
     secret,
     qrCode: `otpauth://totp/Janua:user@example.com?secret=${secret}&issuer=Janua`,
     backupCodes: [
-      'BACKUP-1234-5678',
-      'BACKUP-2345-6789',
-      'BACKUP-3456-7890'
+      generateBackupCode(),
+      generateBackupCode(),
+      generateBackupCode()
     ]
   });
 });
@@ -37,11 +55,11 @@ mfaRouter.post('/enable', (req: Request, res: Response) => {
 // Verify MFA code
 mfaRouter.post('/verify', (req: Request, res: Response) => {
   const { code } = req.body;
-  
+
   if (!code) {
     return res.status(400).json({ error: 'Code is required' });
   }
-  
+
   // Mock verification - accept any 6-digit code
   if (code.length === 6 && /^\d+$/.test(code)) {
     res.json({ valid: true });
@@ -59,10 +77,7 @@ mfaRouter.post('/disable', (_req: Request, res: Response) => {
 
 // Generate backup codes
 mfaRouter.post('/backup-codes', (_req: Request, res: Response) => {
-  const codes = Array.from({ length: 8 }, () => 
-    'BACKUP-' + Math.random().toString(36).substring(2, 6).toUpperCase() + 
-    '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
-  );
-  
+  const codes = Array.from({ length: 8 }, () => generateBackupCode());
+
   res.json({ codes });
 });

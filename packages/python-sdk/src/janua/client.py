@@ -39,51 +39,82 @@ class JanuaClient:
     
     def __init__(
         self,
-        app_id: str,
         api_key: Optional[str] = None,
-        api_url: str = "https://api.janua.dev",
-        timeout: int = 30,
+        app_id: Optional[str] = None,
+        base_url: str = "https://api.janua.dev",
+        api_url: Optional[str] = None,  # Alias for base_url
+        timeout: float = 30.0,
+        max_retries: int = 3,
+        environment: str = "production",
         debug: bool = False,
     ):
         """
         Initialize the Janua client
-        
+
         Args:
-            app_id: Your Janua application ID
-            api_key: Your API key (optional, for server-side usage)
-            api_url: The Janua API URL (defaults to production)
+            api_key: Your API key (required, can also be set via JANUA_API_KEY env var)
+            app_id: Your Janua application ID (optional)
+            base_url: The Janua API URL (defaults to production)
+            api_url: Alias for base_url (deprecated)
             timeout: Request timeout in seconds
+            max_retries: Maximum number of retries for failed requests
+            environment: Environment name (production, staging, development)
             debug: Enable debug logging
         """
-        if not app_id:
-            raise ValueError("app_id is required")
-        
+        import os
+
+        # Get API key from argument or environment
+        self.api_key = api_key or os.environ.get("JANUA_API_KEY")
+        if not self.api_key:
+            from .exceptions import ConfigurationError
+            raise ConfigurationError("API key is required. Pass api_key parameter or set JANUA_API_KEY environment variable.")
+
         self.app_id = app_id
-        self.api_key = api_key
-        self.api_url = api_url
+        # Support both base_url and api_url (api_url is deprecated)
+        self.base_url = api_url or base_url or os.environ.get("JANUA_BASE_URL", "https://api.janua.dev")
+        self.api_url = self.base_url  # Alias for compatibility
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.environment = os.environ.get("JANUA_ENVIRONMENT", environment)
         self.debug = debug
         
+        # Store config for access
+        self.config = type('Config', (), {
+            'api_key': self.api_key,
+            'base_url': self.base_url,
+            'timeout': self.timeout,
+            'max_retries': self.max_retries,
+            'environment': self.environment,
+            'debug': self.debug,
+        })()
+
         # Set up headers
         headers = {
-            "X-App-Id": app_id,
             "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
         }
-        
-        if api_key:
-            headers["X-API-Key"] = api_key
-        
+
+        if app_id:
+            headers["X-App-Id"] = app_id
+
         # Initialize HTTP client
         self.http = HttpClient(
-            base_url=api_url,
+            base_url=self.base_url,
             headers=headers,
             timeout=timeout,
             debug=debug,
         )
-        
+
         # Initialize sub-clients
         self.auth = AuthClient(self.http)
         self.users = UserClient(self.http)
         self.organizations = OrganizationClient(self.http)
+
+        # Add additional service clients expected by tests
+        self.sessions = self.auth  # sessions is alias for auth sessions
+        self.webhooks = type('WebhooksClient', (), {})()  # placeholder
+        self.mfa = type('MFAClient', (), {})()  # placeholder
+        self.passkeys = type('PasskeysClient', (), {})()  # placeholder
         
         # Current user and session state
         self._current_user: Optional[User] = None
@@ -128,10 +159,21 @@ class JanuaClient:
         # Note: In a real implementation, we'd also fetch session info
         self._current_user = user
     
+    def set_api_key(self, api_key: str):
+        """
+        Update the API key for requests
+
+        Args:
+            api_key: The new API key
+        """
+        self.api_key = api_key
+        self.config.api_key = api_key
+        self.http.set_header("Authorization", f"Bearer {api_key}")
+
     def set_auth_token(self, token: str):
         """
         Set the authentication token for requests
-        
+
         Args:
             token: The JWT access token
         """

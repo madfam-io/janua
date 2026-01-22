@@ -19,8 +19,17 @@ router.include_router(core_router)
 # router.include_router(roles_router, prefix="/{org_id}/roles")
 
 # Export schemas and dependencies for external use
-from .schemas import *
-from .dependencies import *
+from .schemas import (  # noqa: F401
+    OrganizationCreateRequest,
+    OrganizationUpdateRequest,
+    OrganizationResponse,
+    OrganizationDetailResponse,
+)
+from .dependencies import (  # noqa: F401
+    check_organization_permission,
+    check_organization_admin_permission,
+    check_organization_member_permission,
+)
 
 __all__ = [
     "router",

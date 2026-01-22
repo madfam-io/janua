@@ -2,6 +2,8 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import cors from 'cors';
+import csrf from 'csurf';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import dotenv from 'dotenv';
 import { JanuaClient } from '@janua/typescript-sdk';
@@ -20,13 +22,34 @@ const janua = new JanuaClient({
 
 // Middleware
 app.use(helmet({
-  contentSecurityPolicy: false, // Disable for dev
+  // CSP enabled with sensible defaults for dev
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", process.env.JANUA_API_URL || 'http://localhost:8000'],
+    },
+  },
 }));
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '../public')));
+
+// Rate limiting for auth-related routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// CSRF protection for form submissions
+const csrfProtection = csrf({ cookie: true });
 
 // View engine setup
 app.set('view engine', 'ejs');
@@ -43,11 +66,11 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/signup', (req, res) => {
-  res.render('signup', { title: 'Sign Up', error: null });
+app.get('/signup', csrfProtection, (req, res) => {
+  res.render('signup', { title: 'Sign Up', error: null, csrfToken: req.csrfToken() });
 });
 
-app.post('/signup', async (req, res) => {
+app.post('/signup', authLimiter, csrfProtection, async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
@@ -63,19 +86,21 @@ app.post('/signup', async (req, res) => {
     res.cookie('user', JSON.stringify(result.user));
 
     res.redirect('/dashboard');
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Signup failed';
     res.render('signup', {
       title: 'Sign Up',
-      error: error.message || 'Signup failed'
+      error: errorMessage,
+      csrfToken: req.csrfToken()
     });
   }
 });
 
-app.get('/login', (req, res) => {
-  res.render('login', { title: 'Login', error: null });
+app.get('/login', csrfProtection, (req, res) => {
+  res.render('login', { title: 'Login', error: null, csrfToken: req.csrfToken() });
 });
 
-app.post('/login', async (req, res) => {
+app.post('/login', authLimiter, csrfProtection, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -90,10 +115,12 @@ app.post('/login', async (req, res) => {
     res.cookie('user', JSON.stringify(result.user));
 
     res.redirect('/dashboard');
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Login failed';
     res.render('login', {
       title: 'Login',
-      error: error.message || 'Login failed'
+      error: errorMessage,
+      csrfToken: req.csrfToken()
     });
   }
 });
@@ -111,7 +138,7 @@ app.get('/dashboard', (req, res) => {
   });
 });
 
-app.get('/profile', (req, res) => {
+app.get('/profile', csrfProtection, (req, res) => {
   const user = req.cookies.user ? JSON.parse(req.cookies.user) : null;
 
   if (!user) {
@@ -122,11 +149,12 @@ app.get('/profile', (req, res) => {
     title: 'Profile',
     user,
     success: null,
-    error: null
+    error: null,
+    csrfToken: req.csrfToken()
   });
 });
 
-app.post('/profile', async (req, res) => {
+app.post('/profile', authLimiter, csrfProtection, async (req, res) => {
   const user = req.cookies.user ? JSON.parse(req.cookies.user) : null;
 
   if (!user) {
@@ -148,19 +176,22 @@ app.post('/profile', async (req, res) => {
       title: 'Profile',
       user: updatedUser,
       success: 'Profile updated successfully',
-      error: null
+      error: null,
+      csrfToken: req.csrfToken()
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Update failed';
     res.render('profile', {
       title: 'Profile',
       user,
       success: null,
-      error: error.message || 'Update failed'
+      error: errorMessage,
+      csrfToken: req.csrfToken()
     });
   }
 });
 
-app.get('/security', (req, res) => {
+app.get('/security', csrfProtection, (req, res) => {
   const user = req.cookies.user ? JSON.parse(req.cookies.user) : null;
 
   if (!user) {
@@ -173,11 +204,12 @@ app.get('/security', (req, res) => {
     mfaQrCode: null,
     backupCodes: null,
     success: null,
-    error: null
+    error: null,
+    csrfToken: req.csrfToken()
   });
 });
 
-app.post('/security/mfa/enable', async (req, res) => {
+app.post('/security/mfa/enable', authLimiter, csrfProtection, async (req, res) => {
   const user = req.cookies.user ? JSON.parse(req.cookies.user) : null;
 
   if (!user) {
@@ -198,21 +230,24 @@ app.post('/security/mfa/enable', async (req, res) => {
       mfaQrCode: mfaSetup.qr_code,
       backupCodes: mfaSetup.backup_codes,
       success: 'MFA enabled. Scan the QR code with your authenticator app.',
-      error: null
+      error: null,
+      csrfToken: req.csrfToken()
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to enable MFA';
     res.render('security', {
       title: 'Security Settings',
       user,
       mfaQrCode: null,
       backupCodes: null,
       success: null,
-      error: error.message || 'Failed to enable MFA'
+      error: errorMessage,
+      csrfToken: req.csrfToken()
     });
   }
 });
 
-app.post('/security/mfa/verify', async (req, res) => {
+app.post('/security/mfa/verify', authLimiter, csrfProtection, async (req, res) => {
   const user = req.cookies.user ? JSON.parse(req.cookies.user) : null;
 
   if (!user) {
@@ -234,21 +269,24 @@ app.post('/security/mfa/verify', async (req, res) => {
       mfaQrCode: null,
       backupCodes: null,
       success: 'MFA verified successfully',
-      error: null
+      error: null,
+      csrfToken: req.csrfToken()
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'MFA verification failed';
     res.render('security', {
       title: 'Security Settings',
       user,
       mfaQrCode: null,
       backupCodes: null,
       success: null,
-      error: error.message || 'MFA verification failed'
+      error: errorMessage,
+      csrfToken: req.csrfToken()
     });
   }
 });
 
-app.post('/security/password/change', async (req, res) => {
+app.post('/security/password/change', authLimiter, csrfProtection, async (req, res) => {
   const user = req.cookies.user ? JSON.parse(req.cookies.user) : null;
 
   if (!user) {
@@ -270,21 +308,24 @@ app.post('/security/password/change', async (req, res) => {
       mfaQrCode: null,
       backupCodes: null,
       success: 'Password changed successfully',
-      error: null
+      error: null,
+      csrfToken: req.csrfToken()
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Password change failed';
     res.render('security', {
       title: 'Security Settings',
       user,
       mfaQrCode: null,
       backupCodes: null,
       success: null,
-      error: error.message || 'Password change failed'
+      error: errorMessage,
+      csrfToken: req.csrfToken()
     });
   }
 });
 
-app.get('/passkey/register', (req, res) => {
+app.get('/passkey/register', csrfProtection, (req, res) => {
   const user = req.cookies.user ? JSON.parse(req.cookies.user) : null;
 
   if (!user) {
@@ -295,11 +336,12 @@ app.get('/passkey/register', (req, res) => {
     title: 'Passkey Registration',
     user,
     success: null,
-    error: null
+    error: null,
+    csrfToken: req.csrfToken()
   });
 });
 
-app.post('/passkey/register/options', async (req, res) => {
+app.post('/passkey/register/options', authLimiter, csrfProtection, async (req, res) => {
   try {
     const accessToken = req.cookies.access_token;
 
@@ -308,12 +350,13 @@ app.post('/passkey/register/options', async (req, res) => {
     );
 
     res.json(options);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to get registration options' });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get registration options';
+    res.status(500).json({ error: errorMessage });
   }
 });
 
-app.post('/passkey/register/verify', async (req, res) => {
+app.post('/passkey/register/verify', authLimiter, csrfProtection, async (req, res) => {
   try {
     const { credential } = req.body;
     const accessToken = req.cookies.access_token;
@@ -324,8 +367,9 @@ app.post('/passkey/register/verify', async (req, res) => {
     );
 
     res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Passkey registration failed' });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Passkey registration failed';
+    res.status(500).json({ error: errorMessage });
   }
 });
 
