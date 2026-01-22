@@ -9,6 +9,7 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {

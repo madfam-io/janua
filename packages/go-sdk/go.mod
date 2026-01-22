@@ -1,4 +1,4 @@
-module github.com/madfam-io/janua/go-sdk
+module github.com/madfam-org/janua/packages/go-sdk
 
 go 1.23.0
 

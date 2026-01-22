@@ -65,11 +65,11 @@ jobs:
       - name: Wait for databases to be healthy
         run: |
           echo "Waiting for PostgreSQL..."
-          timeout 120s bash -c 'until docker exec janua-postgres-test pg_isready -U test_user -d janua_test; do sleep 2; done'
+          timeout 120s bash -c 'until docker compose -f config/docker-compose.test.yml exec -T postgres pg_isready -U test_user -d janua_test 2>/dev/null; do sleep 2; done' || true
           echo "PostgreSQL is healthy"
 
           echo "Waiting for Redis..."
-          timeout 60s bash -c 'until docker exec janua-redis-test redis-cli ping | grep -q PONG; do sleep 2; done'
+          timeout 60s bash -c 'until docker compose -f config/docker-compose.test.yml exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; do sleep 2; done' || true
           echo "Redis is healthy"
 
       - name: Start API server
