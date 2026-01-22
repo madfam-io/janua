@@ -500,7 +500,6 @@ class EnterpriseReadinessValidator:
                 category["score"] += 25
 
         # Test concurrent request handling
-        import asyncio
         import aiohttp
 
         async def make_request(session):

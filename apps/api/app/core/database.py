@@ -10,7 +10,8 @@ import structlog
 try:
     from app.config import settings
 except Exception as e:
-    print(f"Failed to import settings: {e}")
+    import logging
+    logging.getLogger(__name__).error("Failed to import settings: %s", e)
     raise
 
 logger = structlog.get_logger()
@@ -142,8 +143,10 @@ try:
         autoflush=False
     )
 except Exception as e:
-    print(f"Failed to create database engine: {e}")
-    print(f"DATABASE_URL: {getattr(settings, 'DATABASE_URL', 'NOT SET')}")
+    import logging
+    _db_logger = logging.getLogger(__name__)
+    _db_logger.error("Failed to create database engine: %s", e)
+    _db_logger.error("DATABASE_URL: %s", getattr(settings, 'DATABASE_URL', 'NOT SET'))
     raise
 
 

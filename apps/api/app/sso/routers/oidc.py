@@ -23,7 +23,7 @@ class OIDCDiscoveryRequest(BaseModel):
     force_refresh: bool = Field(False, description="Force refresh cached configuration")
 
     @validator("issuer")
-    def validate_issuer(cls, v):  # noqa: N805 - pydantic validators use cls
+    def validate_issuer(cls, v):  # noqa: N805 - Pydantic validators use cls
         if not v.startswith(("http://", "https://")):
             raise ValueError("Issuer must be a valid HTTP/HTTPS URL")
         return v.rstrip("/")
@@ -36,7 +36,7 @@ class OIDCDiscoveryFromURLRequest(BaseModel):
     force_refresh: bool = Field(False, description="Force refresh cached configuration")
 
     @validator("discovery_url")
-    def validate_url(cls, v):  # noqa: N805 - pydantic validators use cls
+    def validate_url(cls, v):  # noqa: N805 - Pydantic validators use cls
         if not v.startswith(("http://", "https://")):
             raise ValueError("Discovery URL must be a valid HTTP/HTTPS URL")
         if "/.well-known/openid-configuration" not in v:
@@ -58,7 +58,7 @@ class OIDCProviderSetupRequest(BaseModel):
     enabled: bool = Field(True, description="Enable provider")
 
     @validator("issuer", "redirect_uri")
-    def validate_urls(cls, v):  # noqa: N805 - pydantic validators use cls
+    def validate_urls(cls, v):  # noqa: N805 - Pydantic validators use cls
         if not v.startswith(("http://", "https://")):
             raise ValueError("URL must be valid HTTP/HTTPS URL")
         return v

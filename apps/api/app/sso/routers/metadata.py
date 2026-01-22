@@ -30,7 +30,7 @@ class SPMetadataRequest(BaseModel):
     authn_requests_signed: bool = Field(True, description="Sign authentication requests")
 
     @validator("contact_email")
-    def validate_email(cls, v):  # noqa: N805 - pydantic validators use cls
+    def validate_email(cls, v):  # noqa: N805 - Pydantic validators use cls
         if v and "@" not in v:
             raise ValueError("Invalid email address")
         return v
@@ -43,7 +43,7 @@ class IdPMetadataUpload(BaseModel):
     validate_certificates: bool = Field(True, description="Validate IdP certificates")
 
     @validator("metadata_xml")
-    def validate_xml(cls, v):  # noqa: N805 - pydantic validators use cls
+    def validate_xml(cls, v):  # noqa: N805 - Pydantic validators use cls
         if not v.strip().startswith("<?xml") and not v.strip().startswith("<"):
             raise ValueError("Invalid XML format")
         return v

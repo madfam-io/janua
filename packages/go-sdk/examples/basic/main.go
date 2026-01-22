@@ -10,6 +10,15 @@ import (
 	"github.com/madfam-org/go-sdk/models"
 )
 
+// maskSecret masks a secret string, showing only the first few characters
+// This is a security best practice to avoid exposing secrets in logs or output
+func maskSecret(secret string, showChars int) string {
+	if len(secret) <= showChars {
+		return "***"
+	}
+	return secret[:showChars] + "***"
+}
+
 func main() {
 	// Initialize the Janua client
 	client := janua.New(janua.Config{
@@ -90,8 +99,10 @@ func main() {
 	if err != nil {
 		log.Printf("Enable MFA failed: %v", err)
 	} else {
-		fmt.Printf("MFA Secret: %s\n", mfaSetup.Secret)
-		fmt.Printf("QR Code: %s\n", mfaSetup.QRCode[:50]+"...")
+		// SECURITY: Never log full MFA secrets - they are sensitive credentials
+		// In production, display the secret only in the authenticator app setup UI
+		fmt.Printf("MFA Secret: %s (masked for security)\n", maskSecret(mfaSetup.Secret, 4))
+		fmt.Printf("QR Code available: %v\n", len(mfaSetup.QRCode) > 0)
 		fmt.Printf("Recovery codes: %d\n", len(mfaSetup.RecoveryCodes))
 	}
 

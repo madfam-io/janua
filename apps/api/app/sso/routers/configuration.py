@@ -55,13 +55,13 @@ class SSOProviderCreate(BaseModel):
     enabled: bool = Field(True, description="Enable this provider")
 
     @validator("protocol")
-    def validate_protocol(cls, v):  # noqa: N805 - pydantic validators use cls
+    def validate_protocol(cls, v):  # noqa: N805 - Pydantic validators use cls
         if v.lower() not in ["saml", "oidc"]:
             raise ValueError('Protocol must be either "saml" or "oidc"')
         return v.lower()
 
     @validator("saml_metadata_xml")
-    def validate_saml_metadata(cls, v, values):  # noqa: N805 - pydantic validators use cls
+    def validate_saml_metadata(cls, v, values):  # noqa: N805 - Pydantic validators use cls
         """Validate SAML metadata if provided."""
         if v and values.get("protocol") == "saml":
             # Basic XML validation

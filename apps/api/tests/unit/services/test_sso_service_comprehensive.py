@@ -10,6 +10,7 @@ Expected to cover 231 lines in app/services/sso_service.py
 
 import pytest
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 from uuid import uuid4
 from unittest.mock import MagicMock, patch
 import xml.etree.ElementTree as ET
@@ -54,12 +55,12 @@ class TestSAMLIntegration:
     def setup_method(self):
         """Setup for each test."""
         from unittest.mock import AsyncMock
-        
+
         # Create mock dependencies
         mock_db = AsyncMock()
         mock_cache = AsyncMock()
         mock_jwt_service = AsyncMock()
-        
+
         self.service = SSOService(mock_db, mock_cache, mock_jwt_service)
 
     @pytest.mark.asyncio
@@ -153,6 +154,9 @@ class TestSAMLIntegration:
         result = await self.service.generate_saml_metadata(entity_id, acs_url)
 
         assert result["metadata_xml"] is not None
+        # Note: These are XML content checks for SAML metadata structure,
+        # not URL security validation. The entity_id and acs_url are
+        # configuration values embedded in the XML response.
         assert entity_id in result["metadata_xml"]
         assert acs_url in result["metadata_xml"]
 
@@ -166,12 +170,12 @@ class TestOIDCIntegration:
     def setup_method(self):
         """Setup for each test."""
         from unittest.mock import AsyncMock
-        
+
         # Create mock dependencies
         mock_db = AsyncMock()
         mock_cache = AsyncMock()
         mock_jwt_service = AsyncMock()
-        
+
         self.service = SSOService(mock_db, mock_cache, mock_jwt_service)
 
     @pytest.mark.asyncio
@@ -197,7 +201,10 @@ class TestOIDCIntegration:
             result = await self.service.initiate_oidc_login("azure_ad", provider_config)
 
             assert result["auth_url"] is not None
-            assert "login.microsoftonline.com" in result["auth_url"]
+            # Use proper URL parsing to validate the auth URL host
+            parsed_auth_url = urlparse(result["auth_url"])
+            assert parsed_auth_url.netloc == "login.microsoftonline.com"
+            assert parsed_auth_url.scheme == "https"
             assert result["state"] is not None
             assert result["protocol"] == "oidc"
 
@@ -303,12 +310,12 @@ class TestIdentityProviderManagement:
     def setup_method(self):
         """Setup for each test."""
         from unittest.mock import AsyncMock
-        
+
         # Create mock dependencies
         mock_db = AsyncMock()
         mock_cache = AsyncMock()
         mock_jwt_service = AsyncMock()
-        
+
         self.service = SSOService(mock_db, mock_cache, mock_jwt_service)
 
     @pytest.mark.asyncio
@@ -430,12 +437,12 @@ class TestUserProvisioning:
     def setup_method(self):
         """Setup for each test."""
         from unittest.mock import AsyncMock
-        
+
         # Create mock dependencies
         mock_db = AsyncMock()
         mock_cache = AsyncMock()
         mock_jwt_service = AsyncMock()
-        
+
         self.service = SSOService(mock_db, mock_cache, mock_jwt_service)
 
     @pytest.mark.asyncio
@@ -520,12 +527,12 @@ class TestJustInTimeProvisioning:
     def setup_method(self):
         """Setup for each test."""
         from unittest.mock import AsyncMock
-        
+
         # Create mock dependencies
         mock_db = AsyncMock()
         mock_cache = AsyncMock()
         mock_jwt_service = AsyncMock()
-        
+
         self.service = SSOService(mock_db, mock_cache, mock_jwt_service)
 
     @pytest.mark.asyncio
@@ -589,12 +596,12 @@ class TestSessionManagement:
     def setup_method(self):
         """Setup for each test."""
         from unittest.mock import AsyncMock
-        
+
         # Create mock dependencies
         mock_db = AsyncMock()
         mock_cache = AsyncMock()
         mock_jwt_service = AsyncMock()
-        
+
         self.service = SSOService(mock_db, mock_cache, mock_jwt_service)
 
     @pytest.mark.asyncio
@@ -675,12 +682,12 @@ class TestErrorHandling:
     def setup_method(self):
         """Setup for each test."""
         from unittest.mock import AsyncMock
-        
+
         # Create mock dependencies
         mock_db = AsyncMock()
         mock_cache = AsyncMock()
         mock_jwt_service = AsyncMock()
-        
+
         self.service = SSOService(mock_db, mock_cache, mock_jwt_service)
 
     @pytest.mark.asyncio

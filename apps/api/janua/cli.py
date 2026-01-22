@@ -174,10 +174,16 @@ async def create_user(email: str, password: Optional[str] = None, admin: bool = 
         if not password:
             password = getpass.getpass("Enter password: ")
 
+        # Validate password meets minimum requirements (security check without exposing value)
+        if len(password) < 8:
+            print("Error: Password must be at least 8 characters")
+            sys.exit(1)
+
         # TODO: Implement with proper database session and AuthService
         # Placeholder message until full implementation
         print(f"Creating user: {email} (admin={admin}, org={org})")
-        print(f"Password length: {len(password)} characters")
+        # Security: Do not log password length or any password-related information
+        print("Password validated successfully")
         print("Note: User creation functionality needs database session implementation")
 
     except Exception as e:
@@ -232,33 +238,33 @@ async def check_health():
     try:
         settings = get_settings()
 
-        print("🔍 Janua Health Check")
+        print("Janua Health Check")
         print("=" * 50)
 
         # Check configuration
-        print(f"✅ Configuration loaded")
+        print("Configuration loaded")
         print(f"   Environment: {settings.ENVIRONMENT}")
         print(f"   App Name: {settings.APP_NAME}")
 
         # Check database connection
         try:
             # This would need proper database connection check
-            print(f"✅ Database connection configured")
+            print("Database connection configured")
             print(f"   URL: {settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else 'configured'}")
         except Exception as e:
-            print(f"❌ Database connection failed: {e}")
+            print(f"Database connection failed: {e}")
 
         # Check Redis connection
         try:
-            print(f"✅ Redis connection configured")
+            print("Redis connection configured")
             print(f"   URL: {settings.REDIS_URL}")
         except Exception as e:
-            print(f"❌ Redis connection failed: {e}")
+            print(f"Redis connection failed: {e}")
 
-        print("\n✅ Health check completed")
+        print("\nHealth check completed")
 
     except Exception as e:
-        print(f"❌ Health check failed: {e}")
+        print(f"Health check failed: {e}")
         sys.exit(1)
 
 

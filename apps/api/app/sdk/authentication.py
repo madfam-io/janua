@@ -40,19 +40,19 @@ class TokenStorage(Protocol):
 
     async def store_token(self, token_type: TokenType, token: str, expires_at: Optional[datetime] = None) -> None:
         """Store a token securely."""
-        ...  # Protocol method - implementation provided by concrete classes
+        ...  # noqa: B018 - Protocol method stub, implementation in concrete classes
 
     async def get_token(self, token_type: TokenType) -> Optional[str]:
         """Retrieve a stored token."""
-        ...  # Protocol method - implementation provided by concrete classes
+        ...  # noqa: B018 - Protocol method stub, implementation in concrete classes
 
     async def remove_token(self, token_type: TokenType) -> None:
         """Remove a token from storage."""
-        ...  # Protocol method - implementation provided by concrete classes
+        ...  # noqa: B018 - Protocol method stub, implementation in concrete classes
 
     async def clear_all_tokens(self) -> None:
         """Clear all stored tokens."""
-        ...  # Protocol method - implementation provided by concrete classes
+        ...  # noqa: B018 - Protocol method stub, implementation in concrete classes
 
 
 class InMemoryTokenStorage:

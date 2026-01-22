@@ -346,7 +346,6 @@ class PerformanceTestUtils:
     @staticmethod
     async def load_test_endpoint(client: AsyncClient, endpoint: str, concurrent_requests: int = 10):
         """Simple load test for endpoint"""
-        import asyncio
 
         async def make_request():
             return await client.get(endpoint)

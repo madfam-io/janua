@@ -6,7 +6,7 @@ import base64
 import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 
@@ -40,6 +40,30 @@ from ..config import settings
 from ..exceptions import AuthenticationError, ValidationError
 from .cache import CacheService
 from .jwt_service import JWTService
+
+
+def _is_microsoft_oidc_endpoint(url: str) -> bool:
+    """
+    Securely validate if a URL is a Microsoft OIDC endpoint.
+
+    Uses proper URL parsing to prevent subdomain bypass attacks.
+    For example, "login.microsoftonline.com.attacker.com" would fail validation.
+
+    Args:
+        url: The URL to validate
+
+    Returns:
+        True if the URL is a valid Microsoft OIDC endpoint
+    """
+    try:
+        parsed = urlparse(url)
+        # Validate scheme is https and host is exactly login.microsoftonline.com
+        return (
+            parsed.scheme == "https" and
+            parsed.netloc == "login.microsoftonline.com"
+        )
+    except Exception:
+        return False
 
 
 class SSOService:
@@ -674,8 +698,9 @@ class SSOService:
         # Check if we need to discover endpoints
         if "discovery_url" in provider_config:
             # For testing, use the discovery URL to generate authorization endpoint
+            # Use secure URL parsing to validate the discovery URL host
             discovery_url = provider_config["discovery_url"]
-            if "login.microsoftonline.com" in discovery_url:
+            if _is_microsoft_oidc_endpoint(discovery_url):
                 auth_url = "https://login.microsoftonline.com/oauth2/v2.0/authorize"
             else:
                 auth_url = provider_config.get("authorization_url", "https://provider.com/auth")

@@ -282,15 +282,15 @@ class NotificationStrategy(Protocol):
 
     async def send(self, request: NotificationRequest) -> bool:
         """Send notification using this strategy"""
-        ...  # Protocol method - implementation provided by concrete classes
+        ...  # noqa: B018 - Protocol method stub, implementation in concrete classes
 
     async def validate_config(self, config: Dict[str, Any]) -> bool:
         """Validate channel configuration for this strategy"""
-        ...  # Protocol method - implementation provided by concrete classes
+        ...  # noqa: B018 - Protocol method stub, implementation in concrete classes
 
     def get_channel_type(self) -> str:
         """Get supported channel type"""
-        ...  # Protocol method - implementation provided by concrete classes
+        ...  # noqa: B018 - Protocol method stub, implementation in concrete classes
 
 
 class AbstractNotificationStrategy(ABC):
