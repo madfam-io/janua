@@ -518,7 +518,7 @@ class WebhookOrchestrator {
   public async processEvent(event: any): Promise<void> {
     const promises = [];
 
-    for (const [name, config] of this.webhooks) {
+    for (const [_name, config] of this.webhooks) {
       if (this.shouldSendToWebhook(event.type, config.events)) {
         promises.push(this.sendWithRetry(event, config));
       }

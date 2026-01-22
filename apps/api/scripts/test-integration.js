@@ -7,14 +7,13 @@
  * that doesn't require complex Jest configuration.
  */
 
-const { exec } = require('child_process');
-const { promisify } = require('util');
 const fs = require('fs').promises;
 const path = require('path');
-// Note: os module is available for future use if needed
+// Note: exec/promisify and os module are available for future use if needed
+// const { exec } = require('child_process');
+// const { promisify } = require('util');
+// const execAsync = promisify(exec);
 // const os = require('os');
-
-const execAsync = promisify(exec);
 
 // Colors for console output
 const colors = {

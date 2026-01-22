@@ -1,12 +1,12 @@
 module github.com/madfam-io/janua/go-sdk
 
-go 1.22
+go 1.23.0
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2 // CVE-2025-30204 fix
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	golang.org/x/oauth2 v0.25.0 // CVE-2025-22868 fix
+	golang.org/x/oauth2 v0.27.0 // CVE-2025-22868 fix
 )
 
 require (

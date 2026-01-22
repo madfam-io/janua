@@ -2,6 +2,8 @@
 Migration API endpoints for data portability and user migration
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,7 +91,7 @@ async def create_migration_job(
 ):
     """
     Create a new migration job
-    
+
     Requires admin privileges.
     """
     try:
@@ -103,10 +105,13 @@ async def create_migration_job(
             options=job_request.options
         )
         return result
-        
+
     except Exception as e:
-        logger.error(f"Failed to create migration job: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to create migration job")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create migration job. Please contact support."
+        )
 
 
 @router.get("/jobs", response_model=List[MigrationJobResponse])
@@ -118,7 +123,7 @@ async def list_migration_jobs(
 ):
     """
     List migration jobs
-    
+
     Requires admin privileges.
     """
     try:
@@ -132,7 +137,7 @@ async def list_migration_jobs(
 
         result = await db.execute(stmt)
         jobs = result.scalars().all()
-        
+
         return [
             MigrationJobResponse(
                 id=str(job.id),
@@ -152,10 +157,13 @@ async def list_migration_jobs(
             )
             for job in jobs
         ]
-        
+
     except Exception as e:
-        logger.error(f"Failed to list migration jobs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to list migration jobs")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to list migration jobs. Please contact support."
+        )
 
 
 @router.get("/jobs/{job_id}", response_model=MigrationJobResponse)
@@ -166,14 +174,14 @@ async def get_migration_job(
 ):
     """
     Get migration job details
-    
+
     Requires admin privileges.
     """
     try:
         job = await db.get(MigrationJob, job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Migration job not found")
-        
+
         return MigrationJobResponse(
             id=str(job.id),
             name=job.name,
@@ -190,10 +198,15 @@ async def get_migration_job(
             created_at=job.created_at.isoformat(),
             updated_at=job.updated_at.isoformat()
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to get migration job: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to get migration job")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to get migration job. Please contact support."
+        )
 
 
 @router.post("/jobs/{job_id}/start")
@@ -205,7 +218,7 @@ async def start_migration_job(
 ):
     """
     Start migration job with real-time progress streaming
-    
+
     Returns Server-Sent Events (SSE) stream with progress updates.
     """
     async def generate_progress():
@@ -216,11 +229,12 @@ async def start_migration_job(
                 batch_size=batch_size
             ):
                 yield f"data: {json.dumps(progress)}\n\n"
-                
+
         except Exception as e:
-            error_response = {"type": "error", "error": str(e)}
+            logger.exception("Migration job failed")
+            error_response = {"type": "error", "error": "Migration failed. Please contact support."}
             yield f"data: {json.dumps(error_response)}\n\n"
-    
+
     return StreamingResponse(
         generate_progress(),
         media_type="text/plain",
@@ -240,28 +254,33 @@ async def delete_migration_job(
 ):
     """
     Delete migration job
-    
+
     Requires admin privileges.
     """
     try:
         job = await db.get(MigrationJob, job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Migration job not found")
-        
+
         if job.status == MigrationStatus.IN_PROGRESS:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot delete job while migration is in progress"
             )
-        
+
         await db.delete(job)
         await db.commit()
-        
+
         return {"message": "Migration job deleted successfully"}
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to delete migration job: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to delete migration job")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete migration job. Please contact support."
+        )
 
 
 @router.get("/jobs/{job_id}/logs")
@@ -274,7 +293,7 @@ async def get_migration_logs(
 ):
     """
     Get migration job logs
-    
+
     Requires admin privileges.
     """
     try:
@@ -287,7 +306,7 @@ async def get_migration_logs(
 
         result = await db.execute(stmt.limit(limit))
         logs = result.scalars().all()
-        
+
         return [
             {
                 "id": str(log.id),
@@ -299,10 +318,13 @@ async def get_migration_logs(
             }
             for log in logs
         ]
-        
+
     except Exception as e:
-        logger.error(f"Failed to get migration logs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to get migration logs")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to get migration logs. Please contact support."
+        )
 
 
 @router.get("/jobs/{job_id}/users")
@@ -316,7 +338,7 @@ async def get_migrated_users(
 ):
     """
     Get migrated users for a job
-    
+
     Requires admin privileges.
     """
     try:
@@ -329,7 +351,7 @@ async def get_migrated_users(
 
         result = await db.execute(stmt.offset(offset).limit(limit))
         users = result.scalars().all()
-        
+
         return [
             {
                 "id": str(user.id),
@@ -346,10 +368,13 @@ async def get_migrated_users(
             }
             for user in users
         ]
-        
+
     except Exception as e:
-        logger.error(f"Failed to get migrated users: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to get migrated users")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to get migrated users. Please contact support."
+        )
 
 
 @router.get("/templates", response_model=List[Dict[str, Any]])
@@ -360,7 +385,7 @@ async def list_migration_templates(
 ):
     """
     List migration templates
-    
+
     Requires admin privileges.
     """
     try:
@@ -371,7 +396,7 @@ async def list_migration_templates(
 
         result = await db.execute(stmt)
         templates = result.scalars().all()
-        
+
         return [
             {
                 "id": str(template.id),
@@ -386,10 +411,13 @@ async def list_migration_templates(
             }
             for template in templates
         ]
-        
+
     except Exception as e:
-        logger.error(f"Failed to list migration templates: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to list migration templates")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to list migration templates. Please contact support."
+        )
 
 
 @router.post("/export")
@@ -402,27 +430,30 @@ async def export_data(
 ):
     """
     Export organization or user data for portability
-    
+
     Requires admin privileges.
     """
     try:
         # Create export job in background
         export_id = str(uuid.uuid4())
-        
+
         background_tasks.add_task(
             _process_data_export,
             db, export_id, export_request, organization_id, str(current_user.id)
         )
-        
+
         return {
             "export_id": export_id,
             "status": "processing",
             "message": "Data export started. You will be notified when complete."
         }
-        
+
     except Exception as e:
-        logger.error(f"Failed to start data export: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to start data export")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to start data export. Please contact support."
+        )
 
 
 async def _process_data_export(
@@ -437,17 +468,17 @@ async def _process_data_export(
         # Implementation would collect and export data
         # This is a placeholder for the actual export logic
         logger.info(f"Processing data export {export_id}")
-        
+
         # Simulate export processing
         await asyncio.sleep(5)
-        
+
         # Update export status in database
         # In real implementation, would create DataExport record
-        
+
         logger.info(f"Data export {export_id} completed")
-        
+
     except Exception as e:
-        logger.error(f"Data export {export_id} failed: {e}")
+        logger.exception(f"Data export {export_id} failed")
 
 
 @router.get("/providers")

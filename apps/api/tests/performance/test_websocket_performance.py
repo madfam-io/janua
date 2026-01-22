@@ -401,7 +401,8 @@ class TestWebSocketConcurrentConnections:
             error_rate = (len(metrics.errors) / connection_count) * 100
             assert error_rate < 10, f"Error rate too high: {error_rate:.2f}%"
 
-            # Check performance
+            # Check performance - initialize with default values
+            connection_stats: Dict[str, float] = {"p99": 0.0}
             if metrics.connection_times:
                 connection_stats = metrics.get_stats(metrics.connection_times)
                 assert connection_stats["p99"] * 1000 < PERF_CONFIG["latency_thresholds"]["p99_ms"]

@@ -39,7 +39,7 @@ export function SAMLConfigForm({
   // SAML configuration
   const [entityId, setEntityId] = React.useState('')
   const [acsUrl, setAcsUrl] = React.useState('')
-  const [sloUrl, setSloUrl] = React.useState('')
+  const [sloUrl, _setSloUrl] = React.useState('')
   const [certificate, setCertificate] = React.useState('')
   const [certificateFile, setCertificateFile] = React.useState<File | null>(null)
 

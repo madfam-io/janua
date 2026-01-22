@@ -200,6 +200,5 @@ def beta_list_users():
             }
             for user in BETA_USERS.values()
         ],
-        "total": len(BETA_USERS),
         "total": len(BETA_USERS)
     }

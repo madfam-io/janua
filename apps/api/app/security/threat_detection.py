@@ -13,6 +13,7 @@ from enum import Enum
 import logging
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from sklearn.ensemble import IsolationForest
 import joblib
 import redis.asyncio as aioredis
@@ -71,6 +72,168 @@ class ThreatEvent:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
+class HTMLTagDetector(HTMLParser):
+    """
+    HTML parser-based detector for malicious tags.
+
+    SECURITY: Uses proper HTML parsing instead of regex to avoid bypasses.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.malicious_tags: List[str] = []
+        self.malicious_attrs: List[Tuple[str, str]] = []
+
+        # Tags that can execute code or load external resources
+        self.dangerous_tags = {
+            'script', 'iframe', 'object', 'embed', 'applet',
+            'form', 'input', 'button', 'link', 'base', 'meta'
+        }
+
+        # Attributes that can execute JavaScript
+        self.dangerous_attrs = {
+            'onload', 'onerror', 'onclick', 'onmouseover', 'onfocus',
+            'onblur', 'onsubmit', 'onreset', 'onchange', 'oninput',
+            'onkeydown', 'onkeyup', 'onkeypress', 'onmousedown', 'onmouseup',
+            'onmouseenter', 'onmouseleave', 'ondrag', 'ondrop', 'formaction',
+            'href', 'src', 'action', 'data', 'xlink:href'
+        }
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]):
+        tag_lower = tag.lower()
+
+        # Check for dangerous tags
+        if tag_lower in self.dangerous_tags:
+            self.malicious_tags.append(tag)
+
+        # Check for dangerous attributes
+        for attr_name, attr_value in attrs:
+            attr_name_lower = attr_name.lower()
+
+            # Check dangerous event handlers
+            if attr_name_lower in self.dangerous_attrs:
+                self.malicious_attrs.append((attr_name, attr_value or ''))
+
+            # Check for javascript: protocol
+            if attr_value and 'javascript:' in attr_value.lower():
+                self.malicious_attrs.append((attr_name, attr_value))
+
+            # Check for data: protocol in src/href
+            if attr_name_lower in ('src', 'href') and attr_value:
+                if attr_value.lower().startswith('data:'):
+                    self.malicious_attrs.append((attr_name, attr_value))
+
+    def has_threats(self) -> bool:
+        return bool(self.malicious_tags or self.malicious_attrs)
+
+    def get_threats(self) -> Dict[str, List]:
+        return {
+            'malicious_tags': self.malicious_tags,
+            'malicious_attrs': self.malicious_attrs
+        }
+
+
+def detect_xss_patterns(content: str) -> List[Dict[str, Any]]:
+    """
+    Detect XSS patterns using proper HTML parsing.
+
+    SECURITY: Uses HTMLParser instead of regex for reliable detection.
+    """
+    threats = []
+
+    try:
+        detector = HTMLTagDetector()
+        detector.feed(content)
+
+        if detector.has_threats():
+            threat_details = detector.get_threats()
+
+            if threat_details['malicious_tags']:
+                threats.append({
+                    'type': 'xss_tag',
+                    'tags': threat_details['malicious_tags'][:5],  # Limit for safety
+                    'confidence': 0.9
+                })
+
+            if threat_details['malicious_attrs']:
+                threats.append({
+                    'type': 'xss_attribute',
+                    'attrs': [a[0] for a in threat_details['malicious_attrs'][:5]],
+                    'confidence': 0.85
+                })
+
+    except Exception as e:
+        # HTML parsing failed - might indicate malformed injection attempt
+        logger.warning(f"HTML parsing failed, potential injection: {type(e).__name__}")
+        threats.append({
+            'type': 'malformed_html',
+            'confidence': 0.6
+        })
+
+    return threats
+
+
+def detect_sql_injection_patterns(content: str) -> List[Dict[str, Any]]:
+    """
+    Detect SQL injection patterns.
+
+    Note: These regex patterns are safe for SQL injection detection (not HTML filtering).
+    """
+    threats = []
+
+    # SQL injection patterns (regex is appropriate here as we're matching SQL syntax, not HTML)
+    sql_patterns = [
+        (r"\bUNION\b.*\bSELECT\b", "union_select"),
+        (r"\bEXEC\b.*\bxp_cmdshell\b", "xp_cmdshell"),
+        (r";\s*DROP\s+TABLE", "drop_table"),
+        (r";\s*DELETE\s+FROM", "delete_from"),
+        (r"--\s*$", "sql_comment"),
+        (r"'\s*OR\s+'[^']*'\s*=\s*'", "or_equals"),
+        (r"'\s*OR\s+1\s*=\s*1", "or_true"),
+        (r"\bWAITFOR\s+DELAY\b", "time_based"),
+        (r"\bBENCHMARK\s*\(", "benchmark"),
+    ]
+
+    content_lower = content.lower()
+
+    for pattern, pattern_type in sql_patterns:
+        if re.search(pattern, content_lower, re.IGNORECASE):
+            threats.append({
+                'type': 'sql_injection',
+                'pattern': pattern_type,
+                'confidence': 0.8
+            })
+
+    return threats
+
+
+def detect_path_traversal_patterns(content: str) -> List[Dict[str, Any]]:
+    """
+    Detect path traversal patterns.
+    """
+    threats = []
+
+    # Path traversal patterns
+    traversal_patterns = [
+        r"\.\./",
+        r"\.\.\\",
+        r"%2e%2e/",
+        r"%2e%2e\\",
+        r"\.\.%2f",
+        r"\.\.%5c",
+    ]
+
+    for pattern in traversal_patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            threats.append({
+                'type': 'path_traversal',
+                'confidence': 0.8
+            })
+            break  # One detection is enough
+
+    return threats
+
+
 class AdvancedThreatDetectionSystem:
     """
     Enterprise-grade threat detection system with:
@@ -80,35 +243,34 @@ class AdvancedThreatDetectionSystem:
     - Integration with threat intelligence feeds
     - Behavioral analysis
     """
-    
+
     def __init__(self, redis_client: Optional[aioredis.Redis] = None):
         self.redis_client = redis_client
-        
+
         # Detection thresholds
         self.failed_login_threshold = 5
         self.failed_login_window = 300  # 5 minutes
         self.request_rate_threshold = 100  # requests per minute
         self.data_access_threshold = 1000  # records per hour
-        
+
         # ML models
         self.anomaly_detector = None
         self._initialize_ml_models()
-        
+
         # Threat intelligence
         self.threat_intel_feeds = []
         self.blocked_ips: Set[str] = set()
-        self.suspicious_patterns: List[re.Pattern] = []
         self._load_threat_intelligence()
-        
+
         # Real-time tracking
         self.active_threats: Dict[str, ThreatEvent] = {}
         self.user_behavior: Dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
         self.ip_reputation: Dict[str, float] = {}
-        
+
         # Start background tasks
         asyncio.create_task(self._threat_monitoring_loop())
         asyncio.create_task(self._update_threat_intelligence())
-    
+
     def _initialize_ml_models(self):
         """Initialize machine learning models for anomaly detection"""
         try:
@@ -121,36 +283,26 @@ class AdvancedThreatDetectionSystem:
                 random_state=42
             )
             # Would need training data in production
-    
+
     def _load_threat_intelligence(self):
         """Load threat intelligence patterns and feeds"""
-        
-        # Known malicious patterns
-        self.suspicious_patterns = [
-            re.compile(r"(<script[^>]*>.*?</script>)", re.IGNORECASE),
-            re.compile(r"(javascript:)", re.IGNORECASE),
-            re.compile(r"(\bUNION\b.*\bSELECT\b)", re.IGNORECASE),
-            re.compile(r"(\.\.\/|\.\.\\\\)"),
-            re.compile(r"(\bEXEC\b.*\bxp_cmdshell\b)", re.IGNORECASE),
-        ]
-        
         # Load IP reputation database
         self._load_ip_reputation()
-    
+
     async def analyze_request(
         self,
         request_data: Dict[str, Any]
     ) -> Tuple[ThreatLevel, List[ThreatIndicator]]:
         """
         Analyze incoming request for threats
-        
+
         Returns:
             Threat level and list of indicators
         """
-        
+
         indicators = []
         threat_scores = []
-        
+
         # Extract request attributes
         ip = request_data.get('ip_address', '')
         user_id = request_data.get('user_id')
@@ -159,7 +311,7 @@ class AdvancedThreatDetectionSystem:
         headers = request_data.get('headers', {})
         body = request_data.get('body', '')
         query_params = request_data.get('query_params', {})
-        
+
         # 1. IP Reputation Check
         ip_threat = await self._check_ip_reputation(ip)
         if ip_threat > 0:
@@ -171,7 +323,7 @@ class AdvancedThreatDetectionSystem:
                 metadata={"reputation_score": ip_threat}
             ))
             threat_scores.append(ip_threat)
-        
+
         # 2. Pattern Matching for Attacks
         pattern_threats = self._detect_attack_patterns(
             f"{path} {body} {json.dumps(query_params)}"
@@ -179,7 +331,7 @@ class AdvancedThreatDetectionSystem:
         for threat in pattern_threats:
             indicators.append(threat)
             threat_scores.append(threat.confidence)
-        
+
         # 3. Rate Limiting Analysis
         rate_threat = await self._analyze_rate_patterns(ip, user_id)
         if rate_threat > 0:
@@ -190,7 +342,7 @@ class AdvancedThreatDetectionSystem:
                 timestamp=datetime.utcnow()
             ))
             threat_scores.append(rate_threat)
-        
+
         # 4. Behavioral Analysis
         if user_id:
             behavior_threat = await self._analyze_user_behavior(
@@ -204,7 +356,7 @@ class AdvancedThreatDetectionSystem:
                     timestamp=datetime.utcnow()
                 ))
                 threat_scores.append(behavior_threat)
-        
+
         # 5. Authentication Attack Detection
         if path in ['/api/v1/auth/signin', '/api/v1/auth/signup']:
             auth_threat = await self._detect_authentication_attacks(
@@ -218,7 +370,7 @@ class AdvancedThreatDetectionSystem:
                     timestamp=datetime.utcnow()
                 ))
                 threat_scores.append(auth_threat)
-        
+
         # 6. Bot Detection
         bot_score = self._detect_bot_activity(headers, request_data)
         if bot_score > 0.5:
@@ -229,14 +381,14 @@ class AdvancedThreatDetectionSystem:
                 timestamp=datetime.utcnow()
             ))
             threat_scores.append(bot_score)
-        
+
         # Calculate overall threat level
         if not threat_scores:
             return ThreatLevel.NONE, indicators
-        
+
         max_score = max(threat_scores)
         avg_score = sum(threat_scores) / len(threat_scores)
-        
+
         if max_score >= 0.9 or avg_score >= 0.7:
             threat_level = ThreatLevel.CRITICAL
         elif max_score >= 0.7 or avg_score >= 0.5:
@@ -247,26 +399,26 @@ class AdvancedThreatDetectionSystem:
             threat_level = ThreatLevel.LOW
         else:
             threat_level = ThreatLevel.NONE
-        
+
         # Create threat event if significant
         if threat_level in [ThreatLevel.HIGH, ThreatLevel.CRITICAL]:
             await self._create_threat_event(
                 threat_level, indicators, request_data
             )
-        
+
         return threat_level, indicators
-    
+
     async def _check_ip_reputation(self, ip: str) -> float:
         """Check IP reputation from multiple sources"""
-        
+
         # Check blocklist
         if ip in self.blocked_ips:
             return 1.0
-        
+
         # Check cached reputation
         if ip in self.ip_reputation:
             return self.ip_reputation[ip]
-        
+
         # Check Redis for distributed reputation
         if self.redis_client:
             reputation = await self.redis_client.get(f"ip_reputation:{ip}")
@@ -274,13 +426,13 @@ class AdvancedThreatDetectionSystem:
                 score = float(reputation)
                 self.ip_reputation[ip] = score
                 return score
-        
+
         # Check if IP is from known bad ranges (TOR, VPN, etc.)
         if self._is_suspicious_ip_range(ip):
             return 0.6
-        
+
         return 0.0
-    
+
     def _is_suspicious_ip_range(self, ip: str) -> bool:
         """Check if IP is from suspicious range"""
         try:
@@ -305,61 +457,69 @@ class AdvancedThreatDetectionSystem:
                 error=str(e),
                 error_type=type(e).__name__
             )
-        
+
         return False
-    
+
     def _detect_attack_patterns(self, content: str) -> List[ThreatIndicator]:
-        """Detect attack patterns in request content"""
-        
+        """
+        Detect attack patterns in request content.
+
+        SECURITY: Uses proper HTML parsing for XSS detection instead of regex.
+        """
         indicators = []
-        
-        for pattern in self.suspicious_patterns:
-            matches = pattern.findall(content)
-            if matches:
-                threat_type = self._identify_pattern_type(pattern)
-                indicators.append(ThreatIndicator(
-                    indicator_type=threat_type,
-                    value=matches[0][:100],  # Truncate for safety
-                    confidence=0.8,
-                    timestamp=datetime.utcnow(),
-                    metadata={"pattern": pattern.pattern}
-                ))
-        
+
+        # Detect XSS using proper HTML parsing
+        xss_threats = detect_xss_patterns(content)
+        for threat in xss_threats:
+            indicators.append(ThreatIndicator(
+                indicator_type="xss_attempt",
+                value=threat.get('type', 'xss')[:100],
+                confidence=threat.get('confidence', 0.8),
+                timestamp=datetime.utcnow(),
+                metadata=threat
+            ))
+
+        # Detect SQL injection
+        sql_threats = detect_sql_injection_patterns(content)
+        for threat in sql_threats:
+            indicators.append(ThreatIndicator(
+                indicator_type="sql_injection",
+                value=threat.get('pattern', 'sql_injection')[:100],
+                confidence=threat.get('confidence', 0.8),
+                timestamp=datetime.utcnow(),
+                metadata=threat
+            ))
+
+        # Detect path traversal
+        traversal_threats = detect_path_traversal_patterns(content)
+        for threat in traversal_threats:
+            indicators.append(ThreatIndicator(
+                indicator_type="path_traversal",
+                value="path_traversal",
+                confidence=threat.get('confidence', 0.8),
+                timestamp=datetime.utcnow(),
+                metadata=threat
+            ))
+
         return indicators
-    
-    def _identify_pattern_type(self, pattern: re.Pattern) -> str:
-        """Identify the type of attack from pattern"""
-        
-        pattern_str = pattern.pattern.lower()
-        
-        if 'script' in pattern_str or 'javascript' in pattern_str:
-            return "xss_attempt"
-        elif 'union' in pattern_str or 'select' in pattern_str:
-            return "sql_injection"
-        elif '..' in pattern_str:
-            return "path_traversal"
-        elif 'exec' in pattern_str or 'cmd' in pattern_str:
-            return "command_injection"
-        else:
-            return "suspicious_pattern"
-    
+
     async def _analyze_rate_patterns(
         self,
         ip: str,
         user_id: Optional[str]
     ) -> float:
         """Analyze request rate patterns for anomalies"""
-        
+
         if not self.redis_client:
             return 0.0
-        
+
         key = f"rate:{ip}:{user_id or 'anon'}"
-        
+
         # Get request count in last minute
         count = await self.redis_client.incr(key)
         if count == 1:
             await self.redis_client.expire(key, 60)
-        
+
         # Calculate threat score based on rate
         if count > self.request_rate_threshold * 2:
             return 0.9
@@ -367,19 +527,19 @@ class AdvancedThreatDetectionSystem:
             return 0.6
         elif count > self.request_rate_threshold * 0.5:
             return 0.3
-        
+
         return 0.0
-    
+
     async def _analyze_user_behavior(
         self,
         user_id: str,
         request_data: Dict[str, Any]
     ) -> float:
         """Analyze user behavior for anomalies"""
-        
+
         # Get user's historical behavior
         behavior = self.user_behavior[user_id]
-        
+
         # Add current request
         behavior.append({
             'timestamp': datetime.utcnow(),
@@ -387,55 +547,55 @@ class AdvancedThreatDetectionSystem:
             'ip': request_data.get('ip_address'),
             'user_agent': request_data.get('headers', {}).get('user-agent')
         })
-        
+
         # Check for anomalies
         anomaly_score = 0.0
-        
+
         # 1. Rapid IP changes
         recent_ips = set(b['ip'] for b in list(behavior)[-10:])
         if len(recent_ips) > 3:
             anomaly_score += 0.3
-        
+
         # 2. Unusual access patterns
         if len(behavior) >= 10:
             recent_paths = [b['path'] for b in list(behavior)[-10:]]
             if self._is_unusual_pattern(recent_paths):
                 anomaly_score += 0.4
-        
+
         # 3. Time-based anomalies
         if self._is_unusual_time(datetime.utcnow(), user_id):
             anomaly_score += 0.2
-        
+
         return min(anomaly_score, 1.0)
-    
+
     def _is_unusual_pattern(self, paths: List[str]) -> bool:
         """Detect unusual access patterns"""
-        
+
         # Check for scanning behavior
         unique_paths = set(paths)
         if len(unique_paths) > 8:  # Many different paths in short time
             return True
-        
+
         # Check for repeated sensitive endpoints
         sensitive_endpoints = ['/admin', '/api/v1/users', '/api/v1/audit']
         sensitive_count = sum(1 for p in paths if any(s in p for s in sensitive_endpoints))
         if sensitive_count > 5:
             return True
-        
+
         return False
-    
+
     def _is_unusual_time(self, timestamp: datetime, user_id: str) -> bool:
         """Check if access time is unusual for user"""
-        
+
         # Simple check - would use ML model in production
         hour = timestamp.hour
-        
+
         # Suspicious hours (3 AM - 5 AM)
         if 3 <= hour <= 5:
             return True
-        
+
         return False
-    
+
     async def _detect_authentication_attacks(
         self,
         ip: str,
@@ -443,18 +603,18 @@ class AdvancedThreatDetectionSystem:
         request_data: Dict[str, Any]
     ) -> float:
         """Detect authentication-specific attacks"""
-        
+
         if not self.redis_client:
             return 0.0
-        
+
         # Track failed login attempts
         if request_data.get('status_code') in [401, 403]:
             key = f"failed_auth:{ip}"
             count = await self.redis_client.incr(key)
-            
+
             if count == 1:
                 await self.redis_client.expire(key, self.failed_login_window)
-            
+
             # Check for brute force
             if count > self.failed_login_threshold * 2:
                 return 0.9
@@ -462,64 +622,64 @@ class AdvancedThreatDetectionSystem:
                 return 0.7
             elif count > self.failed_login_threshold * 0.5:
                 return 0.4
-        
+
         # Check for credential stuffing patterns
         if await self._detect_credential_stuffing(ip):
             return 0.8
-        
+
         return 0.0
-    
+
     async def _detect_credential_stuffing(self, ip: str) -> bool:
         """Detect credential stuffing attacks"""
-        
+
         if not self.redis_client:
             return False
-        
+
         # Check for multiple usernames from same IP
         key = f"auth_users:{ip}"
         users = await self.redis_client.smembers(key)
-        
+
         if len(users) > 10:  # Same IP trying many different accounts
             return True
-        
+
         return False
-    
+
     def _detect_bot_activity(
         self,
         headers: Dict[str, str],
         request_data: Dict[str, Any]
     ) -> float:
         """Detect bot and automated activity"""
-        
+
         score = 0.0
-        
+
         user_agent = headers.get('user-agent', '').lower()
-        
+
         # Check for known bot user agents
         bot_indicators = [
             'bot', 'crawler', 'spider', 'scraper', 'curl', 'wget',
             'python', 'java', 'ruby', 'perl', 'php'
         ]
-        
+
         for indicator in bot_indicators:
             if indicator in user_agent:
                 score += 0.3
                 break
-        
+
         # Check for missing standard headers
         expected_headers = ['user-agent', 'accept', 'accept-language']
         missing = sum(1 for h in expected_headers if h not in headers)
         score += missing * 0.2
-        
+
         # Check for suspicious header combinations
         if 'x-forwarded-for' in headers and 'x-real-ip' in headers:
             score += 0.2
-        
+
         # Check request timing patterns (would use ML in production)
         # For now, just a placeholder
-        
+
         return min(score, 1.0)
-    
+
     async def _create_threat_event(
         self,
         threat_level: ThreatLevel,
@@ -527,12 +687,12 @@ class AdvancedThreatDetectionSystem:
         request_data: Dict[str, Any]
     ):
         """Create and store threat event"""
-        
+
         import uuid
-        
+
         # Determine threat type from indicators
         threat_types = [i.indicator_type for i in indicators]
-        
+
         if 'auth_attack' in threat_types:
             threat_type = ThreatType.BRUTE_FORCE
         elif 'sql_injection' in threat_types:
@@ -543,7 +703,7 @@ class AdvancedThreatDetectionSystem:
             threat_type = ThreatType.DDOS_ATTACK
         else:
             threat_type = ThreatType.SUSPICIOUS_BEHAVIOR
-        
+
         event = ThreatEvent(
             event_id=str(uuid.uuid4()),
             threat_type=threat_type,
@@ -556,13 +716,13 @@ class AdvancedThreatDetectionSystem:
             timestamp=datetime.utcnow(),
             metadata=request_data
         )
-        
+
         # Store event
         self.active_threats[event.event_id] = event
-        
+
         # Take automated response
         await self._respond_to_threat(event)
-        
+
         # Send to Redis for distributed tracking
         if self.redis_client:
             await self.redis_client.setex(
@@ -575,91 +735,91 @@ class AdvancedThreatDetectionSystem:
                     'timestamp': event.timestamp.isoformat()
                 })
             )
-    
+
     async def _respond_to_threat(self, event: ThreatEvent):
         """Automated threat response"""
-        
+
         responses = []
-        
+
         if event.threat_level == ThreatLevel.CRITICAL:
             # Block IP immediately
             await self._block_ip(event.source_ip, duration=3600)
             responses.append("ip_blocked")
-            
+
             # Lock user account if applicable
             if event.user_id:
                 await self._lock_user_account(event.user_id)
                 responses.append("account_locked")
-            
+
             # Alert security team
             await self._send_security_alert(event)
             responses.append("alert_sent")
-        
+
         elif event.threat_level == ThreatLevel.HIGH:
             # Temporary IP block
             await self._block_ip(event.source_ip, duration=600)
             responses.append("ip_temp_blocked")
-            
+
             # Increase monitoring
             await self._increase_monitoring(event.source_ip)
             responses.append("monitoring_increased")
-        
+
         elif event.threat_level == ThreatLevel.MEDIUM:
             # Add to watchlist
             await self._add_to_watchlist(event.source_ip)
             responses.append("added_to_watchlist")
-        
+
         event.response_actions = responses
-    
+
     async def _block_ip(self, ip: str, duration: int):
         """Block an IP address"""
-        
+
         self.blocked_ips.add(ip)
-        
+
         if self.redis_client:
             await self.redis_client.setex(
                 f"blocked_ip:{ip}",
                 duration,
                 "1"
             )
-        
+
         logger.warning(f"Blocked IP {ip} for {duration} seconds")
-    
+
     async def _lock_user_account(self, user_id: str):
         """Lock a user account"""
-        
+
         if self.redis_client:
             await self.redis_client.setex(
                 f"locked_account:{user_id}",
                 3600,  # 1 hour
                 "1"
             )
-        
+
         logger.warning(f"Locked user account {user_id}")
-    
+
     async def _send_security_alert(self, event: ThreatEvent):
         """Send security alert to team"""
-        
+
         # Would integrate with PagerDuty, Slack, etc.
         logger.critical(
             f"SECURITY ALERT: {event.threat_type.value} detected from {event.source_ip}"
         )
-    
+
     async def _increase_monitoring(self, ip: str):
         """Increase monitoring for suspicious IP"""
-        
+
         if self.redis_client:
             await self.redis_client.sadd("high_monitoring_ips", ip)
-    
+
     async def _add_to_watchlist(self, ip: str):
         """Add IP to watchlist"""
-        
+
         if self.redis_client:
             await self.redis_client.sadd("watchlist_ips", ip)
-    
+
     async def _threat_monitoring_loop(self):
         """Background task for continuous threat monitoring"""
-        
+
         while True:
             try:
                 await self._analyze_threat_trends()
@@ -668,36 +828,36 @@ class AdvancedThreatDetectionSystem:
             except Exception as e:
                 logger.error(f"Threat monitoring error: {e}")
                 await asyncio.sleep(120)
-    
+
     async def _analyze_threat_trends(self):
         """Analyze threat trends and patterns"""
-        
+
         if not self.redis_client:
             return
-        
+
         # Get recent threats
         threat_keys = await self.redis_client.keys("threat:*")
-        
+
         if len(threat_keys) > 100:
             # Potential coordinated attack
             logger.warning(f"High threat activity detected: {len(threat_keys)} threats")
-    
+
     async def _cleanup_old_threats(self):
         """Clean up old threat data"""
-        
+
         cutoff = datetime.utcnow() - timedelta(hours=1)
-        
+
         to_remove = []
         for event_id, event in self.active_threats.items():
             if event.timestamp < cutoff:
                 to_remove.append(event_id)
-        
+
         for event_id in to_remove:
             del self.active_threats[event_id]
-    
+
     async def _update_threat_intelligence(self):
         """Update threat intelligence feeds"""
-        
+
         while True:
             try:
                 await self._fetch_threat_feeds()
@@ -705,28 +865,29 @@ class AdvancedThreatDetectionSystem:
             except Exception as e:
                 logger.error(f"Failed to update threat intelligence: {e}")
                 await asyncio.sleep(7200)
-    
+
     async def _fetch_threat_feeds(self):
         """Fetch latest threat intelligence feeds"""
-        
+
         # Would integrate with real threat feeds
         # For example: AbuseIPDB, AlienVault OTX, etc.
-    
+        pass
+
     async def _load_ip_reputation(self):
         """Load IP reputation database"""
-        
+
         # Would load from threat intelligence feeds
         # For now, using sample data
         suspicious_ips = [
             "192.168.1.100",  # Example suspicious IP
         ]
-        
+
         for ip in suspicious_ips:
             self.ip_reputation[ip] = 0.8
-    
+
     async def get_threat_statistics(self) -> Dict[str, Any]:
         """Get current threat statistics"""
-        
+
         stats = {
             "active_threats": len(self.active_threats),
             "blocked_ips": len(self.blocked_ips),
@@ -735,20 +896,20 @@ class AdvancedThreatDetectionSystem:
             "top_source_ips": [],
             "trend": "stable"
         }
-        
+
         for event in self.active_threats.values():
             stats["threat_levels"][event.threat_level.value] += 1
             stats["threat_types"][event.threat_type.value] += 1
-        
+
         # Get top threat sources
         ip_counts = defaultdict(int)
         for event in self.active_threats.values():
             ip_counts[event.source_ip] += 1
-        
+
         stats["top_source_ips"] = sorted(
             ip_counts.items(),
             key=lambda x: x[1],
             reverse=True
         )[:10]
-        
+
         return stats

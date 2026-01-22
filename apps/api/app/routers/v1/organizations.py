@@ -176,7 +176,6 @@ async def check_organization_permission(
             json.loads(cached_org)
             # We still need to query to get the full ORM object for relationships
             # But we can verify it exists first
-            pass  # Continue to DB query for full object
     except Exception:
         pass  # Continue without cache
 

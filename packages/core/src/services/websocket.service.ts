@@ -5,7 +5,8 @@
 
 import { EventEmitter } from 'events';
 import { Server, Socket } from 'socket.io';
-import { createAdapter } from '@socket.io/redis-adapter';
+// Note: createAdapter from @socket.io/redis-adapter is available for Redis scaling
+// import { createAdapter } from '@socket.io/redis-adapter';
 import * as jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 

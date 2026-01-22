@@ -220,13 +220,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         if response:
             response_headers = self._sanitize_headers(dict(response.headers))
 
-        # Response body (if enabled and appropriate)
+        # Response body logging is skipped to avoid complexity
+        # Note: Capturing response body would require custom response handling
         response_body = None
-        if (self.log_response_body and response and
-            response_size > 0 and response_size <= self.max_body_size):
-            # Note: Capturing response body would require custom response handling
-            # For now, response body logging is skipped to avoid complexity
-            pass
 
         # Determine log level based on status code
         if status_code >= 500:

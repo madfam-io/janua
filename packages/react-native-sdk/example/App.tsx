@@ -14,7 +14,6 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
-  Platform,
   Switch,
 } from 'react-native';
 import JanuaClient from '@janua/react-sdk-native';
@@ -198,7 +197,7 @@ const App: React.FC = () => {
         return;
       }
 
-      const result = await janua.auth.enableBiometric();
+      await janua.auth.enableBiometric();
       setBiometricEnabled(true);
       Alert.alert('Success', `${biometryType} authentication enabled!`);
     } catch (error: any) {
