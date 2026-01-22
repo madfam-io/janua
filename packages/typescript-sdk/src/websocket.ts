@@ -371,3 +371,118 @@ export class WebSocket extends EventEmitter<WebSocketEventMap> {
 export function createWebSocketClient(config: WebSocketConfig): WebSocket {
   return new WebSocket(config)
 }
+
+/**
+ * Options for WebSocketClient constructor (alternative signature)
+ */
+export interface WebSocketClientOptions {
+  token?: string
+  autoReconnect?: boolean
+  heartbeatInterval?: number
+  debug?: boolean
+  protocols?: string | string[]
+}
+
+/**
+ * WebSocketClient - Alternative API with (url, options) constructor
+ *
+ * This class provides a more traditional WebSocket client API where the URL
+ * is passed as the first argument and options as the second. It wraps the
+ * WebSocket class internally.
+ */
+export class WebSocketClient extends EventEmitter<WebSocketEventMap> {
+  private ws: WebSocket
+  private subscriptions = new Map<string, (message: unknown) => void>()
+
+  constructor(url: string, options: WebSocketClientOptions = {}) {
+    super()
+
+    this.ws = new WebSocket({
+      url,
+      getAuthToken: options.token ? () => options.token! : undefined,
+      reconnect: options.autoReconnect ?? true,
+      heartbeatInterval: options.heartbeatInterval ?? 30000,
+      debug: options.debug ?? false,
+      protocols: options.protocols,
+    })
+
+    // Forward all events from the underlying WebSocket
+    this.ws.on('connected', (data) => this.emit('connected', data))
+    this.ws.on('disconnected', (data) => this.emit('disconnected', data))
+    this.ws.on('message', (data) => {
+      this.emit('message', data)
+      // Route to channel subscriptions
+      if (data.channel && this.subscriptions.has(data.channel)) {
+        const handler = this.subscriptions.get(data.channel)
+        if (handler) {
+          handler(data.data)
+        }
+      }
+    })
+    this.ws.on('error', (data) => this.emit('error', data))
+    this.ws.on('reconnecting', (data) => this.emit('reconnecting', data))
+    this.ws.on('reconnected', (data) => this.emit('reconnected', data))
+  }
+
+  /**
+   * Connect to the WebSocket server
+   */
+  connect(): Promise<void> {
+    return this.ws.connect()
+  }
+
+  /**
+   * Disconnect from the WebSocket server
+   */
+  disconnect(): Promise<void> {
+    this.ws.disconnect()
+    return Promise.resolve()
+  }
+
+  /**
+   * Subscribe to a channel with a callback
+   */
+  subscribe(channel: string, callback: (message: unknown) => void): Promise<void> {
+    this.subscriptions.set(channel, callback)
+    this.ws.subscribe(channel)
+    return Promise.resolve()
+  }
+
+  /**
+   * Unsubscribe from a channel
+   */
+  unsubscribe(channel: string): Promise<void> {
+    this.subscriptions.delete(channel)
+    this.ws.unsubscribe(channel)
+    return Promise.resolve()
+  }
+
+  /**
+   * Publish a message to a channel
+   */
+  publish(channel: string, data: unknown, event?: string): Promise<void> {
+    this.ws.publish(channel, data, event)
+    return Promise.resolve()
+  }
+
+  /**
+   * Get current connection status
+   */
+  getStatus(): WebSocketStatus {
+    return this.ws.getStatus()
+  }
+
+  /**
+   * Check if connected
+   */
+  isConnected(): boolean {
+    return this.ws.isConnected()
+  }
+
+  /**
+   * Get subscribed channels
+   */
+  getChannels(): string[] {
+    return this.ws.getChannels()
+  }
+}

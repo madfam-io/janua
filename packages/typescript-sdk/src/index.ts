@@ -222,9 +222,10 @@ export type {
 } from './graphql';
 
 // WebSocket exports
-export { WebSocket, createWebSocketClient } from './websocket';
+export { WebSocket, WebSocketClient, createWebSocketClient } from './websocket';
 export type {
   WebSocketConfig,
+  WebSocketClientOptions,
   WebSocketMessage,
   WebSocketEventMap,
   WebSocketStatus,
