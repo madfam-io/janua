@@ -43,6 +43,13 @@ jobs:
 
       - name: Build SDK
         run: |
+          # Always build typescript-sdk first (dependency for other SDKs)
+          if [ "${{ matrix.sdk }}" != "typescript-sdk" ]; then
+            echo "Building typescript-sdk dependency first..."
+            cd packages/typescript-sdk && pnpm build
+            cd ../..
+          fi
+          # Build the target SDK
           cd packages/${{ matrix.sdk }}
           pnpm build
 

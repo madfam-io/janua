@@ -16,6 +16,7 @@
     "build:core": "cd packages/core && npm run build",
     "build:sdk": "cd packages/typescript-sdk && npm run build",
     "build:all": "npm run build:packages && npm run build:react && npm run build:vue && npm run build:python",
+    "build:frontend": "pnpm --filter './apps/*' build",
     "build:react": "cd packages/react-sdk && npm run build",
     "build:vue": "cd packages/vue-sdk && npm run build",
     "build:python": "cd packages/python-sdk && python setup.py sdist bdist_wheel",
