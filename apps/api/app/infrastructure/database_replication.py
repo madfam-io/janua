@@ -331,7 +331,8 @@ class DatabaseReplicationManager:
                               for name in replica_servers if self.servers[name].is_healthy),
                              default=0.0)
 
-        _status = ReplicationStatus(
+        # ReplicationStatus created for status tracking and logging
+        ReplicationStatus(
             primary_server=primary_servers[0] if primary_servers else "none",
             replica_servers=replica_servers,
             total_lag_bytes=total_lag_bytes,

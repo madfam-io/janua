@@ -52,7 +52,7 @@ export function SignUp({
   signInUrl,
   afterSignUp,
   onError,
-  appearance = { theme: 'light' },
+  appearance: _appearance = { theme: 'light' },
   socialProviders = {
     google: true,
     github: true,

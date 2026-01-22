@@ -570,10 +570,8 @@ class ComplianceDashboard:
     ) -> Dict[str, Any]:
         """Get response time metrics for various services"""
 
-        time_window = self._get_time_window(timeframe)
-        datetime.utcnow() - time_window
-
-        # Simplified response time analysis
+        # Note: time_window could be used to query actual performance metrics
+        # For now, simplified response time analysis is returned
         # In production, this would query actual performance metrics
         return {
             "average_response_time": 150,  # milliseconds

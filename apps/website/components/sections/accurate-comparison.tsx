@@ -238,7 +238,7 @@ const StatusIcon = ({ status }: { status: FeatureStatus | string }) => {
 
 export function AccurateComparison() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All')
-  const [showFootnotes, setShowFootnotes] = useState(true)
+  const [_showFootnotes, _setShowFootnotes] = useState(true)
 
   const categories = ['All', ...Array.from(new Set(comparisonData.map(row => row.category)))]
 

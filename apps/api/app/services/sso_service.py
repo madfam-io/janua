@@ -11,18 +11,16 @@ from urllib.parse import urlencode
 import httpx
 
 try:
-    from lxml import etree  # noqa: F401 - used dynamically when SAML_AVAILABLE
-    from onelogin.saml2.auth import OneLogin_Saml2_Auth  # noqa: F401
-    from onelogin.saml2.settings import OneLogin_Saml2_Settings  # noqa: F401
-    from onelogin.saml2.utils import OneLogin_Saml2_Utils  # noqa: F401
+    from lxml import etree
+    from onelogin.saml2.auth import OneLogin_Saml2_Auth
+    from onelogin.saml2.settings import OneLogin_Saml2_Settings  # noqa: F401 - available for type hints
+    from onelogin.saml2.utils import OneLogin_Saml2_Utils  # noqa: F401 - available for type hints
 
     SAML_AVAILABLE = True
 except ImportError:
     SAML_AVAILABLE = False
-    etree = None  # noqa: F841
-    OneLogin_Saml2_Auth = None  # noqa: F841
-    OneLogin_Saml2_Settings = None  # noqa: F841
-    OneLogin_Saml2_Utils = None  # noqa: F841
+    etree = None
+    OneLogin_Saml2_Auth = None
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -753,14 +751,6 @@ class SSOService:
             "provisioned": True,
         }
 
-    async def provision_user_from_oidc(self, userinfo: Dict[str, Any]) -> Dict[str, Any]:
-        """Provision user from OIDC userinfo"""
-        return {
-            "user_id": str(uuid.uuid4()),
-            "email": userinfo.get("email", "user@example.com"),
-            "provisioned": True,
-        }
-
     async def update_user_attributes(
         self, user_id: str, attributes: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -774,25 +764,6 @@ class SSOService:
             "email": sso_data.get("email", "user@example.com"),
             "jit_provisioned": True,
         }
-
-    async def create_sso_session(
-        self, user_id: str, session_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Create SSO session"""
-        session_id = str(uuid.uuid4())
-        return {"session_id": session_id, "user_id": user_id, "created": True}
-
-    async def validate_sso_session(self, session_id: str) -> Dict[str, Any]:
-        """Validate SSO session"""
-        return {"valid": True, "session_id": session_id}
-
-    async def invalidate_sso_session(self, session_id: str) -> Dict[str, Any]:
-        """Invalidate SSO session"""
-        return {"invalidated": True, "session_id": session_id}
-
-    async def initiate_single_logout(self, session_id: str) -> Dict[str, Any]:
-        """Initiate single logout"""
-        return {"logout_initiated": True, "session_id": session_id}
 
     async def handle_saml_error(self, error: Exception) -> Dict[str, Any]:
         """Handle SAML parsing error"""

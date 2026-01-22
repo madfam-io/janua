@@ -5,7 +5,7 @@ import { Label } from '../label'
 import { Card } from '../card'
 import { Badge } from '../badge'
 import { cn } from '../../lib/utils'
-import { parseApiError, formatErrorMessage, AUTH_ERRORS } from '../../lib/error-messages'
+import { parseApiError, formatErrorMessage, AUTH_ERRORS as _AUTH_ERRORS } from '../../lib/error-messages'
 
 export interface MFASetupProps {
   /** Optional custom class name */

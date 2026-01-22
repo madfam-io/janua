@@ -71,7 +71,7 @@ class TestOrganizationMemberService:
         )
         mock_db.refresh.side_effect = lambda x: setattr(x, '__dict__', mock_member.__dict__)
 
-        _result = await service.add_member(
+        await service.add_member(
             organization_id=org_id,
             user_id=user_id,
             role="member",
@@ -124,7 +124,7 @@ class TestOrganizationMemberService:
         )
         mock_db.refresh.side_effect = lambda x: setattr(x, '__dict__', mock_invitation.__dict__)
 
-        _invitation = await service.create_invitation(
+        await service.create_invitation(
             organization_id=org_id,
             email=email,
             role="member",
@@ -222,7 +222,7 @@ class TestWebhookService:
             # Attempt delivery
             event_data = {"event": "user.created", "user_id": str(uuid4())}
 
-            _delivery = await service.send_webhook(
+            await service.send_webhook(
                 endpoint_id=mock_endpoint.id,
                 event_type="user.created",
                 payload=event_data,

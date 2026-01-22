@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@janua/ui'
-import { Zap, Globe, Server, ArrowUp, ArrowDown } from 'lucide-react'
+import { Zap, Globe, Server, ArrowUp, ArrowDown as _ArrowDown } from 'lucide-react'
 import { useDemoFeatures } from '@/hooks/useEnvironment'
 
 interface PerformanceMetric {

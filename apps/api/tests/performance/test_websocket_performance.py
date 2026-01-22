@@ -452,7 +452,7 @@ class TestWebSocketMessageThroughput:
 
             # Send messages at target rate
             while messages_sent < total_messages:
-                _send_time = await client.send_message(
+                await client.send_message(
                     {
                         "id": messages_sent,
                         "timestamp": time.time(),

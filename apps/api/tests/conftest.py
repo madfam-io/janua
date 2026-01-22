@@ -478,10 +478,6 @@ def mock_database_dependency():
             # - auth.py: db.commit() (sync)
             # - auth_service.py: await db.commit() (async)
 
-            async def _async_noop(*args, **kwargs):
-                """No-op coroutine for async operations"""
-                return None
-
             def populate_object_fields(obj):
                 """Helper to populate required fields on database objects"""
                 from datetime import datetime
@@ -730,10 +726,14 @@ except ImportError:
 
 # Import all fixtures from fixtures package (Week 1 Foundation Sprint)
 # Enable database-dependent fixtures for integration tests
-# noqa: F401, F403 - Star imports needed for pytest fixture discovery
-from tests.fixtures.users import *  # noqa: F401, F403
-from tests.fixtures.organizations import *  # noqa: F401, F403
-from tests.fixtures.sessions import *  # noqa: F401, F403
+# Pytest auto-discovers fixtures via import; we import the modules to register them
+try:
+    from tests.fixtures import users as _users_fixtures  # noqa: F401
+    from tests.fixtures import organizations as _organizations_fixtures  # noqa: F401
+    from tests.fixtures import sessions as _sessions_fixtures  # noqa: F401
+except ImportError:
+    # Fixture modules may not be available in all test environments
+    pass
 
 
 # Export all utilities

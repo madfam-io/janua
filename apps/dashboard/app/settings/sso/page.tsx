@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@janua/ui'
 import { Button } from '@janua/ui'
 import { Badge } from '@janua/ui'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@janua/ui'
+import { Tabs as _Tabs, TabsContent as _TabsContent, TabsList as _TabsList, TabsTrigger as _TabsTrigger } from '@janua/ui'
 import Link from 'next/link'
 import {
   Key,
@@ -141,7 +141,7 @@ export default function SSOSettingsPage() {
     }
   }
 
-  const handleDelete = async (configId: string) => {
+  const _handleDelete = async (configId: string) => {
     if (!confirm('Are you sure you want to delete this SSO configuration?')) return
 
     try {

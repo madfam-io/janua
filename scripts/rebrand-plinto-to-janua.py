@@ -4,7 +4,6 @@ Comprehensive Janua → Janua rebranding script
 Handles case-sensitive replacements across the entire codebase
 """
 
-import re
 from pathlib import Path
 from typing import List, Tuple
 
@@ -117,7 +116,7 @@ def main():
                         remaining_count += 1
                         print(f"  ⚠️  Still contains 'Janua': {file_path.relative_to(root_dir)}")
             except Exception:
-                pass
+                pass  # Skip files that cannot be read (binary, encoding issues, etc.)
 
     if remaining_count == 0:
         print("✅ Verification passed: No 'Janua' references remaining!")

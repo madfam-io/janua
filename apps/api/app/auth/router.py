@@ -19,7 +19,7 @@ try:
 
     AUTH_SERVICE_AVAILABLE = True
 except Exception as e:
-    logger.error(f"Failed to import AuthService: {e}")
+    logger.error("Failed to import AuthService", error_type=type(e).__name__)
     AUTH_SERVICE_AVAILABLE = False
 
 try:
@@ -27,13 +27,23 @@ try:
 
     EMAIL_SERVICE_AVAILABLE = True
 except Exception as e:
-    logger.error(f"Failed to import ResendEmailService: {e}")
+    logger.error("Failed to import ResendEmailService", error_type=type(e).__name__)
     EMAIL_SERVICE_AVAILABLE = False
 from app.models.user import User
 
 logger = structlog.get_logger()
 router = APIRouter()
 security = HTTPBearer()
+
+
+def _redact_email(email: str) -> str:
+    """Redact email address for logging (shows first 2 chars and domain)."""
+    if not email or "@" not in email:
+        return "[redacted]"
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        return f"{local[0]}***@{domain}"
+    return f"{local[:2]}***@{domain}"
 
 
 # Simple status endpoint to verify router is working
@@ -144,9 +154,9 @@ async def signup(
                 await email_service.send_verification_email(
                     to_email=user.email, user_name=user.name, verification_url=verification_url
                 )
-                logger.info(f"Verification email sent to {user.email}")
+                logger.info("Verification email sent", email=_redact_email(user.email))
             except Exception as e:
-                logger.error(f"Failed to send verification email: {e}")
+                logger.error("Failed to send verification email", error_type=type(e).__name__)
                 # Continue with signup even if email fails for beta
         else:
             logger.warning("Email service unavailable - skipping verification email")
@@ -163,7 +173,7 @@ async def signup(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        logger.error("Signup failed", error=str(e))
+        logger.error("Signup failed", error_type=type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Registration failed"
         )
@@ -263,7 +273,7 @@ async def signout(
             user_id = payload.get("sub")
         except (jwt.InvalidTokenError, jwt.DecodeError, Exception) as e:
             # If token parsing fails, still proceed with cleanup
-            logger.debug("Token parsing failed during logout", error=str(e))
+            logger.debug("Token parsing failed during logout", error_type=type(e).__name__)
             user_id = None
 
         # Create session store instance
@@ -288,7 +298,7 @@ async def signout(
         return {"message": "Successfully signed out"}
 
     except Exception as e:
-        logger.error("Signout failed", error=str(e))
+        logger.error("Signout failed", error_type=type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Signout failed"
         )
@@ -420,7 +430,7 @@ async def verify_email(request: VerifyEmailRequest, db=Depends(get_db), redis=De
         if user:
             user.email_verified = True
             await db.commit()
-            logger.info(f"Email verified for user {user.id}")
+            logger.info("Email verified", user_id=str(user.id))
 
         # Send welcome email after verification
         try:
@@ -429,10 +439,10 @@ async def verify_email(request: VerifyEmailRequest, db=Depends(get_db), redis=De
                 to_email=token_info["email"], user_name=token_info.get("user_name")
             )
         except Exception as e:
-            logger.error(f"Failed to send welcome email: {e}")
+            logger.error("Failed to send welcome email", error_type=type(e).__name__)
             # Continue even if welcome email fails
 
-        logger.info(f"Email verification successful for {token_info['email']}")
+        logger.info("Email verification successful", email=_redact_email(token_info['email']))
 
         return {
             "message": "Email verified successfully",
@@ -441,7 +451,7 @@ async def verify_email(request: VerifyEmailRequest, db=Depends(get_db), redis=De
         }
 
     except Exception as e:
-        logger.error(f"Email verification failed: {e}")
+        logger.error("Email verification failed", error_type=type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token"
         )
@@ -472,9 +482,9 @@ async def forgot_password(request: ForgotPasswordRequest, redis=Depends(get_redi
             user_name=request.email.split("@")[0],  # Use email prefix as name
             reset_url=reset_url,
         )
-        logger.info(f"Password reset email sent to {request.email}")
+        logger.info("Password reset email sent", email=_redact_email(request.email))
     except Exception as e:
-        logger.error(f"Failed to send password reset email: {e}")
+        logger.error("Failed to send password reset email", error_type=type(e).__name__)
         # Always return success for security (don't reveal if email exists)
 
     return {"message": "Password reset email sent if account exists"}
@@ -527,7 +537,7 @@ async def reset_password(request: ResetPasswordRequest, db=Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Password reset failed", error=str(e))
+        logger.error("Password reset failed", error_type=type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Password reset failed"
         )
@@ -669,5 +679,5 @@ async def passkey_register(
         }
 
     except Exception as e:
-        logger.error("Passkey registration failed", error=str(e), user_id=str(current_user.id))
+        logger.error("Passkey registration failed", error_type=type(e).__name__, user_id=str(current_user.id))
         raise HTTPException(status_code=400, detail=f"Registration verification failed: {str(e)}")

@@ -176,7 +176,7 @@ async def setup_oidc_provider(
         discovery_config = await discovery_service.discover_configuration(request.issuer)
 
         # Extract provider config (stored for future database persistence)
-        _provider_config = discovery_service.extract_provider_config(
+        discovery_service.extract_provider_config(
             discovery_config=discovery_config,
             client_id=request.client_id,
             client_secret=request.client_secret,

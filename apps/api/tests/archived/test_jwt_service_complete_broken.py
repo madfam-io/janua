@@ -37,13 +37,7 @@ class TestJWTServiceInitialization:
         redis = Mock()
         service = JWTService(db, redis)
 
-        # Mock existing key data
-        _key_data = {
-            'kid': 'test-kid-123',
-            'private_key': 'test-private-key',
-            'public_key': 'test-public-key'
-        }
-
+        # Mock existing key data (used by _load_or_generate_keys internally)
         with patch.object(service, '_load_or_generate_keys') as mock_load:
             mock_load.return_value = None
 

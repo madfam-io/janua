@@ -100,7 +100,7 @@ const decision = await janua.policies.evaluate({
     setTimeout(() => setCopiedCode(null), 2000)
   }
 
-  const runDemo = async (demo: string) => {
+  const runDemo = async (_demo: string) => {
     setIsRunning(true)
     setVerificationTime(null)
     

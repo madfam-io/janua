@@ -4,6 +4,9 @@ import { motion } from 'framer-motion'
 import { Shield, Zap, Globe, Heart, Users, Target } from 'lucide-react'
 import Image from 'next/image'
 
+// Note: Image and team are defined for future use but not currently rendered
+const _Image = Image
+
 export function AboutSection() {
   const values = [
     {
@@ -38,7 +41,7 @@ export function AboutSection() {
     }
   ]
 
-  const team = [
+  const _team = [
     {
       name: 'The Janua Team',
       role: 'Building the future of identity',

@@ -118,8 +118,8 @@ async def oauth_authorize(
     """Initialize OAuth flow for a provider"""
     try:
         # Validate redirect URLs to prevent open redirect vulnerabilities
-        # redirect_to is validated but stored in state for post-auth redirect
-        _validated_redirect_to = validate_redirect_url(redirect_to)
+        # redirect_to is validated (and stored in state for post-auth redirect)
+        validate_redirect_url(redirect_to)
         redirect_uri = validate_redirect_url(redirect_uri)
 
         # Parse provider enum

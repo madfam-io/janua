@@ -8,18 +8,19 @@ from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 try:
-    import numpy as np  # noqa: F401 - used dynamically when ML_AVAILABLE
-    from sklearn.ensemble import IsolationForest  # noqa: F401
-    import user_agents  # noqa: F401
+    import numpy as np
+    from sklearn.ensemble import IsolationForest
+    import user_agents
     ML_AVAILABLE = True
     # Type aliases for when ML is available
     NDArray = np.ndarray
 except ImportError:
     ML_AVAILABLE = False
-    np = None  # noqa: F841
-    IsolationForest = None  # noqa: F841
+    np = None
+    IsolationForest = None
+    user_agents = None
     # Fallback type alias when ML is not available
-    NDArray = Any  # noqa: F841
+    NDArray = Any
 
 from ..models import User, Session
 try:
@@ -57,12 +58,9 @@ class RiskAssessmentService:
     
     def _init_geoip(self):
         """Initialize GeoIP database for location-based risk assessment"""
-        try:
-            # In production, use actual GeoIP2 database
-            # self.geoip_reader = geoip2.database.Reader('/path/to/GeoLite2-City.mmdb')
-            pass
-        except Exception as e:
-            logger.warning(f"GeoIP initialization failed: {e}")
+        # In production, use actual GeoIP2 database
+        # self.geoip_reader = geoip2.database.Reader('/path/to/GeoLite2-City.mmdb')
+        pass
     
     def _init_anomaly_detector(self):
         """Initialize anomaly detection model"""
@@ -744,13 +742,12 @@ class RiskAssessmentService:
                     self._evaluate_condition(cond, context)
                     for cond in conditions['and']
                 )
-            elif 'or' in conditions:
+            if 'or' in conditions:
                 return any(
                     self._evaluate_condition(cond, context)
                     for cond in conditions['or']
                 )
-            else:
-                return self._evaluate_condition(conditions, context)
+            return self._evaluate_condition(conditions, context)
         except Exception:
             return False
     

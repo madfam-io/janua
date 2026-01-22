@@ -160,7 +160,7 @@ class TestTokenCreation:
         mock_result.token_type = "Bearer"
         mock_token_pair.return_value = mock_result
         
-        _result = await jwt_service.create_tokens(
+        await jwt_service.create_tokens(
             identity_id="user-123",
             tenant_id="tenant-456",
             organization_id="org-789"
@@ -180,7 +180,7 @@ class TestTokenCreation:
         mock_token_pair.return_value = mock_result
 
         custom = {"department": "engineering"}
-        _result = await jwt_service.create_tokens(
+        await jwt_service.create_tokens(
             identity_id="user-123",
             tenant_id="tenant-456",
             custom_claims=custom

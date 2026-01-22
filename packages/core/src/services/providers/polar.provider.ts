@@ -26,7 +26,7 @@ import {
   Currency,
   PaymentStatus,
   PaymentProviderInterface,
-  LineItem,
+  LineItem as _LineItem,
   RefundRequest,
   ComplianceCheck
 } from '../../types/payment.types';

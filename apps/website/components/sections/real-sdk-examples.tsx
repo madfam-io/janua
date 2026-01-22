@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { Code2, Copy, Check, Play, Terminal, FileCode, Package } from 'lucide-react'
 import { Button } from '@janua/ui'
 import { Badge } from '@janua/ui'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@janua/ui'
+import { Tabs as _Tabs, TabsContent as _TabsContent, TabsList as _TabsList, TabsTrigger as _TabsTrigger } from '@janua/ui'
 
 interface SDKExample {
   language: string

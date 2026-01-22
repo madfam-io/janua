@@ -165,7 +165,7 @@ async def organization_examples():
             # Invite member
             if orgs:
                 org_id = orgs[0].id
-                _invitation = await client.organizations.invite_member(
+                await client.organizations.invite_member(
                     org_id,
                     OrganizationInviteRequest(
                         email="teammate@example.com",
@@ -351,8 +351,9 @@ def webhook_handler_example():
             # Add your user creation logic here
 
         elif event_type == "user.signed_in":
-            user_data = event_data.get("user", {})
-            session_data = event_data.get("session", {})
+            # Event data contains user and session info
+            # user_data = event_data.get("user", {})
+            # session_data = event_data.get("session", {})
             # Note: In production, avoid logging full IP addresses
             print("User signed in (session created)")
             # Add your sign-in tracking logic here

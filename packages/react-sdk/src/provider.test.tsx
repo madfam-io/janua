@@ -1,6 +1,6 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { provider } from './provider'
+import { provider as _provider } from './provider'
 
 describe('provider', () => {
   it('should render without crashing', () => {

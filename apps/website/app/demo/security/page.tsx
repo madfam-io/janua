@@ -106,13 +106,13 @@ export default function SecurityShowcase() {
     },
   ]
 
-  const handleSessionRevoke = (sessionId: string) => {
+  const _handleSessionRevoke = (_sessionId: string) => {
     setSessionRevoked(true)
     // removed console.log
     setTimeout(() => setSessionRevoked(false), 3000)
   }
 
-  const handleDeviceTrust = (deviceId: string, trusted: boolean) => {
+  const _handleDeviceTrust = (_deviceId: string, _trusted: boolean) => {
     setDeviceTrusted(true)
     // removed console.log
     setTimeout(() => setDeviceTrusted(false), 3000)

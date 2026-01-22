@@ -37,7 +37,7 @@ export function SystemHealth() {
   const [metrics, setMetrics] = useState<HealthMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [_lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const fetchMetrics = async () => {
     try {

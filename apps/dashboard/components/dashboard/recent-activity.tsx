@@ -1,6 +1,6 @@
 'use client'
 
-import { Avatar } from '@radix-ui/react-avatar'
+import { Avatar as _Avatar } from '@radix-ui/react-avatar'
 import { useState, useEffect } from 'react'
 import { apiCall } from '@/lib/auth'
 

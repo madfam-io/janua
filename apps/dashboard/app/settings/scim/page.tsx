@@ -17,7 +17,7 @@ import {
   XCircle,
   AlertCircle,
   Loader2,
-  Key,
+  Key as _Key,
   RotateCcw,
 } from 'lucide-react'
 import { apiCall } from '../../../lib/auth'

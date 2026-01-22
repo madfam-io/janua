@@ -1,7 +1,3 @@
-import pytest
-
-pytestmark = pytest.mark.asyncio
-
 """
 Comprehensive tests for enterprise features
 Testing multi-tenancy, RBAC, SCIM, audit logging, and webhooks
@@ -44,10 +40,9 @@ audit_logger = None
 webhook_dispatcher = None
 
 try:
-    from app.core.test_config import TestDataFactory, TestUtils  # noqa: F401
+    from app.core.test_config import TestDataFactory, TestUtils
 except ImportError:
-    TestDataFactory = None  # noqa: F841
-    TestUtils = None  # noqa: F841
+    pass  # Test utilities not available; tests will skip or fail appropriately
 
 
 class TestTenantContext:
@@ -264,10 +259,8 @@ class TestSCIMIntegration:
         await db_session.commit()
 
         # Simulate SCIM token (in production, would be validated)
-        _headers = {
-            "Authorization": "Bearer scim-token-123",
-            "Content-Type": "application/json"
-        }
+        # SCIM headers would be used for actual endpoint calls
+        # scim_headers = {"Authorization": "Bearer scim-token-123", "Content-Type": "application/json"}
 
         # SCIM user creation payload
         scim_user = {
@@ -293,13 +286,6 @@ class TestSCIMIntegration:
 
         # Note: This would normally go through the SCIM router
         # but we're testing the logic directly
-
-        # Verify SCIM resource was created
-        scim_resource = await db_session.execute(
-            select(SCIMResource).where(
-                SCIMResource.organization_id == org.id
-            )
-        )
 
         # For this test, we'll create the resource manually
         user = User(

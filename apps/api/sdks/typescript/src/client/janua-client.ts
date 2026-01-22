@@ -8,7 +8,7 @@
 import { BaseAPIClient } from './base-client';
 import {
   ClientConfig,
-  RequestOptions,
+  RequestOptions as _RequestOptions,
   SDKDataResponse,
   SDKListResponse,
   SDKSuccessResponse,

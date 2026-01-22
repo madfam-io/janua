@@ -49,7 +49,7 @@ export function PasswordReset({
 }: PasswordResetProps) {
   const [step, setStep] = React.useState(initialStep)
   const [email, setEmail] = React.useState(initialEmail)
-  const [token, setToken] = React.useState(initialToken || '')
+  const [token, _setToken] = React.useState(initialToken || '')
   const [newPassword, setNewPassword] = React.useState('')
   const [confirmPassword, setConfirmPassword] = React.useState('')
   const [isLoading, setIsLoading] = React.useState(false)

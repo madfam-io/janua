@@ -7,7 +7,7 @@
 
 import type { HttpClient } from './http-client';
 import type { UUID, ISODateString } from './types';
-import { ValidationError } from './errors';
+import { ValidationError as _ValidationError } from './errors';
 import { ValidationUtils } from './utils';
 
 // ========================================

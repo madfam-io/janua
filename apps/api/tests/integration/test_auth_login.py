@@ -253,8 +253,8 @@ async def test_login_case_insensitive_email(integration_client: AsyncClient, tes
         json=login_data_mixed
     )
 
-    # Try login with lowercase email
-    _response_lower = await integration_client.post(
+    # Try login with lowercase email (tests email normalization)
+    await integration_client.post(
         "/api/v1/auth/signin",
         json=login_data_upper
     )

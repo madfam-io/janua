@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Cloud, Shield, Users, Settings, Zap, Database, Lock, BarChart3 } from 'lucide-react'
+import { ArrowRight, Cloud, Shield as _Shield, Users, Settings, Zap, Database, Lock, BarChart3 } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'SaaS Authentication | Janua',

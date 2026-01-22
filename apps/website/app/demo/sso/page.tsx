@@ -14,7 +14,7 @@ import { januaClient } from '@/lib/janua-client'
 export default function SSOShowcasePage() {
   const [activeTab, setActiveTab] = React.useState('providers')
   const [selectedProvider, setSelectedProvider] = React.useState<any | null>(null)
-  const [showProviderForm, setShowProviderForm] = React.useState(false)
+  const [_showProviderForm, setShowProviderForm] = React.useState(false)
   const [showSAMLConfig, setShowSAMLConfig] = React.useState(false)
   const [showTestConnection, setShowTestConnection] = React.useState(false)
 

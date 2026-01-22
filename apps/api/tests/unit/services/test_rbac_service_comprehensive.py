@@ -502,9 +502,8 @@ class TestUserPermissions:
                 return Mock(filter=Mock(return_value=user_result))
             elif model == OrganizationMember:
                 return Mock(filter=Mock(return_value=member_result))
-            else:  # RBACPolicy
-                return Mock(filter=Mock(return_value=policy_result))
-            return Mock()
+            # RBACPolicy or other models
+            return Mock(filter=Mock(return_value=policy_result))
 
         mock_db.query.side_effect = query_side_effect
 
@@ -528,7 +527,7 @@ class TestPolicyCRUD:
             mock_policy = Mock()
             mock_policy_class.return_value = mock_policy
 
-            _policy = await rbac_service.create_policy(
+            await rbac_service.create_policy(
                 organization_id=org_id,
                 name="Test Policy",
                 permission="custom:action",

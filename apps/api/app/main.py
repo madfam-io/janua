@@ -20,7 +20,7 @@ try:
 
         bcrypt.hashpw = _patched_hashpw
 except ImportError:
-    pass
+    pass  # bcrypt not installed, passlib will use fallback implementation
 
 
 from fastapi import FastAPI, HTTPException, Request
@@ -488,16 +488,14 @@ redis_url = os.getenv("REDIS_URL", settings.REDIS_URL if hasattr(settings, "REDI
 if redis_url or settings.ENVIRONMENT != "test":
     # Only enable in non-test environments or when Redis is available
     # Tests handle rate limiting via mocks in conftest.py
-    rate_limit_middleware_instance = create_rate_limit_middleware(app, redis_url)
+    create_rate_limit_middleware(app, redis_url)
 
 # Add COMPREHENSIVE INPUT VALIDATION for all endpoints
 # This provides defense-in-depth against injection attacks and malformed input
 if settings.ENVIRONMENT != "test":
     # Disable strict validation in test environment to avoid test complexity
     # Tests verify validation logic in unit tests
-    _input_validation_middleware_instance = create_input_validation_middleware(
-        app, strict_mode=not settings.DEBUG
-    )
+    create_input_validation_middleware(app, strict_mode=not settings.DEBUG)
 
 # Add tenant context middleware for multi-tenancy
 app.add_middleware(TenantMiddleware)

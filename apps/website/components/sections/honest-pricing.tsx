@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, X, AlertCircle, Users, Zap, Shield, Code2, HelpCircle } from 'lucide-react'
+import { Check, X, AlertCircle, Users as _Users, Zap as _Zap, Shield as _Shield, Code2 as _Code2, HelpCircle } from 'lucide-react'
 import { Button } from '@janua/ui'
 import { Badge } from '@janua/ui'
 import Link from 'next/link'

@@ -196,7 +196,7 @@ export function ComparisonSection() {
 
           {/* Table Body */}
           <div className="bg-white dark:bg-gray-800 rounded-b-xl">
-            {metrics.map((category, categoryIndex) => (
+            {metrics.map((category, _categoryIndex) => (
               <div key={category.category}>
                 {/* Category Header */}
                 <div className="px-4 py-2 bg-gray-100 dark:bg-gray-700/50">

@@ -224,16 +224,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         response_body = None
         if (self.log_response_body and response and
             response_size > 0 and response_size <= self.max_body_size):
-            try:
-                # Note: This would require custom response handling to capture body
-                # For now, we'll skip response body logging to avoid complexity
-                pass
-            except Exception as e:
-                structured_logger.warning(
-                    "Failed to read response body for logging",
-                    correlation_id=correlation_id,
-                    error=str(e)
-                )
+            # Note: Capturing response body would require custom response handling
+            # For now, response body logging is skipped to avoid complexity
+            pass
 
         # Determine log level based on status code
         if status_code >= 500:
@@ -330,12 +323,11 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         """Classify request performance tier"""
         if duration_ms < 100:
             return "fast"
-        elif duration_ms < 500:
+        if duration_ms < 500:
             return "normal"
-        elif duration_ms < 1000:
+        if duration_ms < 1000:
             return "slow"
-        else:
-            return "very_slow"
+        return "very_slow"
 
 
 class DatabaseLoggingMixin:

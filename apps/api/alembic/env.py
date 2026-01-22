@@ -17,7 +17,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import application components
 from app.config import settings
 from app.core.database import Base
-from app.models import *  # noqa: F401, F403 - Import all models to ensure they're registered
+# Import all models to register them with SQLAlchemy metadata for Alembic migrations
+# Using explicit model imports is not practical here as Alembic needs all models registered
+import app.models  # noqa: F401 - ensures all models are registered with Base.metadata
 
 # Alembic Config object
 config = context.config

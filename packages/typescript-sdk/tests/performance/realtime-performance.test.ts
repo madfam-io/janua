@@ -9,7 +9,7 @@
  * - Connection stability
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll as _beforeAll, afterAll as _afterAll } from 'vitest';
 import { JanuaClient } from '../../src/index';
 import { WebSocketClient } from '../../src/websocket';
 
@@ -208,6 +208,10 @@ describe('WebSocket Performance Tests', () => {
         });
 
         const connectPromise = new Promise<void>((resolve, reject) => {
+          if (!client) {
+            reject(new Error('Client not initialized'));
+            return;
+          }
           client.on('connected', () => {
             const connectionTime = Date.now() - startTime;
             metrics.recordConnectionTime(connectionTime);
@@ -266,6 +270,10 @@ describe('WebSocket Performance Tests', () => {
         });
 
         const connectPromise = new Promise<void>((resolve, reject) => {
+          if (!client) {
+            reject(new Error('Client not initialized'));
+            return;
+          }
           client.on('connected', () => {
             const connectionTime = Date.now() - startTime;
             metrics.recordConnectionTime(connectionTime);
@@ -330,6 +338,10 @@ describe('WebSocket Performance Tests', () => {
           });
 
           const connectPromise = new Promise<void>((resolve, reject) => {
+            if (!client) {
+              reject(new Error('Client not initialized'));
+              return;
+            }
             client.on('connected', () => {
               const connectionTime = Date.now() - startTime;
               metrics.recordConnectionTime(connectionTime);
@@ -392,6 +404,10 @@ describe('WebSocket Performance Tests', () => {
 
       // Wait for connection
       await new Promise<void>((resolve, reject) => {
+        if (!client) {
+          reject(new Error('Client not initialized'));
+          return;
+        }
         client.on('connected', () => resolve());
         client.on('error', (error: unknown) => {
           reject(error instanceof Error ? error : new Error(String(error)));
@@ -474,6 +490,10 @@ describe('WebSocket Performance Tests', () => {
       clients.push(client);
 
       await new Promise<void>((resolve, reject) => {
+        if (!client) {
+          reject(new Error('Client not initialized'));
+          return;
+        }
         client.on('connected', () => resolve());
         client.on('error', (error: unknown) => {
           reject(error instanceof Error ? error : new Error(String(error)));
@@ -551,17 +571,19 @@ describe('WebSocket Performance Tests', () => {
       let pongCount = 0;
       const latencies: number[] = [];
 
-      client.on('connected', () => {
-        metrics.recordConnectionTime(0);
-      });
+      if (client) {
+        client.on('connected', () => {
+          metrics.recordConnectionTime(0);
+        });
 
-      client.on('disconnected', () => {
-        metrics.recordError('disconnect', 'Unexpected disconnection');
-      });
+        client.on('disconnected', () => {
+          metrics.recordError('disconnect', 'Unexpected disconnection');
+        });
 
-      client.on('reconnecting', (attempt: number) => {
-        metrics.recordError('reconnect', `Reconnection attempt ${attempt}`);
-      });
+        client.on('reconnecting', (attempt: number) => {
+          metrics.recordError('reconnect', `Reconnection attempt ${attempt}`);
+        });
+      }
 
       // Mock ping/pong mechanism
       let pingIntervalHandle: ReturnType<typeof setInterval> | null = setInterval(() => {
@@ -580,6 +602,10 @@ describe('WebSocket Performance Tests', () => {
       }, pingIntervalMs);
 
       await new Promise<void>((resolve, reject) => {
+        if (!client) {
+          reject(new Error('Client not initialized'));
+          return;
+        }
         client.on('connected', () => resolve());
         client.on('error', (error: unknown) => {
           reject(error instanceof Error ? error : new Error(String(error)));
@@ -628,6 +654,10 @@ describe('WebSocket Performance Tests', () => {
         });
 
         await new Promise<void>((resolve, reject) => {
+          if (!client) {
+            reject(new Error('Client not initialized'));
+            return;
+          }
           client.on('connected', () => resolve());
           client.on('error', (error: unknown) => {
             reject(error instanceof Error ? error : new Error(String(error)));

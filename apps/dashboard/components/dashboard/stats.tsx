@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@janua/ui'
+import { Card, CardContent, CardDescription as _CardDescription, CardHeader, CardTitle } from '@janua/ui'
 import { Users, Shield, Key, Activity, TrendingUp, TrendingDown } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { apiCall } from '@/lib/auth'

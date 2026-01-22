@@ -281,7 +281,7 @@ class TestOIDCDiscoveryEdgeCases:
                 return_value=mock_response
             )
 
-            _config = await service.discover_configuration("https://example.com/")
+            await service.discover_configuration("https://example.com/")
 
             # Should have normalized to remove trailing slash
             call_url = mock_client.return_value.__aenter__.return_value.get.call_args[0][0]

@@ -183,9 +183,7 @@ class RBACEngine:
     ) -> Optional[OrganizationMember]:
         """Get user's membership in organization"""
 
-        # TODO: Implement Redis cache using this key
-        _cache_key = f"membership:{user_id}:{organization_id}"
-
+        # TODO: Implement Redis cache using key: f"membership:{user_id}:{organization_id}"
         # Check cache first
         # In production, implement Redis cache
 

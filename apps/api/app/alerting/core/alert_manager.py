@@ -204,7 +204,7 @@ class AlertManager:
             try:
                 await self.evaluation_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when task is cancelled during graceful shutdown
 
         logger.info("Alert monitoring stopped")
 

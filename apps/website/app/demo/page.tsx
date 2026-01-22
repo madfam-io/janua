@@ -8,9 +8,9 @@ import {
   Users,
   FileCheck,
   UserCircle,
-  Lock,
-  Mail,
-  Fingerprint,
+  Lock as _Lock,
+  Mail as _Mail,
+  Fingerprint as _Fingerprint,
   Key
 } from 'lucide-react'
 

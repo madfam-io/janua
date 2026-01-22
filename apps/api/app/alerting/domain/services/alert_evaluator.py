@@ -45,14 +45,14 @@ class EvaluationResult:
 
 class MetricsProvider(Protocol):
     """Protocol for metric data providers"""
-    
+
     async def get_metric_value(self, metric_name: str, window_seconds: int) -> Optional[float]:
         """Get current metric value for evaluation"""
-        ...
-    
+        ...  # Protocol method - implementation provided by concrete classes
+
     async def get_metric_context(self, metric_name: str, window_seconds: int) -> Dict[str, any]:
         """Get additional context for the metric"""
-        ...
+        ...  # Protocol method - implementation provided by concrete classes
 
 
 class RuleEvaluationHistory:

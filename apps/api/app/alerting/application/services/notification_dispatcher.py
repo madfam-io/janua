@@ -120,8 +120,8 @@ class NotificationDispatcher:
             try:
                 await self._processing_task
             except asyncio.CancelledError:
-                pass
-        
+                pass  # Expected when task is cancelled during graceful shutdown
+
         logger.info("Notification processing stopped")
     
     async def send_alert_notifications(self, alert: Alert, rule: AlertRule, notification_type: str = "alert") -> List[NotificationRequest]:

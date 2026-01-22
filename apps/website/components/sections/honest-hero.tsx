@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowRight, Zap, Shield, Code2, GitBranch, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
+import { ArrowRight, Zap, Shield as _Shield, Code2, GitBranch, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
 import { Button } from '@janua/ui'
 import { Badge } from '@janua/ui'
 import Link from 'next/link'

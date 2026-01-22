@@ -72,7 +72,7 @@ class AlertManager:
             try:
                 await self.evaluation_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when task is cancelled during graceful shutdown
             logger.info("Alert monitoring stopped")
 
     async def _monitoring_loop(self):
@@ -327,8 +327,9 @@ class AlertManager:
         # Persist to Redis
         if self.redis_client:
             # TODO: Implement Redis persistence for alert rules
-            _rule_key = f"alert_rule:{rule.rule_id}"
+            # Key format: f"alert_rule:{rule.rule_id}"
             # Store rule data - implementation depends on serialization needs
+            pass
 
     async def add_notification_channel(self, channel: NotificationChannel):
         """Add new notification channel"""
@@ -337,8 +338,9 @@ class AlertManager:
         # Persist to Redis
         if self.redis_client:
             # TODO: Implement Redis persistence for notification channels
-            _channel_key = f"notification_channel:{channel.channel_id}"
+            # Key format: f"notification_channel:{channel.channel_id}"
             # Store channel data - implementation depends on serialization needs
+            pass
 
     async def acknowledge_alert(self, alert_id: str, acknowledged_by: str):
         """Acknowledge an alert"""

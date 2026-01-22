@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Mail, MessageCircle, Phone, MapPin, Clock, Users } from 'lucide-react'
+import { ArrowRight, Mail, MessageCircle, Phone as _Phone, MapPin, Clock, Users } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Contact Us | Janua',

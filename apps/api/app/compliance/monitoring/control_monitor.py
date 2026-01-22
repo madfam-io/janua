@@ -210,7 +210,8 @@ class ControlMonitor:
                 try:
                     cpu_usage = psutil.cpu_percent(interval=1)
                     memory = psutil.virtual_memory()
-                    _disk = psutil.disk_usage('/')
+                    # Disk usage check - could be expanded for disk monitoring
+                    psutil.disk_usage('/')
 
                     evidence.append(f"System monitoring active - CPU: {cpu_usage}%, Memory: {memory.percent}%")
 

@@ -10,7 +10,7 @@ import {
   RefreshCw,
   CheckCircle2,
   XCircle,
-  MoreHorizontal,
+  MoreHorizontal as _MoreHorizontal,
   Send,
   Trash2,
   Copy,

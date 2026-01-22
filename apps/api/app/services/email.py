@@ -5,6 +5,17 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _redact_email(email: str) -> str:
+    """Redact email address for logging (shows first 2 chars and domain)."""
+    if not email or "@" not in email:
+        return "[redacted]"
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        return f"{local[0]}***@{domain}"
+    return f"{local[:2]}***@{domain}"
+
+
 class EmailService:
     """Email service for sending emails"""
 
@@ -16,7 +27,7 @@ class EmailService:
         user_name: Optional[str] = None
     ) -> bool:
         """Send email verification"""
-        logger.info(f"Sending verification email to {email}")
+        logger.info("Sending verification email to %s", _redact_email(email))
         # Placeholder - would integrate with email provider
         return True
 
@@ -28,7 +39,7 @@ class EmailService:
         user_name: Optional[str] = None
     ) -> bool:
         """Send password reset email"""
-        logger.info(f"Sending password reset email to {email}")
+        logger.info("Sending password reset email to %s", _redact_email(email))
         # Placeholder - would integrate with email provider
         return True
 
@@ -40,7 +51,7 @@ class EmailService:
         redirect_url: Optional[str] = None
     ) -> bool:
         """Send magic link for passwordless login"""
-        logger.info(f"Sending magic link to {email}")
+        logger.info("Sending magic link to %s", _redact_email(email))
         # Placeholder - would integrate with email provider
         return True
 
@@ -51,7 +62,7 @@ class EmailService:
         user_name: Optional[str] = None
     ) -> bool:
         """Send welcome email to new user"""
-        logger.info(f"Sending welcome email to {email}")
+        logger.info("Sending welcome email to %s", _redact_email(email))
         # Placeholder - would integrate with email provider
         return True
 
@@ -64,6 +75,6 @@ class EmailService:
         html: Optional[str] = None
     ) -> bool:
         """Send generic email"""
-        logger.info(f"Sending email to {to}: {subject}")
+        logger.info("Sending email to %s with subject_length=%d", _redact_email(to), len(subject))
         # Placeholder - would integrate with email provider
         return True

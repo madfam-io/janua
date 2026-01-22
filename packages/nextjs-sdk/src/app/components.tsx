@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useAuth, useUser } from './provider';
+import { useAuth, useUser as _useUser } from './provider';
 import type { SignUpRequest, SignInRequest } from '@janua/typescript-sdk';
 
 // SignIn Component

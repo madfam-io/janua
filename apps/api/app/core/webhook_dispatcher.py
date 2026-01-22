@@ -43,7 +43,7 @@ class WebhookDispatcher:
             try:
                 await self._worker_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when task is cancelled during graceful shutdown
             logger.info("Webhook delivery worker stopped")
 
     async def emit_event(
@@ -367,7 +367,7 @@ class WebhookDispatcher:
                 and_(*conditions),
                 or_(
                     WebhookEndpoint.user_id == user_id,
-                    WebhookEndpoint.user_id == None
+                    WebhookEndpoint.user_id.is_(None)
                 )
             ]
 

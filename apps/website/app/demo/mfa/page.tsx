@@ -8,7 +8,7 @@ import { januaClient } from '@/lib/janua-client'
 export default function MFAShowcase() {
   const [setupComplete, setSetupComplete] = useState(false)
   const [challengeVerified, setChallengeVerified] = useState(false)
-  const [backupCodesGenerated, setBackupCodesGenerated] = useState(false)
+  const [_backupCodesGenerated, setBackupCodesGenerated] = useState(false)
 
   // Sample backup codes for demo
   const sampleBackupCodes = [
@@ -33,7 +33,7 @@ export default function MFAShowcase() {
     setTimeout(() => setChallengeVerified(false), 3000)
   }
 
-  const handleBackupCodesDownload = () => {
+  const _handleBackupCodesDownload = () => {
     setBackupCodesGenerated(true)
     // removed console.log
   }

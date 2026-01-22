@@ -2,7 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   const registerButton = document.getElementById('registerPasskeyButton');
-  const statusDiv = document.getElementById('passkeyStatus');
+  const _statusDiv = document.getElementById('passkeyStatus');
 
   if (registerButton) {
     registerButton.addEventListener('click', registerPasskey);

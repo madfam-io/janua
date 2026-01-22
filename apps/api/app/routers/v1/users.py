@@ -306,8 +306,8 @@ async def list_users(
             status_enum = UserStatus(status)
             stmt = stmt.where(User.status == status_enum)
         except ValueError:
-            pass
-    
+            pass  # Invalid status value - ignore filter and return all users
+
     # Get total count
     count_stmt = select(func.count()).select_from(stmt.subquery())
     count_result = await db.execute(count_stmt)

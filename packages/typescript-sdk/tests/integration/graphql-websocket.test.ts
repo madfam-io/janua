@@ -3,7 +3,7 @@
  * Tests real-time communication, subscriptions, and pub/sub functionality
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi as _vi } from 'vitest';
 import { GraphQL } from '../../src/graphql';
 import { WebSocket } from '../../src/websocket';
 import { JanuaClient } from '../../src/client';

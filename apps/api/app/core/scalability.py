@@ -67,7 +67,7 @@ class ResourceMonitor:
             try:
                 await self._monitoring_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when task is cancelled during graceful shutdown
         logger.info("🛑 Resource monitoring stopped")
     
     async def _monitoring_loop(self):
