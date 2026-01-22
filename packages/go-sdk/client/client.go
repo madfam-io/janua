@@ -171,7 +171,8 @@ func (c *Client) request(ctx context.Context, method, path string, body interfac
 
 	var bodyReader io.Reader
 	if body != nil {
-		jsonBody, err := json.Marshal(body)
+		var jsonBody []byte
+		jsonBody, err = json.Marshal(body)
 		if err != nil {
 			return err
 		}
