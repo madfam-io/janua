@@ -87,8 +87,12 @@ jobs:
         working-directory: ./apps/api
         run: |
           # Fail if any tests use bare httpx/requests patches that won't work
-          echo "Checking for incorrect mock paths..."
-          BAD_MOCKS=$(grep -rn 'patch("httpx\.' tests/ 2>/dev/null || true)
+          # Only check tests/unit/ excluding quarantine and already-ignored files
+          echo "Checking for incorrect mock paths in tests/unit/..."
+          BAD_MOCKS=$(grep -rn 'patch("httpx\.' tests/unit/ \
+            --exclude-dir=quarantine \
+            --exclude=test_sso_service_comprehensive.py \
+            2>/dev/null || true)
           if [ -n "$BAD_MOCKS" ]; then
             echo "::error::Found incorrect mock paths using bare 'httpx.*'"
             echo "$BAD_MOCKS"

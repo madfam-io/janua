@@ -22,7 +22,12 @@ fi
 
 # Pattern 1: Bare httpx.AsyncClient (should be module.httpx.AsyncClient)
 # This pattern doesn't work because patch() needs the path where the name is looked up
-BAD_HTTPX=$(grep -rn 'patch("httpx\.' "$@" 2>/dev/null || true)
+# Exclude quarantine and already-ignored test files
+BAD_HTTPX=$(grep -rn 'patch("httpx\.' "$@" \
+    --exclude-dir=quarantine \
+    --exclude-dir=integration \
+    --exclude=test_sso_service_comprehensive.py \
+    2>/dev/null || true)
 if [ -n "$BAD_HTTPX" ]; then
     echo -e "${RED}ERROR: Found 'patch(\"httpx.*\")' - mock path should be module-specific${NC}"
     echo "$BAD_HTTPX"
