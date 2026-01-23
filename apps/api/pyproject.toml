@@ -53,6 +53,7 @@ dependencies = [
     # Authentication & Security
     "python-jose[cryptography]>=3.3.0,<4.0.0",
     "passlib[bcrypt]>=1.7.4,<2.0.0",
+    "bcrypt>=4.0.0,<4.3.0",  # Pin bcrypt for passlib 1.7.x compatibility
     "pyjwt>=2.8.0,<3.0.0",
     "pyotp>=2.9.0,<3.0.0",
     "qrcode>=7.4.0,<8.0.0",
@@ -238,6 +239,7 @@ ignore_missing_imports = true
 minversion = "8.0"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["."]  # Ensure app package is discoverable
 addopts = [
     "--strict-markers",
     "--strict-config",
