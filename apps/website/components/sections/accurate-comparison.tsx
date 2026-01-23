@@ -359,7 +359,7 @@ export function AccurateComparison() {
         </div>
 
         {/* Footnotes */}
-        {showFootnotes && footnotes.length > 0 && (
+        {_showFootnotes && footnotes.length > 0 && (
           <div className="mt-8 p-6 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
             <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-3">
               Important Notes
