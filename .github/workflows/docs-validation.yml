@@ -81,9 +81,11 @@ jobs:
       - name: Find duplicate files
         run: |
           echo "Checking for duplicate filenames..."
+          # Exempt page.mdx (Next.js App Router convention) and README.md (standard docs)
           duplicates=$(find docs apps/docs -name "*.md" -o -name "*.mdx" | \
             xargs -I {} basename {} | \
-            sort | uniq -d)
+            sort | uniq -d | \
+            grep -vE "^(page\.mdx|README\.md)$" || true)
 
           if [ ! -z "$duplicates" ]; then
             echo "::error::Duplicate files found:"
