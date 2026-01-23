@@ -1,0 +1,54 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Python linting and formatting with Ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^apps/api/
+      - id: ruff-format
+        files: ^apps/api/
+
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-json
+        files: \.(json)$
+
+  # Local custom hooks
+  - repo: local
+    hooks:
+      # Detect incorrect mock paths that cause tests to make real HTTP calls
+      - id: detect-bad-mock-paths
+        name: Detect incorrect mock paths
+        entry: scripts/hooks/detect-bad-mocks.sh
+        language: script
+        files: ^apps/api/tests/.*\.py$
+        types: [python]
+
+      # Optional: Run tests for changed test files (can be slow)
+      # Enable by setting JANUA_RUN_TESTS_ON_COMMIT=1
+      - id: pytest-changed
+        name: Run tests for changed files
+        entry: scripts/hooks/pytest-changed.sh
+        language: script
+        files: ^apps/api/tests/.*\.py$
+        pass_filenames: false
+        stages: [manual]  # Only run with: pre-commit run pytest-changed --all-files
+
+# CI configuration
+ci:
+  autofix_prs: true
+  autoupdate_schedule: monthly

@@ -7,6 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)](https://fastapi.tiangolo.com)
 [![Production Ready](https://img.shields.io/badge/status-production%20ready-brightgreen)](https://janua.dev)
+[![Coverage](https://codecov.io/gh/madfam-org/janua/branch/main/graph/badge.svg)](https://codecov.io/gh/madfam-org/janua)
 
 **Website:** [janua.dev](https://janua.dev) | **Docs:** [docs.janua.dev](https://docs.janua.dev) | **Demo:** [demo.janua.dev](https://demo.janua.dev)
 

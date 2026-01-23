@@ -252,7 +252,7 @@ class TestTokenExchange:
             mock_settings.OAUTH_GOOGLE_CLIENT_ID = "client_id"
             mock_settings.OAUTH_GOOGLE_CLIENT_SECRET = "client_secret"
 
-            with patch("httpx.AsyncClient") as mock_client:
+            with patch("app.services.oauth.httpx.AsyncClient") as mock_client:
                 mock_client.return_value.__aenter__.return_value.post = AsyncMock(
                     return_value=mock_response
                 )
@@ -278,7 +278,7 @@ class TestTokenExchange:
             mock_settings.OAUTH_GOOGLE_CLIENT_ID = "client_id"
             mock_settings.OAUTH_GOOGLE_CLIENT_SECRET = "client_secret"
 
-            with patch("httpx.AsyncClient") as mock_client:
+            with patch("app.services.oauth.httpx.AsyncClient") as mock_client:
                 mock_client.return_value.__aenter__.return_value.post = AsyncMock(
                     return_value=mock_response
                 )
@@ -298,7 +298,7 @@ class TestTokenExchange:
             mock_settings.OAUTH_GOOGLE_CLIENT_ID = "client_id"
             mock_settings.OAUTH_GOOGLE_CLIENT_SECRET = "client_secret"
 
-            with patch("httpx.AsyncClient") as mock_client:
+            with patch("app.services.oauth.httpx.AsyncClient") as mock_client:
                 mock_client.return_value.__aenter__.return_value.post = AsyncMock(
                     side_effect=Exception("Network error")
                 )
@@ -336,7 +336,7 @@ class TestUserInfoRetrieval:
             mock_settings.OAUTH_GOOGLE_CLIENT_ID = "client_id"
             mock_settings.OAUTH_GOOGLE_CLIENT_SECRET = "client_secret"
 
-            with patch("httpx.AsyncClient") as mock_client:
+            with patch("app.services.oauth.httpx.AsyncClient") as mock_client:
                 mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                     return_value=mock_response
                 )
@@ -382,7 +382,7 @@ class TestUserInfoRetrieval:
             mock_settings.OAUTH_GITHUB_CLIENT_ID = "client_id"
             mock_settings.OAUTH_GITHUB_CLIENT_SECRET = "client_secret"
 
-            with patch("httpx.AsyncClient") as mock_client:
+            with patch("app.services.oauth.httpx.AsyncClient") as mock_client:
                 mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                     side_effect=[user_response, email_response]
                 )
@@ -408,7 +408,7 @@ class TestUserInfoRetrieval:
             mock_settings.OAUTH_GOOGLE_CLIENT_ID = "client_id"
             mock_settings.OAUTH_GOOGLE_CLIENT_SECRET = "client_secret"
 
-            with patch("httpx.AsyncClient") as mock_client:
+            with patch("app.services.oauth.httpx.AsyncClient") as mock_client:
                 mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                     return_value=mock_response
                 )

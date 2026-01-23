@@ -10,6 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+# Import the oidc module to enable patching of httpx within it
+from app.sso.domain.protocols import oidc as oidc_module
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -394,7 +397,7 @@ class TestOIDCTokenOperations:
             "expires_in": 3600,
         }
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch.object(oidc_module.httpx, "AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(
                 return_value=mock_response
             )
@@ -412,7 +415,7 @@ class TestOIDCTokenOperations:
         mock_response.status_code = 400
         mock_response.text = "invalid_grant"
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch.object(oidc_module.httpx, "AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(
                 return_value=mock_response
             )
@@ -427,7 +430,7 @@ class TestOIDCTokenOperations:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch.object(oidc_module.httpx, "AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(
                 return_value=mock_response
             )
@@ -539,7 +542,7 @@ class TestOIDCSigningKey:
         mock_response.json.return_value = {"keys": [{"kid": "other_key", "kty": "RSA"}]}
         mock_response.raise_for_status = MagicMock()
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch.object(oidc_module.httpx, "AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 return_value=mock_response
             )
