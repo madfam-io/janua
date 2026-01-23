@@ -149,6 +149,16 @@ export class ValidationUtils {
   }
 
   /**
+   * Validate UUID format and throw error if invalid
+   * @throws Error if UUID is invalid
+   */
+  static validateUUID(uuid: string, fieldName: string = 'uuid'): void {
+    if (!this.isValidUuid(uuid)) {
+      throw new Error(`Invalid UUID format for ${fieldName}`);
+    }
+  }
+
+  /**
    * Validate slug format (lowercase letters, numbers, and hyphens only)
    */
   static isValidSlug(slug: string): boolean {

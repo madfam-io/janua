@@ -63,6 +63,9 @@ jobs:
       - name: Run frontend tests
         run: pnpm test:unit
 
+      - name: Build SDK packages
+        run: pnpm build:packages
+
       - name: Build frontend packages
         run: pnpm build:frontend
 
