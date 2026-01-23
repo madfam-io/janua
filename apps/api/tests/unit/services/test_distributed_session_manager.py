@@ -30,7 +30,7 @@ def mock_redis():
     redis.srem = AsyncMock(return_value=1)
     redis.zrem = AsyncMock(return_value=1)
     redis.smembers = AsyncMock(return_value=set())
-    redis.scan = AsyncMock(return_value=(b"0", []))
+    redis.scan = AsyncMock(return_value=(0, []))
     redis.zcard = AsyncMock(return_value=0)
     redis.zrangebyscore = AsyncMock(return_value=[])
     redis.lock = Mock(return_value=AsyncMock())
@@ -231,7 +231,7 @@ class TestSessionValidation:
         """Test validating a valid active session"""
         # Mock Redis scan to return our session
         session_key = f"session:{sample_session_data['session_id']}"
-        mock_redis.scan.return_value = (b"0", [session_key.encode()])
+        mock_redis.scan.return_value = (0, [session_key.encode()])
         mock_redis.get.return_value = json.dumps(sample_session_data).encode()
 
         # Create token that matches hash
@@ -253,7 +253,7 @@ class TestSessionValidation:
         sample_session_data["expires_at"] = (datetime.utcnow() - timedelta(hours=1)).isoformat()
 
         session_key = f"session:{sample_session_data['session_id']}"
-        mock_redis.scan.return_value = (b"0", [session_key.encode()])
+        mock_redis.scan.return_value = (0, [session_key.encode()])
         mock_redis.get.return_value = json.dumps(sample_session_data).encode()
 
         import hashlib
@@ -273,7 +273,7 @@ class TestSessionValidation:
         sample_session_data["status"] = SessionStatus.REVOKED.value
 
         session_key = f"session:{sample_session_data['session_id']}"
-        mock_redis.scan.return_value = (b"0", [session_key.encode()])
+        mock_redis.scan.return_value = (0, [session_key.encode()])
         mock_redis.get.return_value = json.dumps(sample_session_data).encode()
 
         import hashlib
@@ -289,7 +289,7 @@ class TestSessionValidation:
     @pytest.mark.asyncio
     async def test_validate_invalid_token(self, session_manager, mock_redis):
         """Test validating with invalid token"""
-        mock_redis.scan.return_value = (b"0", [])
+        mock_redis.scan.return_value = (0, [])
 
         result = await session_manager.validate_session("invalid_token_xyz")
 
@@ -610,7 +610,7 @@ class TestSessionAnalytics:
         mobile_session = {"session_type": "mobile", "created_at": datetime.utcnow().isoformat()}
 
         session_keys = [b"session:1", b"session:2"]
-        mock_redis.scan.return_value = (b"0", session_keys)
+        mock_redis.scan.return_value = (0, session_keys)
 
         call_count = [0]
 
@@ -631,7 +631,7 @@ class TestSessionAnalytics:
     async def test_analytics_with_no_sessions(self, session_manager, mock_redis):
         """Test analytics with no active sessions"""
         mock_redis.zcard.return_value = 0
-        mock_redis.scan.return_value = (b"0", [])
+        mock_redis.scan.return_value = (0, [])
 
         analytics = await session_manager.get_session_analytics()
 
