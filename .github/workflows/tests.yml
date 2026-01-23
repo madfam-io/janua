@@ -80,6 +80,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://janua:janua_test@localhost:5432/janua_test
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: test-secret-key-do-not-use-in-production
+          PYTHONPATH: ${{ github.workspace }}/apps/api
         run: |
           pytest \
             --cov=app \
