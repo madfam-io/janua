@@ -4,30 +4,30 @@ Compliance service for GDPR, SOC 2, HIPAA, and other frameworks
 
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, text
 
+from app.core.logging import logger
 from app.models import User
 from app.models.compliance import (
+    ComplianceFramework,
+    ComplianceReport,
     ConsentRecord,
-    ConsentType,
     ConsentStatus,
-    LegalBasis,
+    ConsentType,
+    DataBreachIncident,
+    DataCategory,
     DataRetentionPolicy,
     DataSubjectRequest,
     DataSubjectRequestType,
-    RequestStatus,
+    LegalBasis,
     PrivacySettings,
-    DataBreachIncident,
-    ComplianceReport,
-    DataCategory,
-    ComplianceFramework,
+    RequestStatus,
 )
-from app.services.audit_logger import AuditLogger, AuditEventType
-from app.core.logging import logger
+from app.services.audit_logger import AuditEventType, AuditLogger
 
 
 class ConsentService:
@@ -641,7 +641,7 @@ class DataRetentionService:
     async def _delete_data(self, data_type: str, data_id: str):
         """Delete data permanently"""
         if data_type == "user":
-            await self.db.execute(text(f"DELETE FROM users WHERE id = :id"), {"id": data_id})
+            await self.db.execute(text("DELETE FROM users WHERE id = :id"), {"id": data_id})
             await self.db.commit()
 
         if not policy:

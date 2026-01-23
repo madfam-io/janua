@@ -5,12 +5,13 @@ Advanced log analysis, pattern detection, and metrics extraction
 
 import json
 import re
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple, Set
-from dataclasses import dataclass, field
-from collections import defaultdict, Counter
 import statistics
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 import redis.asyncio as aioredis
 import structlog
 

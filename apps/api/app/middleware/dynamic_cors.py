@@ -158,8 +158,9 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
 
     async def _load_database_origins(self) -> Set[str]:
         """Load CORS origins from database"""
-        from app.core.database import get_db_session
         from sqlalchemy import select
+
+        from app.core.database import get_db_session
 
         origins = set()
 

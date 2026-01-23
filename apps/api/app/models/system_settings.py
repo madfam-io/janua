@@ -6,10 +6,13 @@ These settings override environment variables and provide dynamic configuration
 without requiring deployment changes.
 """
 
-from sqlalchemy import Column, String, DateTime, Boolean, Text, Index, ForeignKey
-from app.models.types import GUID as UUID, JSON as JSONB
-from datetime import datetime
 import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, String, Text
+
+from app.models.types import GUID as UUID
+from app.models.types import JSON as JSONB
 
 from . import Base
 

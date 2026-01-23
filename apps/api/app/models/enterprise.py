@@ -2,11 +2,15 @@
 Enterprise models for advanced features
 """
 
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text, Integer, Enum as SQLEnum
-from app.models.types import GUID as UUID, JSON as JSONB
-from datetime import datetime
-import uuid
 import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SQLEnum
+
+from app.models.types import GUID as UUID
+from app.models.types import JSON as JSONB
 
 from . import Base
 

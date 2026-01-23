@@ -5,12 +5,13 @@ Extends FastAPI's OpenAPI generation with SDK-specific metadata,
 examples, and platform-specific code generation hints.
 """
 
-from typing import Any, Dict, List, Optional
+import json
 from enum import Enum
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
+
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
-import json
+from pydantic import BaseModel
 
 
 class SDKPlatform(str, Enum):

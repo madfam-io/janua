@@ -7,9 +7,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Protocol, Tuple
 
-from ..models.rule import AlertRule
-from ..models.alert import Alert, AlertMetrics, AlertStatus
 import structlog
+
+from ..models.alert import Alert, AlertMetrics, AlertStatus
+from ..models.rule import AlertRule
 
 logger = structlog.get_logger()
 
@@ -235,7 +236,7 @@ class AlertEvaluatorService:
                 self._set_cooldown(rule.rule_id)
 
             logger.debug(
-                f"Rule evaluation completed",
+                "Rule evaluation completed",
                 rule_id=rule.rule_id,
                 metric_name=rule.condition.metric_name,
                 current_value=current_value,
@@ -371,14 +372,14 @@ class AlertEvaluationOrchestrator:
                     alert = self._evaluator.create_alert_from_evaluation(rule, evaluation)
                     alerts.append(alert)
                     logger.info(
-                        f"Created alert from rule evaluation",
+                        "Created alert from rule evaluation",
                         alert_id=alert.alert_id,
                         rule_id=rule.rule_id,
                         severity=alert.severity.value,
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to create alert from evaluation",
+                        "Failed to create alert from evaluation",
                         rule_id=rule.rule_id,
                         error=str(e),
                     )

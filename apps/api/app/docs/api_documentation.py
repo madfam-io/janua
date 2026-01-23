@@ -4,6 +4,7 @@ Generates comprehensive OpenAPI documentation with examples, schemas, and intera
 """
 
 from typing import Any, Dict
+
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 

@@ -2,10 +2,11 @@
 Invitation models with Pydantic schemas.
 """
 
-from typing import List, Optional, Dict
-from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
 import enum
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel, EmailStr, Field
 
 # Re-export SQLAlchemy model from __init__.py
 from . import Invitation as InvitationModel

@@ -2,9 +2,10 @@
 Health check endpoints for monitoring integration
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from typing import Dict, Any
 from datetime import datetime
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.redis import get_redis
 from app.core.redis_circuit_breaker import ResilientRedisClient

@@ -2,16 +2,15 @@
 GraphQL endpoint for Janua API.
 """
 
-from fastapi import APIRouter, Depends, Request, WebSocket, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, WebSocket
 from fastapi.responses import HTMLResponse
 from strawberry.fastapi import GraphQLRouter
 from strawberry.subscriptions import GRAPHQL_TRANSPORT_WS_PROTOCOL, GRAPHQL_WS_PROTOCOL
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user_optional
 from app.graphql.schema import schema
-from app.config import settings
-
 
 router = APIRouter(tags=["graphql"])
 

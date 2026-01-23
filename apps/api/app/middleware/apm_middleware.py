@@ -3,18 +3,19 @@ APM Middleware for FastAPI
 Automatic request tracing, performance monitoring, and metrics collection
 """
 
+import asyncio
 import time
 import uuid
-import asyncio
 from typing import Callable, Optional
+
+import structlog
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-import structlog
 
-from app.monitoring.apm import apm_collector
 from app.core.models import RequestContext
+from app.monitoring.apm import apm_collector
 
 logger = structlog.get_logger()
 

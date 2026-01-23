@@ -4,24 +4,25 @@ Coordinates notification delivery for alerts across multiple channels
 """
 
 import asyncio
-from typing import Dict, List, Optional, Set
-from datetime import datetime, timedelta
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Set
+
+import structlog
 
 from ...domain.models.alert import Alert
-from ...domain.models.rule import AlertRule
 from ...domain.models.notification import (
-    NotificationRequest,
     NotificationChannel,
-    NotificationStatus,
     NotificationPriority,
+    NotificationRequest,
+    NotificationStatus,
     NotificationTemplate,
 )
+from ...domain.models.rule import AlertRule
 from ...domain.services.notification_strategy import (
-    NotificationStrategyRegistry,
     NotificationPriorityQueue,
+    NotificationStrategyRegistry,
 )
-import structlog
 
 logger = structlog.get_logger()
 
@@ -171,7 +172,7 @@ class NotificationDispatcher:
                         requests.append(request)
                 except Exception as e:
                     logger.error(
-                        f"Failed to create notification request",
+                        "Failed to create notification request",
                         alert_id=alert.alert_id,
                         channel_id=channel.channel_id,
                         error=str(e),
@@ -196,7 +197,7 @@ class NotificationDispatcher:
 
         except Exception as e:
             logger.error(
-                f"Failed to send alert notifications",
+                "Failed to send alert notifications",
                 alert_id=alert.alert_id,
                 rule_id=rule.rule_id,
                 error=str(e),
@@ -220,7 +221,7 @@ class NotificationDispatcher:
 
         except Exception as e:
             logger.error(
-                f"Failed to send immediate notification",
+                "Failed to send immediate notification",
                 request_id=request.request_id,
                 error=str(e),
             )
@@ -328,7 +329,7 @@ class NotificationDispatcher:
 
         except Exception as e:
             logger.error(
-                f"Failed to create notification request",
+                "Failed to create notification request",
                 alert_id=alert.alert_id,
                 channel_id=channel.channel_id,
                 error=str(e),
@@ -408,7 +409,7 @@ class NotificationDispatcher:
 
             except Exception as e:
                 logger.error(
-                    f"Failed to process notification", request_id=request.request_id, error=str(e)
+                    "Failed to process notification", request_id=request.request_id, error=str(e)
                 )
                 request.mark_failed(str(e))
 

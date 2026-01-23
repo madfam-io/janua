@@ -5,26 +5,26 @@ Implements GDPR, SOC2, HIPAA, PCI-DSS compliance requirements
 
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, delete
 
+from app.config import settings
 from app.models import User
 from app.models.compliance import (
+    BreachSeverity,
+    ComplianceControl,
     ConsentRecord,
     ConsentStatus,
+    ControlStatus,
+    DataBreachIncident,
     DataSubjectRequest,
     DataSubjectRequestType,
     RequestStatus,
-    DataBreachIncident,
-    ComplianceControl,
-    ControlStatus,
-    BreachSeverity,
 )
-from app.services.audit_logger import AuditLogger, AuditEventType
-from app.config import settings
+from app.services.audit_logger import AuditEventType, AuditLogger
 from app.utils.notifications import send_compliance_alert
 
 

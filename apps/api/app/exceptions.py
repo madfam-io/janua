@@ -9,15 +9,15 @@ All exceptions now inherit from the unified exception system in app.core.excepti
 
 # Import from unified exception system
 from app.core.exceptions import (
-    JanuaAPIException,
     AuthenticationError,
-    TokenError,
     AuthorizationError,
-    ValidationError,
-    NotFoundError,
     ConflictError,
-    RateLimitError,
     ExternalServiceError,
+    JanuaAPIException,
+    NotFoundError,
+    RateLimitError,
+    TokenError,
+    ValidationError,
 )
 
 # Re-export for backward compatibility

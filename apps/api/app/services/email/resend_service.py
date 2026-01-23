@@ -12,9 +12,10 @@ Features:
 - Email tracking and analytics
 """
 
-import os
 import logging
-from typing import Optional, List, Dict, Any
+import os
+from typing import Any, Dict, List, Optional
+
 import resend
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 

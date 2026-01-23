@@ -18,9 +18,9 @@ from app.config import settings
 from app.core.url_security import validate_redirect_url
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.services.account_lockout_service import AccountLockoutService
 from app.services.auth_service import AuthService
 from app.services.email import EmailService
-from app.services.account_lockout_service import AccountLockoutService
 
 from ...models import ActivityLog, EmailVerification, MagicLink, PasswordReset, User, UserStatus
 from ...models import Session as UserSession
@@ -394,10 +394,10 @@ async def login_page(
     - client_id: OAuth client requesting authorization
     - client_name: Human-readable name of the OAuth client
     """
-    from fastapi.responses import HTMLResponse
-
     # Escape values for HTML safety
     import html
+
+    from fastapi.responses import HTMLResponse
 
     # SECURITY: Validate the 'next' URL to prevent open redirect attacks (CWE-601)
     safe_next = validate_redirect_url(next or "/", default_url="/")
@@ -577,8 +577,9 @@ async def login_form(
     SECURITY: The 'next' parameter is validated to prevent open redirect attacks (CWE-601).
     Only redirects to trusted Janua ecosystem domains are allowed.
     """
-    from fastapi.responses import RedirectResponse, HTMLResponse
     import html
+
+    from fastapi.responses import HTMLResponse, RedirectResponse
 
     # SECURITY: Validate redirect URL to prevent open redirect attacks (CWE-601)
     # This must be done BEFORE any authentication to ensure malicious URLs

@@ -3,16 +3,17 @@ Web Application Firewall (WAF) Implementation
 Provides comprehensive protection against common web attacks
 """
 
-import re
-import json
 import hashlib
 import ipaddress
-from typing import Dict, List, Set, Tuple
+import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Dict, List, Set, Tuple
+
+import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse
-import structlog
 
 logger = structlog.get_logger()
 
@@ -398,7 +399,7 @@ class WAFConfig:
     def load_config(config_file: str = "waf_config.json") -> Dict:
         """Load WAF configuration from file"""
         try:
-            with open(config_file, "r") as f:
+            with open(config_file) as f:
                 return json.load(f)
         except FileNotFoundError:
             return WAFConfig.get_default_config()

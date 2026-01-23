@@ -2,19 +2,19 @@
 Email service for sending verification, password reset, and notification emails
 """
 
-import smtplib
-import secrets
 import hashlib
+import secrets
+import smtplib
 from datetime import datetime
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.utils import formataddr
-from typing import Optional, Dict, Any
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
+from typing import Any, Dict, Optional
 
-import structlog
 import redis.asyncio as redis
+import structlog
+from jinja2 import Environment, FileSystemLoader
 
 from app.config import settings
 

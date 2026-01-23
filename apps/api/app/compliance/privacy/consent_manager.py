@@ -6,20 +6,21 @@ Handles GDPR consent management with comprehensive audit trails and evidence col
 import logging
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, and_, desc
+from sqlalchemy import and_, desc, select
 
 from app.core.database import get_session
 from app.models.compliance import (
-    ConsentRecord,
-    ConsentType,
-    ConsentStatus,
-    LegalBasis,
-    DataCategory,
     ComplianceFramework,
+    ConsentRecord,
+    ConsentStatus,
+    ConsentType,
+    DataCategory,
+    LegalBasis,
 )
-from ..audit import AuditLogger, AuditEventType
+
+from ..audit import AuditEventType, AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ class ConsentManager:
         )
 
         logger.info(
-            f"Consent granted",
+            "Consent granted",
             extra={
                 "user_id": user_id,
                 "consent_type": consent_type.value,
@@ -172,7 +173,7 @@ class ConsentManager:
         )
 
         logger.info(
-            f"Consent withdrawn",
+            "Consent withdrawn",
             extra={
                 "user_id": user_id,
                 "consent_type": consent_type.value,

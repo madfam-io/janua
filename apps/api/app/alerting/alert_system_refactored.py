@@ -5,9 +5,9 @@ Public interface for the modular alerting system with helper functions.
 
 import uuid
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
-from .core import AlertManager, AlertSeverity, Alert, AlertStatus
+from .core import Alert, AlertManager, AlertSeverity, AlertStatus
 
 # Global alert manager instance
 alert_manager = AlertManager()

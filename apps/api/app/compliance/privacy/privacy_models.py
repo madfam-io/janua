@@ -5,7 +5,7 @@ Data structures for privacy impact assessments and data subject request response
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from app.models.compliance import DataCategory, LegalBasis
 

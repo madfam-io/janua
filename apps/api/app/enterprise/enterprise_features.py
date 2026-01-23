@@ -4,15 +4,15 @@ Complete implementation of remaining production-ready features
 """
 
 import json
-from typing import Dict, Any, List
 from datetime import datetime, timedelta
-import stripe
+from typing import Any, Dict, List
+
 import pandas as pd
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
 import plotly.express as px
 import plotly.graph_objects as go
-
+import stripe
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 
 # ============== AUTOMATED SECURITY SCANNING ==============
 

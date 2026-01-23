@@ -3,25 +3,25 @@ Comprehensive compliance API endpoints for GDPR, SOC 2, HIPAA, and other framewo
 """
 
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import logger
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import User
 from app.models.compliance import (
+    ComplianceFramework,
     ConsentType,
-    LegalBasis,
     DataCategory,
     DataSubjectRequestType,
-    ComplianceFramework,
+    LegalBasis,
 )
-from app.services.compliance_service import ComplianceService
 from app.services.audit_logger import AuditLogger
-from app.core.logging import logger
+from app.services.compliance_service import ComplianceService
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
 
@@ -270,6 +270,7 @@ async def get_privacy_settings(
 
     try:
         from sqlalchemy import select
+
         from app.models.compliance import PrivacySettings
 
         result = await db.execute(select(PrivacySettings).where(PrivacySettings.user_id == user.id))
@@ -320,6 +321,7 @@ async def update_privacy_settings(
 
     try:
         from sqlalchemy import select
+
         from app.models.compliance import PrivacySettings
 
         result = await db.execute(select(PrivacySettings).where(PrivacySettings.user_id == user.id))

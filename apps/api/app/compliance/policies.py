@@ -3,20 +3,22 @@ Security Policy Management for enterprise compliance.
 Automated policy distribution, acknowledgment tracking, version control, and violation detection.
 """
 
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
-from enum import Enum
-from dataclasses import dataclass, asdict
-import uuid
 import hashlib
-import redis.asyncio as aioredis
-from sqlalchemy import select, and_, func
+import logging
+import uuid
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
+import redis.asyncio as aioredis
+from sqlalchemy import and_, func, select
+
+from app.core.config import get_settings
 from app.core.database import get_session
 from app.models.audit import AuditLog
-from app.core.config import get_settings
-from .audit import AuditLogger, AuditEventType, EvidenceType
+
+from .audit import AuditEventType, AuditLogger, EvidenceType
 from .monitor import ComplianceMonitor
 
 logger = logging.getLogger(__name__)
@@ -807,7 +809,7 @@ class PolicyManager:
         await self.audit_logger.collect_evidence(
             evidence_type=EvidenceType.TRAINING_RECORD,
             title=f"Policy Acknowledgment - {acknowledgment.policy_id}",
-            description=f"User acknowledgment of policy",
+            description="User acknowledgment of policy",
             content=asdict(acknowledgment),
             source_system="policy_manager",
             collector_id=acknowledgment.user_id,

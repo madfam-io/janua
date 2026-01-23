@@ -5,12 +5,14 @@ Handles read/write splitting, failover, and monitoring for PostgreSQL replicatio
 
 import asyncio
 import random
-from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
 import asyncpg
 import structlog
+
 from app.config import settings
 
 logger = structlog.get_logger()

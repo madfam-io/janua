@@ -4,24 +4,24 @@ Billing models for multi-provider payment infrastructure.
 Supports Conekta (Mexico), Stripe (International), and Polar (Products).
 """
 
+import uuid
 from datetime import datetime
-from typing import Optional, Dict, Any
 from enum import Enum
+from typing import Any, Dict, Optional
 
 from sqlalchemy import (
-    Column,
-    String,
-    Integer,
+    JSON,
     Boolean,
+    Column,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
+    String,
     Text,
-    JSON,
 )
-from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
-import uuid
+from sqlalchemy.orm import relationship
 
 from app.models.base import Base
 

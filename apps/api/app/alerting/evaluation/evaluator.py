@@ -3,9 +3,10 @@ Alert Rule Evaluation Engine
 Handles evaluation of metrics against alert rules and trigger logic
 """
 
-import structlog
-from typing import Dict, List
 from datetime import datetime
+from typing import Dict, List
+
+import structlog
 
 from ..models import AlertRule, EvaluationResult
 

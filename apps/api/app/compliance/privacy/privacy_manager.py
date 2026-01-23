@@ -4,16 +4,16 @@ Main orchestrator for privacy compliance system integrating all privacy componen
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from app.models.compliance import DataSubjectRequestType, ConsentType, DataCategory, LegalBasis
+from app.models.compliance import ConsentType, DataCategory, DataSubjectRequestType, LegalBasis
+
 from ..audit import AuditLogger
-
-from .data_subject_handler import DataSubjectRequestHandler
 from .consent_manager import ConsentManager
-from .retention_manager import RetentionManager
-from .privacy_types import DataExportFormat, RetentionAction
+from .data_subject_handler import DataSubjectRequestHandler
 from .privacy_models import DataSubjectRequestResponse
+from .privacy_types import DataExportFormat, RetentionAction
+from .retention_manager import RetentionManager
 
 logger = logging.getLogger(__name__)
 

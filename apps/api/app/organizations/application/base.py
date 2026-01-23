@@ -4,7 +4,7 @@ Base classes for CQRS pattern
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, Optional
+from typing import Generic, Optional, TypeVar
 
 # Type variables for commands, queries, and results
 TCommand = TypeVar("TCommand")

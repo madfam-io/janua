@@ -3,14 +3,15 @@ Admin notification system for critical system events
 """
 
 import asyncio
-from datetime import datetime
-from typing import List, Dict, Any, Optional
-from enum import Enum
 from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 import structlog
+
 from app.config import settings
-from app.services.enhanced_email_service import enhanced_email_service, EmailPriority
+from app.services.enhanced_email_service import EmailPriority, enhanced_email_service
 
 logger = structlog.get_logger()
 

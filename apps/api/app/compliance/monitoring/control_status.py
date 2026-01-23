@@ -3,10 +3,10 @@ Compliance Control Status Models and Enums
 Pure data structures for compliance monitoring without business logic dependencies.
 """
 
-from enum import Enum
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class ControlStatus(str, Enum):

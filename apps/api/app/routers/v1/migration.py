@@ -2,27 +2,27 @@
 Migration API endpoints for data portability and user migration
 """
 
-import uuid
-
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
-import logging
 import asyncio
 import json
+import logging
+import uuid
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database_manager import get_db
 from app.dependencies import require_admin
 from app.models import User
 from app.models.migration import (
+    MigratedUser,
     MigrationJob,
+    MigrationLog,
     MigrationProvider,
     MigrationStatus,
-    MigratedUser,
-    MigrationLog,
     MigrationTemplate,
 )
 from app.services.migration_service import MigrationService
@@ -115,7 +115,7 @@ async def create_migration_job(
         )
         return result
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to create migration job")
         raise HTTPException(
             status_code=500, detail="Failed to create migration job. Please contact support."
@@ -168,7 +168,7 @@ async def list_migration_jobs(
             for job in jobs
         ]
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to list migration jobs")
         raise HTTPException(
             status_code=500, detail="Failed to list migration jobs. Please contact support."
@@ -210,7 +210,7 @@ async def get_migration_job(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get migration job")
         raise HTTPException(
             status_code=500, detail="Failed to get migration job. Please contact support."
@@ -237,7 +237,7 @@ async def start_migration_job(
             ):
                 yield f"data: {json.dumps(progress)}\n\n"
 
-        except Exception as e:
+        except Exception:
             logger.exception("Migration job failed")
             error_response = {"type": "error", "error": "Migration failed. Please contact support."}
             yield f"data: {json.dumps(error_response)}\n\n"
@@ -279,7 +279,7 @@ async def delete_migration_job(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to delete migration job")
         raise HTTPException(
             status_code=500, detail="Failed to delete migration job. Please contact support."
@@ -324,7 +324,7 @@ async def get_migration_logs(
             for log in logs
         ]
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get migration logs")
         raise HTTPException(
             status_code=500, detail="Failed to get migration logs. Please contact support."
@@ -375,7 +375,7 @@ async def get_migrated_users(
             for user in users
         ]
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get migrated users")
         raise HTTPException(
             status_code=500, detail="Failed to get migrated users. Please contact support."
@@ -417,7 +417,7 @@ async def list_migration_templates(
             for template in templates
         ]
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to list migration templates")
         raise HTTPException(
             status_code=500, detail="Failed to list migration templates. Please contact support."
@@ -456,7 +456,7 @@ async def export_data(
             "message": "Data export started. You will be notified when complete.",
         }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to start data export")
         raise HTTPException(
             status_code=500, detail="Failed to start data export. Please contact support."
@@ -484,7 +484,7 @@ async def _process_data_export(
 
         logger.info(f"Data export {export_id} completed")
 
-    except Exception as e:
+    except Exception:
         logger.exception(f"Data export {export_id} failed")
 
 

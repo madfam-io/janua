@@ -3,10 +3,10 @@ Alert System Data Models
 Pure data structures and enums for the alerting system
 """
 
-from enum import Enum
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class AlertSeverity(Enum):

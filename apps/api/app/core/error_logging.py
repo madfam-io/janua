@@ -6,8 +6,9 @@ ensuring no silent error handlers and consistent error tracking.
 """
 
 import traceback
-from typing import Any, Optional, Callable
 from functools import wraps
+from typing import Any, Callable, Optional
+
 import structlog
 
 logger = structlog.get_logger()

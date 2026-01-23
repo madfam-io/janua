@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.routers.v1.auth import get_current_user
 from app.dependencies import require_verified_email
+from app.routers.v1.auth import get_current_user
 
 from ...models import (
     Organization,
@@ -162,8 +162,9 @@ async def check_organization_permission(
 ) -> Organization:
     """Check if user has required permission in organization (with caching)"""
     # Try cache first (organization data changes infrequently)
-    from app.core.redis import get_redis
     import json
+
+    from app.core.redis import get_redis
 
     cache_key = f"org:data:{org_id}"
     org = None

@@ -3,18 +3,20 @@ Enterprise Support System for SLA-driven customer support compliance.
 Automated ticket routing, escalation, response time tracking, and support analytics.
 """
 
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
-from enum import Enum
-from dataclasses import dataclass, asdict
-import uuid
 import json
+import logging
+import uuid
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
 import redis.asyncio as aioredis
 
 from app.core.config import get_settings
-from .audit import AuditLogger, AuditEventType, EvidenceType
-from .sla import SLAMonitor, ServiceLevelObjective
+
+from .audit import AuditEventType, AuditLogger, EvidenceType
+from .sla import ServiceLevelObjective, SLAMonitor
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -574,9 +576,9 @@ class SupportSystem:
 
         # Calculate volume metrics
         total_tickets = len(tickets)
-        tickets_by_priority = {priority: 0 for priority in TicketPriority}
-        tickets_by_category = {category: 0 for category in TicketCategory}
-        tickets_by_status = {status: 0 for status in TicketStatus}
+        tickets_by_priority = dict.fromkeys(TicketPriority, 0)
+        tickets_by_category = dict.fromkeys(TicketCategory, 0)
+        tickets_by_status = dict.fromkeys(TicketStatus, 0)
 
         for ticket in tickets:
             tickets_by_priority[ticket.priority] += 1

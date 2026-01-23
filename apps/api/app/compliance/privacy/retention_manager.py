@@ -6,17 +6,17 @@ Handles automated data retention and deletion based on GDPR retention policies.
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, delete, func
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
-from app.models.compliance import DataRetentionPolicy, DataCategory, ComplianceFramework
-from app.models.users import User
 from app.models.audit import AuditLog
-from ..audit import AuditLogger, AuditEventType
+from app.models.compliance import ComplianceFramework, DataCategory, DataRetentionPolicy
+from app.models.users import User
 
+from ..audit import AuditEventType, AuditLogger
 from .privacy_types import RetentionAction
 
 logger = logging.getLogger(__name__)

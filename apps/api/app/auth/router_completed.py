@@ -6,19 +6,19 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
 import structlog
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
-from app.core.redis import get_redis, SessionStore
-from app.models.user import User, Session
-from app.services.auth_service import AuthService
-from app.exceptions import AuthenticationError, ValidationError
 from app.config import settings
+from app.core.database import get_db
+from app.core.redis import SessionStore, get_redis
+from app.exceptions import AuthenticationError, ValidationError
+from app.models.user import Session, User
+from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 logger = structlog.get_logger()

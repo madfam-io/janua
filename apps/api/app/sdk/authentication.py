@@ -7,8 +7,8 @@ in a way that translates well to all platform SDKs.
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Protocol
 from enum import Enum
+from typing import Any, Dict, Optional, Protocol
 
 from .error_handling import AuthenticationError, ConfigurationError
 

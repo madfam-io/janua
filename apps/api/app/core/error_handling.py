@@ -5,15 +5,15 @@ Standardized error responses with monitoring integration
 
 import time
 import traceback
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 import structlog
-from fastapi import Request, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
-from sqlalchemy.exc import SQLAlchemyError
 
 # Import unified exception system
 from app.core.exceptions import JanuaAPIException

@@ -3,20 +3,20 @@ Enhanced email service with failover, tracking, and advanced features
 """
 
 import secrets
-from datetime import datetime
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
-from typing import Optional, Dict, Any, List
-from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
-from enum import Enum
 from dataclasses import dataclass
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-import structlog
 import redis.asyncio as redis
+import structlog
+from jinja2 import Environment, FileSystemLoader
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
+from sendgrid.helpers.mail import Content, Email, Mail, To
 
 from app.config import settings
 
@@ -169,7 +169,7 @@ class EnhancedEmailService:
             await self._track_delivery(delivery_status)
 
         logger.error(
-            f"Failed to send email after trying all providers",
+            "Failed to send email after trying all providers",
             message_id=message_id,
             to_email=to_email,
             error=last_error,

@@ -1,8 +1,9 @@
 """Event emitter for application events"""
 
-from typing import Dict, List, Callable
-from datetime import datetime
 import asyncio
+from datetime import datetime
+from typing import Callable, Dict, List
+
 import structlog
 
 logger = structlog.get_logger()

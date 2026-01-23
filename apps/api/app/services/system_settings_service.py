@@ -3,21 +3,21 @@ System Settings Service
 Manages global platform configuration that can be modified via API.
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-import logging
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.system_settings import (
-    SystemSetting,
-    AllowedCorsOrigin,
-    SystemSettingCategory,
-    SettingKeys,
-)
 from app.config import settings as app_settings
+from app.models.system_settings import (
+    AllowedCorsOrigin,
+    SettingKeys,
+    SystemSetting,
+    SystemSettingCategory,
+)
 
 logger = logging.getLogger(__name__)
 

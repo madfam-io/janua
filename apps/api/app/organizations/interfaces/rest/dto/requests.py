@@ -3,6 +3,7 @@ Request DTOs for organization endpoints
 """
 
 from typing import List, Optional
+
 from pydantic import BaseModel, Field, validator
 
 from app.models import OrganizationRole

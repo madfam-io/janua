@@ -2,17 +2,19 @@
 IoT and Edge device API endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import Optional, Dict, Any
-from pydantic import BaseModel
 import logging
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dependencies import require_admin
 
 from ...database import get_db
-from app.dependencies import require_admin
 from ...models import User
-from ...models.iot import IoTDevice, DeviceType, DeviceStatus, AuthMethod
+from ...models.iot import AuthMethod, DeviceStatus, DeviceType, IoTDevice
 
 logger = logging.getLogger(__name__)
 

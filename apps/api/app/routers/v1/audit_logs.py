@@ -3,18 +3,18 @@ Audit logs API endpoints for compliance and security monitoring.
 Updated to match existing production database schema.
 """
 
-from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc, select, func, delete
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, delete, desc, func, select
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models import AuditLog
-from app.services.audit_logger import AuditLogger, AuditAction
-
+from app.services.audit_logger import AuditAction, AuditLogger
 
 router = APIRouter(prefix="/v1/audit-logs", tags=["audit-logs"])
 

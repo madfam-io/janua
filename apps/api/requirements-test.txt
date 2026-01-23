@@ -1,6 +1,6 @@
 # Testing Dependencies
-pytest==7.4.4
-pytest-asyncio==0.23.2
+pytest>=8.3.3
+pytest-asyncio>=0.23.0
 pytest-cov==4.1.0
 httpx==0.25.0
 pytest-mock==3.12.0
@@ -11,7 +11,6 @@ coverage==7.3.4
 structlog==23.2.0
 aiosqlite==0.19.0
 fakeredis[aioredis]==2.21.0
-python-jose[cryptography]==3.3.0
 
 # Additional testing utilities
 respx==0.20.2

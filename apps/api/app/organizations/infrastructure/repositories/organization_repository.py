@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID
 
 from sqlalchemy import and_, func
@@ -14,12 +14,17 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Organization as ORMOrganization,
+)
+from app.models import (
     OrganizationInvitation as ORMOrganizationInvitation,
+)
+from app.models import (
     User,
     organization_members,
 )
-from ...domain.models.organization import Organization
+
 from ...domain.models.membership import Membership, OrganizationInvitation
+from ...domain.models.organization import Organization
 
 if TYPE_CHECKING:
     pass  # No circular imports needed here

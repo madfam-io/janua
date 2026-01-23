@@ -2,19 +2,20 @@
 REST API controller for SSO operations
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...application.services.sso_orchestrator import SSOOrchestrator
-from ...domain.services.user_provisioning import UserProvisioningService
-from ...infrastructure.configuration.config_repository import SSOConfigurationRepository
-from ...infrastructure.session.session_repository import SSOSessionRepository
-from ...exceptions import ValidationError, AuthenticationError
 from ....database import get_db
 from ....dependencies import get_current_user
+from ...application.services.sso_orchestrator import SSOOrchestrator
+from ...domain.services.user_provisioning import UserProvisioningService
+from ...exceptions import AuthenticationError, ValidationError
+from ...infrastructure.configuration.config_repository import SSOConfigurationRepository
+from ...infrastructure.session.session_repository import SSOSessionRepository
 
 
 class SSOInitiateRequest(BaseModel):
@@ -326,9 +327,9 @@ class SSOController:
 
         # This would typically be injected via DI container
         from ....core.redis import get_redis
+        from ....services.audit_logger import AuditLogger
         from ....services.cache import CacheService
         from ....services.jwt_service import JWTService
-        from ....services.audit_logger import AuditLogger
 
         config_repo = SSOConfigurationRepository(db)
         session_repo = SSOSessionRepository(db)

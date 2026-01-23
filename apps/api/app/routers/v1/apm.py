@@ -3,15 +3,16 @@ APM Dashboard API Routes
 Endpoints for accessing performance monitoring data and metrics
 """
 
-from typing import Dict, Any, Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import PlainTextResponse
-import structlog
+from typing import Any, Dict, Optional
 
-from app.monitoring.apm import apm_collector, get_apm_health
+import structlog
 from app.core.auth import get_current_admin_user
 from app.core.models import User
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
+
+from app.monitoring.apm import apm_collector, get_apm_health
 
 logger = structlog.get_logger()
 

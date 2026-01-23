@@ -3,29 +3,29 @@ Policy management and evaluation API endpoints.
 """
 
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, select, delete
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.policy import (
     Policy,
-    Role,
-    UserRole,
-    RolePolicy,
     PolicyCreate,
-    PolicyUpdate,
-    PolicyResponse,
     PolicyEvaluateRequest,
     PolicyEvaluateResponse,
+    PolicyResponse,
+    PolicyUpdate,
+    Role,
     RoleCreate,
+    RolePolicy,
     RoleResponse,
+    UserRole,
 )
-from app.services.policy_engine import PolicyEngine
+from app.services.audit_logger import AuditAction, AuditLogger
 from app.services.cache import CacheService
-from app.services.audit_logger import AuditLogger, AuditAction
-
+from app.services.policy_engine import PolicyEngine
 
 router = APIRouter(prefix="/v1/policies", tags=["policies"])
 
@@ -156,7 +156,7 @@ async def update_policy(
 
     # Clear cache for this policy
     cache = CacheService()
-    await cache.delete_pattern(f"policy:eval:*")
+    await cache.delete_pattern("policy:eval:*")
 
     # Log audit event
     audit_logger = AuditLogger(db)
@@ -200,7 +200,7 @@ async def delete_policy(
 
     # Clear cache
     cache = CacheService()
-    await cache.delete_pattern(f"policy:eval:*")
+    await cache.delete_pattern("policy:eval:*")
 
     # Log audit event
     audit_logger = AuditLogger(db)

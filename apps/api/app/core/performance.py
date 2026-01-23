@@ -4,21 +4,21 @@ Phase 2: Sub-100ms response time optimization
 """
 
 import asyncio
-import time
-import logging
-from functools import wraps
-from typing import Dict, Any, Optional, Callable
-from contextlib import asynccontextmanager
-import weakref
-import json
 import hashlib
+import json
+import logging
+import time
+import weakref
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from functools import wraps
+from typing import Any, Callable, Dict, Optional
 
 import redis.asyncio as redis
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 

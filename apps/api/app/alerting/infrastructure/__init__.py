@@ -1,10 +1,10 @@
 """Infrastructure layer for alerting system"""
 
 from .repositories import (
-    RedisAlertRepository,
-    RedisRuleRepository,
     InMemoryChannelRepository,
     InMemoryTemplateRepository,
+    RedisAlertRepository,
+    RedisRuleRepository,
     create_alert_repositories,
 )
 

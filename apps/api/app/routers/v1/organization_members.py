@@ -4,14 +4,15 @@ Complete member lifecycle management endpoints
 """
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
 
-from ...dependencies import get_db, get_current_user, get_redis
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import Session
+
+from ...dependencies import get_current_user, get_db, get_redis
+from ...models import User
 from ...services.organization_member_service import OrganizationMemberService
 from ...services.rbac_service import RBACService
-from ...models import User
 
 
 # Pydantic schemas

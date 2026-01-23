@@ -2,19 +2,20 @@
 GraphQL schema definition for Janua API.
 """
 
-import strawberry
-from strawberry.types import Info
-from typing import List, Optional
-from datetime import datetime
 import json
+from datetime import datetime
+from typing import List, Optional
 
-from app.models.user import User as UserModel
+import strawberry
 from app.models.organization import Organization as OrgModel
-from app.models.policy import Policy as PolicyModel, Role as RoleModel
+from strawberry.types import Info
+
 from app.models.invitation import Invitation as InvitationModel
+from app.models.policy import Policy as PolicyModel
+from app.models.policy import Role as RoleModel
+from app.models.user import User as UserModel
 from app.services.auth_service import AuthService
 from app.services.policy_engine import PolicyEngine
-
 
 # GraphQL Types
 
@@ -371,8 +372,8 @@ class Mutation:
         if not user:
             raise Exception("Authentication required")
 
-        from app.services.policy_engine import PolicyEngine
         from app.models.policy import PolicyEvaluateRequest
+        from app.services.policy_engine import PolicyEngine
 
         engine = PolicyEngine(db)
 

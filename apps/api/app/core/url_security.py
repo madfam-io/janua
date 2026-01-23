@@ -9,8 +9,8 @@ redirecting users to malicious sites after authentication.
 """
 
 import fnmatch
-from urllib.parse import urlparse
 from typing import Optional
+from urllib.parse import urlparse
 
 import structlog
 

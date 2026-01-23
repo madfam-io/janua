@@ -6,11 +6,11 @@ from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
-from ..base import Query, QueryHandler, NotFoundError, PermissionError
-from ...domain.models.organization import Organization
 from ...domain.models.membership import Membership
+from ...domain.models.organization import Organization
 from ...domain.services.membership_service import MembershipService
 from ...infrastructure.repositories.organization_repository import OrganizationRepository
+from ..base import NotFoundError, PermissionError, Query, QueryHandler
 
 
 @dataclass

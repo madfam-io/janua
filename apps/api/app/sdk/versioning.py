@@ -6,11 +6,11 @@ of API changes across different client SDK versions.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set
-from enum import Enum
-from dataclasses import dataclass
-from datetime import datetime, date
 import re
+from dataclasses import dataclass
+from datetime import date, datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional, Set
 
 
 class APIVersion(str, Enum):

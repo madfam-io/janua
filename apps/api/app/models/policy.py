@@ -2,19 +2,24 @@
 Policy and RBAC models with Pydantic schemas.
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime
-from pydantic import BaseModel, Field
 import enum
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-# Re-export SQLAlchemy models from __init__.py
-from . import Policy as PolicyModel, Role as RoleModel
+from pydantic import BaseModel, Field
 
 # Additional SQLAlchemy models for Policy system
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey
-from app.models.types import GUID as UUID, JSON as JSONB
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+
+from app.models.types import GUID as UUID
+from app.models.types import JSON as JSONB
+
 from . import Base
-import uuid
+
+# Re-export SQLAlchemy models from __init__.py
+from . import Policy as PolicyModel
+from . import Role as RoleModel
 
 
 class PolicyEffect(str, enum.Enum):

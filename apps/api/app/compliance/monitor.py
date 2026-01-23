@@ -1156,7 +1156,7 @@ class EvidenceCollector:
 
         for evidence_file in self.storage_path.glob(f"{control_id}_*.json"):
             try:
-                with open(evidence_file, "r") as f:
+                with open(evidence_file) as f:
                     evidence_data = json.load(f)
 
                 evidence = ComplianceEvidence(**evidence_data)
@@ -1173,7 +1173,7 @@ class EvidenceCollector:
 
         for evidence_file in self.storage_path.glob("*.json"):
             try:
-                with open(evidence_file, "r") as f:
+                with open(evidence_file) as f:
                     evidence_data = json.load(f)
 
                 retention_date = datetime.fromisoformat(evidence_data.get("retention_date", ""))

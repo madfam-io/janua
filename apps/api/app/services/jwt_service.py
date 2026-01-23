@@ -7,11 +7,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
+import jwt
 import structlog
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-import jwt
 from jwt.exceptions import InvalidTokenError
 
 from app.config import settings

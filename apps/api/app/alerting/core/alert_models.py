@@ -5,9 +5,9 @@ Data structures for alert rules, alerts, and notification channels.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from .alert_types import AlertSeverity, AlertStatus, AlertChannel
+from .alert_types import AlertChannel, AlertSeverity, AlertStatus
 
 
 @dataclass

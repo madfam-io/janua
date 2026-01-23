@@ -5,11 +5,11 @@ High-level GDPR compliance orchestration and validation system.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 from app.models.compliance import ComplianceFramework
-from ..audit import AuditLogger, AuditEventType
 
+from ..audit import AuditEventType, AuditLogger
 from .privacy_manager import PrivacyManager
 
 logger = logging.getLogger(__name__)

@@ -2,18 +2,21 @@
 Session management endpoints
 """
 
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import select
-from pydantic import BaseModel
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.database import get_db
-from ...models import Session as UserSession, User
 from app.routers.v1.auth import get_current_user
 from app.services.auth_service import AuthService
+
+from ...models import Session as UserSession
+from ...models import User
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 

@@ -4,11 +4,12 @@ Concrete implementation for Slack notification delivery
 """
 
 import json
-from typing import Dict, List, Optional, Any, Tuple
-import httpx
+from typing import Any, Dict, List, Optional, Tuple
 
-from ...domain.models.notification import NotificationRequest, AbstractNotificationStrategy
+import httpx
 import structlog
+
+from ...domain.models.notification import AbstractNotificationStrategy, NotificationRequest
 
 logger = structlog.get_logger()
 
@@ -67,7 +68,7 @@ class SlackNotificationStrategy(AbstractNotificationStrategy):
             # Slack webhooks return "ok" on success
             if response.text.strip() == "ok":
                 logger.info(
-                    f"Slack notification sent successfully",
+                    "Slack notification sent successfully",
                     request_id=request.request_id,
                     channel_id=request.channel.channel_id,
                 )

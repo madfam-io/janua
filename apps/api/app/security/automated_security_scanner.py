@@ -4,15 +4,16 @@ Continuous vulnerability assessment with OWASP, CVE scanning, and dependency aud
 """
 
 import asyncio
-import json
-import re
 import hashlib
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+import json
+import logging
+import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-import logging
+from typing import Any, Dict, List, Optional
+
 import aiofiles
 import yaml
 
@@ -424,7 +425,7 @@ class AutomatedSecurityScanner:
                     continue
 
                 try:
-                    async with aiofiles.open(file_path, "r") as f:
+                    async with aiofiles.open(file_path) as f:
                         content = await f.read()
 
                     for pattern in patterns:
@@ -488,7 +489,7 @@ class AutomatedSecurityScanner:
         vulnerabilities = []
 
         try:
-            async with aiofiles.open(config_path, "r") as f:
+            async with aiofiles.open(config_path) as f:
                 content = await f.read()
 
             # Check for hardcoded secrets
@@ -507,7 +508,7 @@ class AutomatedSecurityScanner:
                             type="configuration",
                             severity=VulnerabilitySeverity.HIGH,
                             title=f"Hardcoded {vuln_type.replace('_', ' ')} detected",
-                            description=f"Found hardcoded sensitive data in configuration",
+                            description="Found hardcoded sensitive data in configuration",
                             affected_component=str(config_path.relative_to(self.project_root)),
                             cve_id=None,
                             cvss_score=None,
@@ -523,7 +524,7 @@ class AutomatedSecurityScanner:
             if "debug" in content.lower() and ("true" in content.lower() or "1" in content):
                 vulnerabilities.append(
                     Vulnerability(
-                        vuln_id=f"CONFIG-DEBUG-ENABLED",
+                        vuln_id="CONFIG-DEBUG-ENABLED",
                         type="configuration",
                         severity=VulnerabilitySeverity.MEDIUM,
                         title="Debug mode enabled",
@@ -560,7 +561,7 @@ class AutomatedSecurityScanner:
         for file_path in self.project_root.rglob("*"):
             if file_path.is_file() and file_path.stat().st_size < 1024 * 1024:  # Skip files > 1MB
                 try:
-                    async with aiofiles.open(file_path, "r", errors="ignore") as f:
+                    async with aiofiles.open(file_path, errors="ignore") as f:
                         content = await f.read()
 
                     for secret_type, pattern in secret_patterns.items():
@@ -615,7 +616,7 @@ class AutomatedSecurityScanner:
         vulnerabilities = []
 
         try:
-            async with aiofiles.open(dockerfile, "r") as f:
+            async with aiofiles.open(dockerfile) as f:
                 content = await f.read()
 
             # Check for running as root
@@ -667,7 +668,7 @@ class AutomatedSecurityScanner:
         vulnerabilities = []
 
         try:
-            async with aiofiles.open(k8s_file, "r") as f:
+            async with aiofiles.open(k8s_file) as f:
                 content = await f.read()
 
             k8s_config = yaml.safe_load(content)
@@ -736,7 +737,7 @@ class AutomatedSecurityScanner:
 
         for api_file in api_files:
             try:
-                async with aiofiles.open(api_file, "r") as f:
+                async with aiofiles.open(api_file) as f:
                     content = await f.read()
 
                 # Check for missing authentication

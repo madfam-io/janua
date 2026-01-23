@@ -72,6 +72,12 @@ from app.routers.v1 import (
     auth as auth_v1,
 )
 from app.routers.v1 import (
+    devices as devices_v1,
+)
+from app.routers.v1 import (
+    integrations as integrations_v1,
+)
+from app.routers.v1 import (
     invitations as invitations_v1,
 )
 from app.routers.v1 import (
@@ -109,16 +115,10 @@ from app.routers.v1 import (
     sessions as sessions_v1,
 )
 from app.routers.v1 import (
-    devices as devices_v1,
-)
-from app.routers.v1 import (
     users as users_v1,
 )
 from app.routers.v1 import (
     webhooks as webhooks_v1,
-)
-from app.routers.v1 import (
-    integrations as integrations_v1,
 )
 
 # Additional feature routers with optional loading

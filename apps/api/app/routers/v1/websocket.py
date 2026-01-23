@@ -2,13 +2,14 @@
 WebSocket endpoint for real-time communication.
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
-from typing import Optional
 import json
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
 from app.database import get_db
-from app.services.websocket_manager import manager, EventType
 from app.services.auth_service import AuthService
+from app.services.websocket_manager import EventType, manager
 from app.utils.logger import create_logger
 
 logger = create_logger(__name__)

@@ -5,11 +5,12 @@ Implements circuit breaker pattern for Redis to prevent cascading failures
 and provide graceful degradation when Redis is unavailable.
 """
 
-from typing import Optional, Any, Dict, Callable
 from datetime import datetime
 from enum import Enum
-import structlog
+from typing import Any, Callable, Dict, Optional
+
 import redis.asyncio as redis
+import structlog
 
 logger = structlog.get_logger()
 

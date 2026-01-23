@@ -12,9 +12,10 @@ import hashlib
 import json
 from functools import wraps
 from typing import Any, Callable, Optional
+
 import structlog
 
-from app.core.redis import get_redis, ResilientRedisClient
+from app.core.redis import ResilientRedisClient, get_redis
 
 logger = structlog.get_logger()
 

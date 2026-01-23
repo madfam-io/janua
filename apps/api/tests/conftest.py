@@ -424,11 +424,14 @@ class SecurityTestUtils:
 
 
 # Pytest fixtures
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def event_loop():
-    """Create an event loop for the test session"""
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
+    """Create event loop for each test function."""
+    import sys
+
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     yield loop
     loop.close()
@@ -834,6 +837,17 @@ def sample_organization_data():
         "plan": "enterprise",
         "created_at": "2023-01-01T00:00:00Z",
         "settings": {"sso_enabled": True, "mfa_required": True},
+    }
+
+
+@pytest.fixture
+def sample_token_data():
+    """Sample token response data for testing"""
+    return {
+        "access_token": "mock_access_token_123",
+        "refresh_token": "mock_refresh_token_456",
+        "token_type": "bearer",
+        "expires_in": 3600,
     }
 
 

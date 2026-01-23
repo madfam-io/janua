@@ -3,8 +3,9 @@ Metrics Collection and Context Generation
 Handles retrieval of metric values and context generation for alerts
 """
 
+from typing import Any, Dict, Optional
+
 import structlog
-from typing import Dict, Any, Optional
 
 logger = structlog.get_logger()
 

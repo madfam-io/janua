@@ -2,17 +2,19 @@
 Localization and internationalization API endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import Optional
-from pydantic import BaseModel
 import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dependencies import require_admin
 
 from ...database import get_db
-from app.dependencies import require_admin
 from ...models import User
-from ...models.localization import Locale, TranslationKey, Translation
+from ...models.localization import Locale, Translation, TranslationKey
 
 logger = logging.getLogger(__name__)
 

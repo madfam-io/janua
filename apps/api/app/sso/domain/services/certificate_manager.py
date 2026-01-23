@@ -4,16 +4,16 @@ Certificate Management Service for SSO
 Handles X.509 certificates for SAML, certificate validation, storage, and rotation.
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, Tuple
-from pathlib import Path
 import os
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
 from cryptography import x509
-from cryptography.x509.oid import NameOID, ExtensionOID
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.backends import default_backend
+from cryptography.x509.oid import ExtensionOID, NameOID
 
 from ...exceptions import ValidationError
 
@@ -273,7 +273,7 @@ class CertificateManager:
             return None
 
         # Read and return certificate
-        with open(certs[0], "r") as f:
+        with open(certs[0]) as f:
             return f.read()
 
     def convert_der_to_pem(self, der_bytes: bytes) -> str:

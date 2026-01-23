@@ -8,8 +8,10 @@ across PostgreSQL and SQLite.
 
 import json
 import uuid
-from sqlalchemy import TypeDecorator, CHAR, Text, String
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB as PG_JSONB
+
+from sqlalchemy import CHAR, String, Text, TypeDecorator
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 
 class GUID(TypeDecorator):

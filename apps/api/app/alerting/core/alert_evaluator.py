@@ -3,8 +3,9 @@ Alert Evaluator
 Evaluates metrics against alert rules to determine if alerts should trigger.
 """
 
-import structlog
 from typing import Dict, List
+
+import structlog
 
 from .alert_models import AlertRule
 

@@ -3,17 +3,18 @@ Notification Strategy Domain Service
 Registry and coordination for notification delivery strategies
 """
 
-from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Set
+
+import structlog
 
 from ..models.notification import (
-    NotificationRequest,
-    NotificationChannel,
     AbstractNotificationStrategy,
+    NotificationChannel,
     NotificationPriority,
+    NotificationRequest,
 )
-import structlog
 
 logger = structlog.get_logger()
 
@@ -52,7 +53,7 @@ class NotificationStrategyRegistry:
 
         self._strategies[channel_type] = strategy
         logger.info(
-            f"Registered notification strategy",
+            "Registered notification strategy",
             channel_type=channel_type,
             strategy_class=type(strategy).__name__,
         )
@@ -79,7 +80,7 @@ class NotificationStrategyRegistry:
         # Check rate limiting
         if self._rate_limiter.is_rate_limited(request.channel):
             logger.warning(
-                f"Rate limit exceeded for channel",
+                "Rate limit exceeded for channel",
                 channel_id=request.channel.channel_id,
                 request_id=request.request_id,
             )
@@ -119,7 +120,7 @@ class NotificationStrategyRegistry:
                 )
                 self._rate_limiter.record_sent(request.channel)
                 logger.info(
-                    f"Notification sent successfully",
+                    "Notification sent successfully",
                     request_id=request.request_id,
                     channel_id=request.channel.channel_id,
                     delivery_time_ms=delivery_time,
@@ -127,7 +128,7 @@ class NotificationStrategyRegistry:
             else:
                 request.mark_failed("Strategy returned failure")
                 logger.error(
-                    f"Notification strategy returned failure",
+                    "Notification strategy returned failure",
                     request_id=request.request_id,
                     channel_id=request.channel.channel_id,
                 )
@@ -153,7 +154,7 @@ class NotificationStrategyRegistry:
 
             request.mark_failed(error_msg)
             logger.error(
-                f"Notification failed with exception",
+                "Notification failed with exception",
                 request_id=request.request_id,
                 channel_id=request.channel.channel_id,
                 error=error_msg,
@@ -171,7 +172,7 @@ class NotificationStrategyRegistry:
             return await strategy.validate_config(channel.config)
         except Exception as e:
             logger.error(
-                f"Failed to validate channel config", channel_id=channel.channel_id, error=str(e)
+                "Failed to validate channel config", channel_id=channel.channel_id, error=str(e)
             )
             return False
 
@@ -334,7 +335,7 @@ class NotificationPriorityQueue:
         """Add request to appropriate priority queue"""
         self._queues[request.priority].append(request)
         logger.debug(
-            f"Enqueued notification request",
+            "Enqueued notification request",
             request_id=request.request_id,
             priority=request.priority.value,
         )

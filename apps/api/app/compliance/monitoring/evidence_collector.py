@@ -3,19 +3,19 @@ Evidence Collector
 Evidence gathering and validation operations.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
 from pathlib import Path
-import json
-from sqlalchemy import select, and_, func
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import and_, func, select
 
 from app.core.database import get_session
 from app.models.audit import AuditLog
 from app.models.users import User
 
-from .control_status import EvidenceType, ComplianceEvidence
-
+from .control_status import ComplianceEvidence, EvidenceType
 
 logger = logging.getLogger(__name__)
 
@@ -286,7 +286,7 @@ class EvidenceCollector:
                 logger.warning(f"Evidence file not found: {evidence_id}")
                 return None
 
-            with open(evidence_file, "r") as f:
+            with open(evidence_file) as f:
                 evidence_data = json.load(f)
 
             # Reconstruct ComplianceEvidence object
@@ -369,7 +369,7 @@ class EvidenceCollector:
             # List all evidence files
             for evidence_file in self.evidence_storage.glob("*.json"):
                 try:
-                    with open(evidence_file, "r") as f:
+                    with open(evidence_file) as f:
                         evidence_data = json.load(f)
 
                     # Apply search filters
@@ -429,7 +429,7 @@ class EvidenceCollector:
 
             for evidence_file in self.evidence_storage.glob("*.json"):
                 try:
-                    with open(evidence_file, "r") as f:
+                    with open(evidence_file) as f:
                         evidence_data = json.load(f)
 
                     collection_date = datetime.fromisoformat(evidence_data["collection_date"])

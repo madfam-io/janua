@@ -2,14 +2,14 @@
 Repository for SSO configuration management
 """
 
-from typing import List, Optional
 import json
+from typing import List, Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import SSOConfiguration as SSOConfigModel
 from app.core.redis import get_redis
+from app.models import SSOConfiguration as SSOConfigModel
 
 from ...domain.protocols.base import SSOConfiguration
 

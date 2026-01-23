@@ -6,13 +6,14 @@ High availability Redis with automatic failover and load balancing
 import asyncio
 import json
 import time
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
 import redis.asyncio as redis
-from redis.sentinel import Sentinel
 import structlog
+from redis.sentinel import Sentinel
 
 logger = structlog.get_logger()
 

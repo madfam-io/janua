@@ -4,14 +4,15 @@ Risk assessment service for Zero-Trust authentication
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
 
 try:
     import numpy as np
-    from sklearn.ensemble import IsolationForest
     import user_agents
+    from sklearn.ensemble import IsolationForest
 
     ML_AVAILABLE = True
     # Type aliases for when ML is available
@@ -24,17 +25,17 @@ except ImportError:
     # Fallback type alias when ML is not available
     NDArray = Any
 
-from ..models import User, Session
+from ..models import Session, User
 
 try:
     from ..models.zero_trust import (
-        RiskAssessment,
-        RiskLevel,
+        AccessDecision,
+        AccessPolicy,
+        BehaviorBaseline,
         DeviceProfile,
         DeviceTrustLevel,
-        AccessPolicy,
-        AccessDecision,
-        BehaviorBaseline,
+        RiskAssessment,
+        RiskLevel,
         ThreatIntelligence,
     )
 

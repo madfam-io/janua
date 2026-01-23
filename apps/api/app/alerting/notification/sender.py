@@ -4,13 +4,14 @@ Handles sending notifications through various channels (email, Slack, webhook, D
 """
 
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 import httpx
 import structlog
-from jinja2 import select_autoescape, Environment
+from jinja2 import Environment, select_autoescape
 
-from ..models import NotificationChannel, Alert
+from ..models import Alert, NotificationChannel
 
 logger = structlog.get_logger()
 

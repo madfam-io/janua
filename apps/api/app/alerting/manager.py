@@ -4,17 +4,18 @@ Core alert management and coordination between evaluation and notification syste
 """
 
 import asyncio
-import uuid
 import json
-from typing import Dict, List, Optional
+import uuid
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
 import redis.asyncio as aioredis
 import structlog
 
-from .models import AlertRule, Alert, NotificationChannel, AlertSeverity, AlertStatus, AlertChannel
 from .evaluation.evaluator import AlertEvaluator
-from .notification.sender import NotificationSender
 from .metrics import MetricsCollector
+from .models import Alert, AlertChannel, AlertRule, AlertSeverity, AlertStatus, NotificationChannel
+from .notification.sender import NotificationSender
 
 logger = structlog.get_logger()
 

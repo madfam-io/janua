@@ -4,13 +4,13 @@ Modular privacy management system with separated concerns for data subject right
 consent management, retention policies, and GDPR compliance.
 """
 
-from .privacy_types import PrivacyRightType, DataExportFormat, RetentionAction
-from .privacy_models import DataSubjectRequestResponse, PrivacyImpactAssessment
-from .data_subject_handler import DataSubjectRequestHandler
 from .consent_manager import ConsentManager
-from .retention_manager import RetentionManager
-from .privacy_manager import PrivacyManager
+from .data_subject_handler import DataSubjectRequestHandler
 from .gdpr_compliance import GDPRCompliance
+from .privacy_manager import PrivacyManager
+from .privacy_models import DataSubjectRequestResponse, PrivacyImpactAssessment
+from .privacy_types import DataExportFormat, PrivacyRightType, RetentionAction
+from .retention_manager import RetentionManager
 
 __all__ = [
     "PrivacyRightType",

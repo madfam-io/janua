@@ -4,9 +4,10 @@ Redis cache service for session management and caching
 
 import json
 import logging
-from typing import Optional, Any, Dict, List
-import redis.asyncio as redis
 import pickle
+from typing import Any, Dict, List, Optional
+
+import redis.asyncio as redis
 
 from app.config import settings
 

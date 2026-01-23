@@ -2,12 +2,13 @@
 Localization models with Pydantic schemas.
 """
 
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 # Re-export SQLAlchemy models from __init__.py for router usage
-from . import Locale, TranslationKey, Translation
+from . import Locale, Translation, TranslationKey
 
 # Make SQLAlchemy models available at module level
 __all__ = ["Locale", "TranslationKey", "Translation"]

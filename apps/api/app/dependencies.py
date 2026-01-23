@@ -4,15 +4,17 @@ Shared dependencies for FastAPI routes and services
 Ensures proper module structure for Railway deployment and dependency injection
 """
 
-from fastapi import Depends, HTTPException
 from typing import Optional
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.redis import ResilientRedisClient, get_redis
 from app.database import get_db
-from app.core.redis import get_redis, ResilientRedisClient
-from .models import User, UserStatus, OrganizationMember
+
+from .models import OrganizationMember, User, UserStatus
 
 security = HTTPBearer()
 # Optional security scheme for endpoints that work with or without authentication
@@ -247,6 +249,7 @@ def require_verified_email(current_user: User = Depends(get_current_user)) -> Us
         HTTPException: 403 if email is not verified (or within grace period for new accounts)
     """
     from datetime import datetime, timedelta
+
     from app.config import settings
 
     if not settings.REQUIRE_EMAIL_VERIFICATION:

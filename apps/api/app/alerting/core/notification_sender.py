@@ -4,8 +4,8 @@ Handles sending notifications through various channels (email, Slack, Discord, w
 """
 
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 import httpx
 import structlog

@@ -7,9 +7,10 @@ Detects user country from:
 3. IP geolocation (fallback)
 """
 
-from typing import Optional, Dict, Any
-import httpx
 import logging
+from typing import Any, Dict, Optional
+
+import httpx
 
 logger = logging.getLogger(__name__)
 

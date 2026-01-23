@@ -4,19 +4,20 @@ Real-time threat detection with ML-based anomaly detection and automated respons
 """
 
 import asyncio
-import json
 import ipaddress
-from typing import Dict, Any, List, Optional, Set, Tuple
-from datetime import datetime, timedelta
-from collections import defaultdict, deque
-from enum import Enum
+import json
 import logging
 import re
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from enum import Enum
 from html.parser import HTMLParser
-from sklearn.ensemble import IsolationForest
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 import joblib
 import redis.asyncio as aioredis
+from sklearn.ensemble import IsolationForest
 
 logger = logging.getLogger(__name__)
 

@@ -5,16 +5,16 @@ List memberships query and handler
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 from uuid import UUID
 
-from ..base import Query, QueryHandler, NotFoundError, PermissionError
 from ...domain.services.membership_service import MembershipService
+from ..base import NotFoundError, PermissionError, Query, QueryHandler
 
 if TYPE_CHECKING:
     from ...infrastructure.repositories.organization_repository import (
-        OrganizationRepository,
         MembershipWithUser,
+        OrganizationRepository,
     )
 
 

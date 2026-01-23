@@ -8,16 +8,17 @@ Supports:
 - Subscriptions in MXN (Mexican Pesos)
 """
 
-from typing import Dict, Any, Optional, List
-import hmac
 import hashlib
+import hmac
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import conekta
 
 from app.services.payment.base import (
-    PaymentProvider,
     CustomerData,
     PaymentMethodData,
+    PaymentProvider,
     SubscriptionData,
     WebhookEvent,
 )
@@ -251,7 +252,7 @@ class ConektaProvider(PaymentProvider):
             # Add trial period if specified
             if subscription_data.trial_days:
                 sub_params["trial_end"] = int(
-                    (datetime.utcnow().timestamp() + (subscription_data.trial_days * 86400))
+                    datetime.utcnow().timestamp() + (subscription_data.trial_days * 86400)
                 )
 
             # Add card token if provided (for first charge)

@@ -4,17 +4,18 @@ Production-ready test infrastructure with 85%+ coverage targets
 """
 
 import asyncio
-import pytest
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
+import pytest
 import structlog
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
-from ..models import Base
 from app.core.jwt_manager import jwt_manager
+from app.main import app
+
+from ..models import Base
 
 # Configure test logging
 structlog.configure(
@@ -147,8 +148,9 @@ class TestDataFactory:
     @staticmethod
     async def create_test_user(db: AsyncSession, **kwargs) -> dict:
         """Create a test user in database"""
-        from ..models import User, UserStatus
         import uuid
+
+        from ..models import User, UserStatus
 
         user_data = TestDataFactory.create_user_data(**kwargs)
 
@@ -328,7 +330,7 @@ class SecurityTestUtils:
 
         results = []
         for payload in sql_payloads:
-            test_params = {k: payload for k in params.keys()}
+            test_params = dict.fromkeys(params.keys(), payload)
             response = await client.get(endpoint, params=test_params)
             results.append(
                 {
@@ -348,7 +350,7 @@ class SecurityTestUtils:
 
         results = []
         for payload in xss_payloads:
-            test_data = {k: payload for k in json_data.keys()}
+            test_data = dict.fromkeys(json_data.keys(), payload)
             response = await client.post(endpoint, json=test_data)
             results.append(
                 {

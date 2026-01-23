@@ -3,18 +3,20 @@ SCIM 2.0 API Endpoints
 Enterprise identity provider integration for user and group provisioning
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 from uuid import UUID
-import structlog
 
-from ...models import User
-from app.models.enterprise import Organization, SCIMResource, OrganizationMember, OrganizationRole
+import structlog
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database_manager import get_db
 from app.core.tenant_context import TenantContext
+from app.models.enterprise import Organization, OrganizationMember, OrganizationRole, SCIMResource
+
+from ...models import User
 
 logger = structlog.get_logger()
 

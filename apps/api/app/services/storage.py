@@ -2,13 +2,13 @@
 File storage service for avatars and other uploads
 """
 
+import hashlib
+import logging
+import mimetypes
 import os
 import uuid
-import hashlib
-import mimetypes
-from typing import Optional, Dict, Any
 from datetime import datetime
-import logging
+from typing import Any, Dict, Optional
 
 from app.config import settings
 
@@ -341,8 +341,9 @@ class StorageService:
     ) -> bytes:
         """Optimize image for storage (resize, compress)"""
         try:
-            from PIL import Image
             import io
+
+            from PIL import Image
 
             # Open image
             img = Image.open(io.BytesIO(file_content))

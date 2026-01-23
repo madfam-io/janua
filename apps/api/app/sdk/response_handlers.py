@@ -5,10 +5,11 @@ Provides consistent response processing, pagination handling,
 and bulk operation result management across all platform SDKs.
 """
 
-from typing import Any, Dict, List, Optional, TypeVar, Generic, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
-from ..schemas.sdk_models import PaginationMetadata, BulkOperationResult, APIStatus
-from .error_handling import create_error_from_response, APIError
+from ..schemas.sdk_models import APIStatus, BulkOperationResult, PaginationMetadata
+from .error_handling import APIError, create_error_from_response
 
 T = TypeVar("T")
 

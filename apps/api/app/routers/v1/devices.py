@@ -239,8 +239,9 @@ async def revoke_session(
     Revoke a specific session, logging out that device.
     """
     from sqlalchemy import select
-    from app.models import Session
+
     from app.core.jwt_manager import jwt_manager
+    from app.models import Session
 
     try:
         session_uuid = UUID(session_id)
@@ -298,9 +299,10 @@ async def revoke_all_sessions(
     # We need to exclude current session somehow - for now we'll use fingerprint
     # In a production system, you'd pass the current session ID from the token
 
-    from sqlalchemy import select, and_
-    from app.models import Session
+    from sqlalchemy import and_, select
+
     from app.core.jwt_manager import jwt_manager
+    from app.models import Session
 
     query = select(Session).where(
         and_(

@@ -3,15 +3,16 @@ Advanced Rate Limiting System
 Provides sophisticated rate limiting with multiple algorithms and Redis backend
 """
 
-import time
 import json
-from typing import Dict, List, Optional
+import time
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, List, Optional
+
 import redis.asyncio as redis
+import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse
-import structlog
 
 logger = structlog.get_logger()
 

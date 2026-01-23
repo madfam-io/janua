@@ -3,7 +3,7 @@ User models - backward compatibility module
 """
 
 # Re-export user-related models from the main models module for backward compatibility
-from . import User, Session, UserStatus, Organization, OrganizationMember
+from . import Organization, OrganizationMember, Session, User, UserStatus
 
 __all__ = ["User", "Session", "UserStatus", "Organization", "OrganizationMember", "Tenant"]
 

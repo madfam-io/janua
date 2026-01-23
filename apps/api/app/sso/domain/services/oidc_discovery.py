@@ -13,10 +13,11 @@ See _validate_hostname_ssrf() for the SSRF protection implementation.
 
 import ipaddress
 import socket
-from typing import Dict, Any, Optional
-from urllib.parse import urlparse
-import httpx
 from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse
+
+import httpx
 
 
 class OIDCDiscoveryService:

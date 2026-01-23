@@ -3,20 +3,20 @@ Production Monitoring and APM Integration
 Integrates with DataDog, New Relic, AppDynamics, and Prometheus
 """
 
-import time
-import json
 import asyncio
+import json
+import logging
+import time
 import traceback
-from typing import Dict, Any, Optional
 from datetime import datetime
 from functools import wraps
-import logging
+from typing import Any, Dict, Optional
 
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
-from prometheus_client import Counter, Histogram, Gauge, generate_latest
 import psutil
 import redis.asyncio as aioredis
+from fastapi import Request, Response
+from prometheus_client import Counter, Gauge, Histogram, generate_latest
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Try importing APM agents (optional dependencies)
 try:

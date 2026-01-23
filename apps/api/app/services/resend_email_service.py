@@ -168,7 +168,7 @@ class ResendEmailService:
                 await self._track_delivery(delivery_status)
 
             logger.info(
-                f"Email sent successfully via Resend",
+                "Email sent successfully via Resend",
                 message_id=delivery_status.message_id,
                 to_email=to_email,
             )
@@ -188,7 +188,7 @@ class ResendEmailService:
                 await self._track_delivery(delivery_status)
 
             logger.error(
-                f"Failed to send email via Resend",
+                "Failed to send email via Resend",
                 message_id=message_id,
                 to_email=to_email,
                 error=str(e),

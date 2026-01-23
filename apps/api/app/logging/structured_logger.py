@@ -3,22 +3,23 @@ Structured Logging System
 Comprehensive logging framework with structured output, correlation IDs, and centralized configuration
 """
 
+import asyncio
+import logging
+import logging.handlers
 import os
 import sys
 import time
-import uuid
-import asyncio
 import traceback
-from typing import Dict, Any, Optional, Callable
+import uuid
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from enum import Enum
-from contextlib import contextmanager, asynccontextmanager
 from functools import wraps
+from typing import Any, Callable, Dict, Optional
+
 import structlog
-import logging
-import logging.handlers
-from pythonjsonlogger import jsonlogger
 from opentelemetry import trace
+from pythonjsonlogger import jsonlogger
 
 from app.config import settings
 

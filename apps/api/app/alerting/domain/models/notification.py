@@ -6,9 +6,9 @@ Represents notification requests and channel configurations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Protocol
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional, Protocol
 
 from .alert import Alert
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 import base64
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 try:
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -16,8 +16,8 @@ except ImportError:
     SAML_AVAILABLE = False
     OneLogin_Saml2_Auth = None
 
-from .base import SSOProtocol
 from ...exceptions import AuthenticationError, ValidationError
+from .base import SSOProtocol
 
 
 class SAMLProtocol(SSOProtocol):
@@ -185,7 +185,7 @@ class SAMLProtocol(SSOProtocol):
             )
         else:
             # Mock for testing
-            slo_request = base64.b64encode(f"<samlp:LogoutRequest />".encode()).decode()
+            slo_request = base64.b64encode(b"<samlp:LogoutRequest />").decode()
 
         return {
             "logout_url": config["slo_url"],

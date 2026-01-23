@@ -1,8 +1,8 @@
 """Domain models for alerting system"""
 
 from .alert import Alert, AlertAggregate
+from .notification import NotificationChannel, NotificationRequest, NotificationStrategy
 from .rule import AlertRule, RuleCondition
-from .notification import NotificationRequest, NotificationChannel, NotificationStrategy
 
 __all__ = [
     "Alert",

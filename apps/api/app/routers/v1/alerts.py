@@ -3,22 +3,22 @@ Alerting System API Routes
 Endpoints for managing alerts, rules, and notification channels
 """
 
-from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field
-import structlog
+from typing import Any, Dict, List, Optional
 
+import structlog
 from app.alerting.alert_system import (
+    AlertChannel,
+    AlertRule,
+    AlertSeverity,
+    NotificationChannel,
     alert_manager,
     get_alert_health,
     trigger_manual_alert,
-    AlertSeverity,
-    AlertChannel,
-    AlertRule,
-    NotificationChannel,
 )
 from app.core.auth import get_current_admin_user
 from app.core.models import User
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 logger = structlog.get_logger()
 

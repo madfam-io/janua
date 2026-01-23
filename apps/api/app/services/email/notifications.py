@@ -10,8 +10,8 @@ Notification Types:
 - Compliance emails (data export, deletion confirmations)
 """
 
-import os
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import List, Optional
 

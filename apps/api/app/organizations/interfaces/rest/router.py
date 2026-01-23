@@ -3,6 +3,7 @@ Organization router using the new layered architecture
 """
 
 from typing import List
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -10,14 +11,14 @@ from app.database import get_db
 from app.models import User
 from app.routers.v1.auth import get_current_user
 
-from .organization_controller import OrganizationController
 from .dto.requests import CreateOrganizationRequest, InviteMemberRequest
 from .dto.responses import (
-    OrganizationResponse,
-    MemberResponse,
     InviteResultResponse,
+    MemberResponse,
+    OrganizationResponse,
     SuccessResponse,
 )
+from .organization_controller import OrganizationController
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 

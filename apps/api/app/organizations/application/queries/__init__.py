@@ -1,7 +1,7 @@
 """Query handlers"""
 
-from .get_organization import GetOrganizationQuery, GetOrganizationHandler
-from .list_memberships import ListMembershipsQuery, ListMembershipsHandler
+from .get_organization import GetOrganizationHandler, GetOrganizationQuery
+from .list_memberships import ListMembershipsHandler, ListMembershipsQuery
 
 __all__ = [
     "GetOrganizationQuery",

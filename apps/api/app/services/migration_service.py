@@ -1,6 +1,6 @@
 # Migration service - placeholder for enterprise migration features
-from typing import Dict, Any
 import logging
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 

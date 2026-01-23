@@ -3,18 +3,19 @@ Load Testing Infrastructure
 Enterprise-grade load testing with Locust, performance scenarios, and real-time monitoring
 """
 
+import logging
 import os
-import time
 import random
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+import statistics
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-import logging
-import statistics
-from locust import HttpUser, task, between
+from typing import Any, Dict, List, Optional
+
 import plotly.graph_objects as go
+from locust import HttpUser, between, task
 from plotly.subplots import make_subplots
 
 logger = logging.getLogger(__name__)

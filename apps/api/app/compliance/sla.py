@@ -4,17 +4,18 @@ Tracks service level objectives, uptime guarantees, and enterprise performance r
 """
 
 import asyncio
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
-from enum import Enum
-from dataclasses import dataclass, asdict
-from pathlib import Path
 import json
+import logging
 import statistics
-import redis.asyncio as aioredis
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import psutil
-from sqlalchemy import select, and_, func
+import redis.asyncio as aioredis
+from sqlalchemy import and_, func, select
 
 from app.core.database import get_session
 from app.models.audit import AuditLog
@@ -729,7 +730,7 @@ class SLAMonitor:
             return None
 
         try:
-            with open(slo_file, "r") as f:
+            with open(slo_file) as f:
                 slo_data = json.load(f)
 
             # Convert datetime strings back to datetime objects
@@ -821,7 +822,7 @@ class SLAMonitor:
 
         for measurement_file in measurements_dir.glob("*.json"):
             try:
-                with open(measurement_file, "r") as f:
+                with open(measurement_file) as f:
                     measurement_data = json.load(f)
 
                 timestamp = datetime.fromisoformat(measurement_data["timestamp"])

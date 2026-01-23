@@ -1,10 +1,12 @@
-from typing import AsyncGenerator, Optional
 import os
 import ssl
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import declarative_base
-from sqlalchemy import MetaData, select
+from collections.abc import AsyncGenerator
+from typing import Optional
+
 import structlog
+from sqlalchemy import MetaData, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base
 
 # Import config with error handling
 try:
@@ -236,9 +238,10 @@ async def bootstrap_admin_user():
 
     try:
         # Import here to avoid circular imports
-        from app.models import User, Organization, OrganizationMember
         from passlib.context import CryptContext
+
         from app.core.database_manager import db_manager
+        from app.models import Organization, OrganizationMember, User
 
         pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

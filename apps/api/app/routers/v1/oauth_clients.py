@@ -23,9 +23,9 @@ from app.schemas.oauth_client import (
     OAuthClientListResponse,
     OAuthClientResponse,
     OAuthClientSecretInfo,
+    OAuthClientSecretRevokeRequest,
     OAuthClientSecretRotateRequest,
     OAuthClientSecretRotateResponse,
-    OAuthClientSecretRevokeRequest,
     OAuthClientSecretStatusResponse,
     OAuthClientUpdate,
 )

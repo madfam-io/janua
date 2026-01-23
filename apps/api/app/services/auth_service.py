@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from uuid import UUID
 
-import structlog
 import jwt
+import structlog
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
 from sqlalchemy import and_, select

@@ -3,19 +3,20 @@ Security incident response system for enterprise compliance and SOC2 requirement
 Automated incident detection, classification, response coordination, and compliance reporting.
 """
 
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
-from enum import Enum
-from dataclasses import dataclass, asdict
-from pathlib import Path
 import json
+import logging
 import uuid
-from sqlalchemy import select, and_, func
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from sqlalchemy import and_, func, select
+
+from app.core.config import get_settings
 from app.core.database import get_session
 from app.models.audit import AuditLog
-from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -299,7 +300,7 @@ class IncidentResponse:
             return None
 
         try:
-            with open(incident_file, "r") as f:
+            with open(incident_file) as f:
                 incident_data = json.load(f)
 
             # Convert datetime strings back to datetime objects
@@ -809,7 +810,7 @@ async def create_authentication_failure_alert(
         alert_id=f"AUTH-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:8]}",
         alert_type=AlertType.AUTHENTICATION_FAILURE,
         severity=severity,
-        title=f"Multiple Authentication Failures",
+        title="Multiple Authentication Failures",
         description=f"User {user_id} failed authentication {failure_count} times from IP {ip_address}",
         source_system="authentication",
         affected_assets=["authentication_service"],

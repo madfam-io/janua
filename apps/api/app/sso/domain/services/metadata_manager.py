@@ -5,9 +5,9 @@ Handles SAML metadata generation and parsing for SP and IdP metadata exchange.
 Supports both SP-initiated and IdP-initiated flows with certificate embedding.
 """
 
-from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 from xml.dom import minidom
 
 # Use defusedxml for secure XML parsing to prevent XML bomb attacks

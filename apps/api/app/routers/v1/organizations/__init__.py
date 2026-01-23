@@ -4,6 +4,7 @@ Refactored from single large file into focused sub-modules for better maintainab
 """
 
 from fastapi import APIRouter
+
 from .core import router as core_router
 
 # from .members import router as members_router
@@ -20,16 +21,16 @@ router.include_router(core_router)
 # router.include_router(roles_router, prefix="/{org_id}/roles")
 
 # Export schemas and dependencies for external use
-from .schemas import (
-    OrganizationCreateRequest,
-    OrganizationUpdateRequest,
-    OrganizationResponse,
-    OrganizationDetailResponse,
-)
 from .dependencies import (
-    check_organization_permission,
     check_organization_admin_permission,
     check_organization_member_permission,
+    check_organization_permission,
+)
+from .schemas import (
+    OrganizationCreateRequest,
+    OrganizationDetailResponse,
+    OrganizationResponse,
+    OrganizationUpdateRequest,
 )
 
 __all__ = [

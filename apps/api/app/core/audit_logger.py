@@ -12,18 +12,18 @@ Features:
 import hashlib
 import json
 import os
-from pathlib import Path
-from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 from uuid import UUID
+
 import structlog
-
+from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc
 
+from app.core.tenant_context import TenantContext
 from app.models import AuditLog
 from app.models.enterprise import AuditEventType
-from app.core.tenant_context import TenantContext
 
 logger = structlog.get_logger()
 
@@ -623,7 +623,7 @@ async def replay_fallback_logs(session: AsyncSession) -> Dict[str, Any]:
 
     for fallback_file in fallback_files:
         try:
-            with open(fallback_file, "r") as f:
+            with open(fallback_file) as f:
                 for line_num, line in enumerate(f, 1):
                     try:
                         event_data = json.loads(line.strip())
@@ -704,7 +704,7 @@ def get_fallback_log_stats() -> Dict[str, Any]:
 
     for fallback_file in fallback_files:
         try:
-            with open(fallback_file, "r") as f:
+            with open(fallback_file) as f:
                 stats["pending_events"] += sum(1 for _ in f)
 
             if stats["oldest_file"] is None:

@@ -6,11 +6,11 @@ Centralized email service for all MADFAM applications via Resend
 from typing import Any, Dict, List, Optional
 
 import structlog
-from app.services.resend_email_service import ResendEmailService as ResendService
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr
 
 from app.config import settings
+from app.services.resend_email_service import ResendEmailService as ResendService
 
 logger = structlog.get_logger()
 

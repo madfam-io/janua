@@ -132,9 +132,9 @@ class PerformanceTrackingMiddleware(BaseHTTPMiddleware):
         """Record metrics to Prometheus (if available)"""
         try:
             from app.monitoring.metrics import (
-                record_request_latency,
-                record_db_queries,
                 record_cache_hit_rate,
+                record_db_queries,
+                record_request_latency,
             )
 
             # Record latency histogram

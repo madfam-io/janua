@@ -11,12 +11,24 @@ This provides HTTP status codes and consistent error handling across the applica
 # Import from unified exception system
 from app.core.exceptions import (
     JanuaSSOException as SSOException,
+)
+from app.core.exceptions import (
     SSOAuthenticationError as AuthenticationError,
-    SSOValidationError as ValidationError,
-    SSOConfigurationError as ConfigurationError,
-    SSOMetadataError as MetadataError,
+)
+from app.core.exceptions import (
     SSOCertificateError as CertificateError,
+)
+from app.core.exceptions import (
+    SSOConfigurationError as ConfigurationError,
+)
+from app.core.exceptions import (
+    SSOMetadataError as MetadataError,
+)
+from app.core.exceptions import (
     SSOProvisioningError as ProvisioningError,
+)
+from app.core.exceptions import (
+    SSOValidationError as ValidationError,
 )
 
 # Re-export for backward compatibility

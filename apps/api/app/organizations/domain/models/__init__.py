@@ -1,6 +1,6 @@
 """Domain models"""
 
-from .organization import Organization
 from .membership import Membership
+from .organization import Organization
 
 __all__ = ["Organization", "Membership"]

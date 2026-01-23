@@ -9,13 +9,14 @@ Provides Prometheus-compatible metrics for performance monitoring:
 """
 
 from typing import Optional
+
 import structlog
 
 logger = structlog.get_logger()
 
 # Try to import Prometheus client
 try:
-    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:

@@ -3,26 +3,28 @@ Core organization CRUD operations
 Basic organization management endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func, select
 from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.models import User, Organization, organization_members
+from app.models import Organization, User, organization_members
 from app.routers.v1.auth import get_current_user
-from .schemas import (
-    OrganizationCreateRequest,
-    OrganizationUpdateRequest,
-    OrganizationResponse,
-    OrganizationDetailResponse,
-    OrganizationListResponse,
-    UserSummary,
-)
+
 from .dependencies import (
     check_organization_admin_permission,
     check_organization_member_permission,
     validate_unique_slug,
+)
+from .schemas import (
+    OrganizationCreateRequest,
+    OrganizationDetailResponse,
+    OrganizationListResponse,
+    OrganizationResponse,
+    OrganizationUpdateRequest,
+    UserSummary,
 )
 
 router = APIRouter()

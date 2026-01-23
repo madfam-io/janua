@@ -3,9 +3,9 @@
 Uses centralized pydantic Settings from app.config instead of direct os.getenv() calls.
 """
 
-import time
 import json
 import logging
+import time
 from typing import Optional
 from urllib.parse import urlparse
 

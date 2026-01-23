@@ -4,17 +4,18 @@ Automatic request/response logging with correlation IDs and structured output
 """
 
 import time
-from typing import Callable, Optional, Dict, Any
+from typing import Any, Callable, Dict, Optional
+
+import structlog
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-import structlog
 
 from app.logging.structured_logger import (
-    structured_logger,
-    request_logging_context,
     generate_correlation_id,
+    request_logging_context,
+    structured_logger,
 )
 
 logger = structlog.get_logger()

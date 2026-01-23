@@ -4,10 +4,10 @@ Represents the alert entity with its business rules and state transitions
 """
 
 import uuid
-from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 import structlog
 

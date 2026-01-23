@@ -2,19 +2,19 @@
 Rate limiting middleware for API protection
 """
 
-import time
-from typing import Optional
-from datetime import datetime
 import json
+import time
+from datetime import datetime
+from typing import Optional
 
-from fastapi import Request, HTTPException, status
+import redis.asyncio as redis
+import structlog
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-import redis.asyncio as redis
 
 from app.config import settings
-import structlog
 
 logger = structlog.get_logger()
 
@@ -340,9 +340,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             # Fetch from database if not in cache
             try:
+                from sqlalchemy import select
+
                 from app.database import get_db_session
                 from app.models import Organization
-                from sqlalchemy import select
 
                 async with get_db_session() as db:
                     result = await db.execute(

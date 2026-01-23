@@ -10,29 +10,28 @@ Endpoints:
 - Plans: List available subscription plans
 """
 
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from app.core.auth import get_current_user
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.auth import get_current_user
-from app.models.user import User
 from app.models.billing import (
-    SubscriptionPlan,
-    Subscription,
-    PaymentMethod,
-    Invoice,
-    SubscriptionStatus,
     BillingInterval,
+    Invoice,
+    PaymentMethod,
     PaymentStatus,
+    Subscription,
+    SubscriptionPlan,
+    SubscriptionStatus,
 )
-from app.services.payment.router import PaymentRouter, TransactionType
+from app.models.user import User
 from app.services.payment.base import CustomerData, PaymentMethodData, SubscriptionData
-
+from app.services.payment.router import PaymentRouter, TransactionType
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 

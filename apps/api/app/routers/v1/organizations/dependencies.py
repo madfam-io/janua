@@ -4,12 +4,13 @@ Shared dependencies and utilities for organization routes
 
 import uuid
 from typing import Optional
-from fastapi import HTTPException, Depends
-from sqlalchemy.orm import Session
+
+from fastapi import Depends, HTTPException
 from sqlalchemy import and_, select
+from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User, Organization, organization_members
+from app.models import Organization, User, organization_members
 from app.routers.v1.auth import get_current_user
 
 

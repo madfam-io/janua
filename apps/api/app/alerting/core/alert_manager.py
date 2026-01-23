@@ -4,23 +4,23 @@ Main alert management system orchestrating evaluation, triggering, and lifecycle
 """
 
 import asyncio
+import json
 import time
 import uuid
-import json
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 import redis.asyncio as aioredis
 import structlog
 
 from app.config import settings
-from app.monitoring.apm import apm_collector
 from app.logging.log_analyzer import log_analyzer
+from app.monitoring.apm import apm_collector
 
-from .alert_types import AlertSeverity, AlertStatus, AlertChannel
-from .alert_models import AlertRule, Alert, NotificationChannel
 from .alert_evaluator import AlertEvaluator
+from .alert_models import Alert, AlertRule, NotificationChannel
+from .alert_types import AlertChannel, AlertSeverity, AlertStatus
 from .notification_sender import NotificationSender
 
 logger = structlog.get_logger()

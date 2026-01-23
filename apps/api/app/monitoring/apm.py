@@ -3,25 +3,26 @@ Application Performance Monitoring (APM)
 Comprehensive performance tracking, metrics collection, and distributed tracing
 """
 
-import time
 import asyncio
+import time
 import uuid
-import psutil
-import structlog
-from typing import Dict, List, Optional, Any, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from functools import wraps
-from contextlib import asynccontextmanager
+from typing import Any, Callable, Dict, List, Optional
+
+import psutil
 import redis.asyncio as aioredis
-from prometheus_client import Counter, Histogram, Gauge, CollectorRegistry, generate_latest
-from opentelemetry import trace, metrics
+import structlog
+from opentelemetry import metrics, trace
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.exporter.prometheus import PrometheusMetricReader
+from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.exporter.prometheus import PrometheusMetricReader
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 
 from app.config import settings
 

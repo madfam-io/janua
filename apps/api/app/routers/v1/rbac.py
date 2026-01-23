@@ -2,16 +2,17 @@
 RBAC API Routes
 Role-based access control and policy management
 """
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import select
-from pydantic import BaseModel
 
-from ...dependencies import get_db, get_current_user, get_redis
-from ...services.rbac_service import RBACService
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ...dependencies import get_current_user, get_db, get_redis
 from ...models import User
+from ...services.rbac_service import RBACService
 
 
 # Pydantic schemas

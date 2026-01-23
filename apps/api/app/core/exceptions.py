@@ -10,8 +10,7 @@ All exceptions inherit from a common base (JanuaException) for consistent
 error handling and logging across the application.
 """
 
-from typing import Optional, Dict, Any
-
+from typing import Any, Dict, Optional
 
 # ============================================================================
 # Base Exception

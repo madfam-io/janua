@@ -13,16 +13,17 @@ DO NOT use this code in production applications. It is for security testing only
 """
 
 import asyncio
-import aiohttp
 import json
 import re
-import ssl
 import socket
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+import ssl
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from urllib.parse import urljoin, urlparse
 from enum import Enum
+from typing import Any, Dict, List, Optional
+from urllib.parse import urljoin, urlparse
+
+import aiohttp
 import structlog
 
 logger = structlog.get_logger()

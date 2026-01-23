@@ -4,8 +4,8 @@ Standardizes on async SQLAlchemy with comprehensive health monitoring
 """
 
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import structlog
 from sqlalchemy import text

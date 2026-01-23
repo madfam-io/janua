@@ -2,14 +2,15 @@
 WebSocket connection manager for real-time events.
 """
 
-from typing import Dict, Set, Optional, Any
-from fastapi import WebSocket
-from datetime import datetime
 import asyncio
+from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, Optional, Set
 
-from app.services.cache import CacheService
+from fastapi import WebSocket
+
 from app.services.auth_service import AuthService
+from app.services.cache import CacheService
 
 
 class EventType(str, Enum):

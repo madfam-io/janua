@@ -6,15 +6,15 @@ from __future__ import annotations
 import base64
 import secrets
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
 import httpx
 import jwt
 from cryptography.hazmat.primitives import serialization
 
-from .base import SSOProtocol
 from ...exceptions import AuthenticationError, ValidationError
+from .base import SSOProtocol
 
 
 class OIDCProtocol(SSOProtocol):

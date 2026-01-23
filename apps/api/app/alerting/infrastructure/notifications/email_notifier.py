@@ -5,14 +5,15 @@ Concrete implementation for email notification delivery
 
 import smtplib
 import ssl
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.utils import formataddr
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+import structlog
 from jinja2 import Environment, select_autoescape
 
-from ...domain.models.notification import NotificationRequest, AbstractNotificationStrategy
-import structlog
+from ...domain.models.notification import AbstractNotificationStrategy, NotificationRequest
 
 logger = structlog.get_logger()
 

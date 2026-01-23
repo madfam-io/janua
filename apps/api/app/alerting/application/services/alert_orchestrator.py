@@ -4,15 +4,16 @@ Coordinates alert lifecycle management and business workflows
 """
 
 import asyncio
-from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
 
-from ...domain.models.alert import Alert, AlertStatus, AlertAggregate
+import structlog
+
+from ...domain.models.alert import Alert, AlertAggregate, AlertStatus
 from ...domain.models.rule import AlertRule
 from ...domain.services.alert_evaluator import AlertEvaluatorService, EvaluationResult
 from .notification_dispatcher import NotificationDispatcher
-import structlog
 
 logger = structlog.get_logger()
 
@@ -179,7 +180,7 @@ class AlertOrchestrator:
                 "acknowledged", alert_id, alert.rule_id, {"acknowledged_by": acknowledged_by}
             )
 
-            logger.info(f"Alert acknowledged", alert_id=alert_id, acknowledged_by=acknowledged_by)
+            logger.info("Alert acknowledged", alert_id=alert_id, acknowledged_by=acknowledged_by)
 
             return True
 
@@ -226,7 +227,7 @@ class AlertOrchestrator:
             )
 
             logger.info(
-                f"Alert resolved",
+                "Alert resolved",
                 alert_id=alert_id,
                 resolved_by=resolved_by or "system",
                 reason=reason,
@@ -284,7 +285,7 @@ class AlertOrchestrator:
             )
 
             logger.warning(
-                f"Alert escalated",
+                "Alert escalated",
                 alert_id=alert_id,
                 original_severity=original_severity.value,
                 new_severity=alert.severity.value,
@@ -377,7 +378,7 @@ class AlertOrchestrator:
         )
 
         logger.info(
-            f"Created new alert",
+            "Created new alert",
             alert_id=alert.alert_id,
             rule_id=alert.rule_id,
             severity=alert.severity.value,
@@ -524,5 +525,5 @@ class AlertOrchestrator:
             self._lifecycle_events = self._lifecycle_events[-1000:]
 
         logger.debug(
-            f"Recorded lifecycle event", event_type=event_type, alert_id=alert_id, rule_id=rule_id
+            "Recorded lifecycle event", event_type=event_type, alert_id=alert_id, rule_id=rule_id
         )

@@ -2,21 +2,24 @@
 User management endpoints
 """
 
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, select, func, update
-from pydantic import BaseModel, Field
-from datetime import datetime
-import uuid
-import os
 import hashlib
+import os
+import uuid
+from datetime import datetime
+from typing import List, Optional
 
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.orm import Session
+
+from app.config import settings
 from app.database import get_db
-from ...models import User, UserStatus, Organization, OrganizationMember, Session as UserSession
 from app.routers.v1.auth import get_current_user
 from app.services.auth_service import AuthService
-from app.config import settings
+
+from ...models import Organization, OrganizationMember, User, UserStatus
+from ...models import Session as UserSession
 
 router = APIRouter(prefix="/users", tags=["users"])
 

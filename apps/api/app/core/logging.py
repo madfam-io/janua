@@ -4,8 +4,9 @@ Structured logging configuration for Janua
 
 import logging
 import sys
-import structlog
 from typing import Any, Dict, Optional
+
+import structlog
 
 from app.config import settings
 

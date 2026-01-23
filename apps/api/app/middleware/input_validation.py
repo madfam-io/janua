@@ -3,19 +3,20 @@ Comprehensive Input Validation Middleware
 Enterprise-grade validation for all API inputs with security focus
 """
 
-import re
+import ipaddress
 import json
-import bleach
+import logging
+import re
+import urllib.parse
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
+
+import bleach
+import phonenumbers
+from email_validator import EmailNotValidError, validate_email
 from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-from email_validator import validate_email, EmailNotValidError
-import phonenumbers
-from datetime import datetime
-import ipaddress
-import urllib.parse
-import logging
 
 logger = logging.getLogger(__name__)
 

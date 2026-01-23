@@ -6,22 +6,22 @@ Handles GDPR data subject requests including access, erasure, and portability ri
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 
 from app.core.database import get_session
 from app.models.compliance import (
+    ComplianceFramework,
+    DataCategory,
     DataSubjectRequest,
     DataSubjectRequestType,
     RequestStatus,
-    DataCategory,
-    ComplianceFramework,
 )
-from ..audit import AuditLogger, AuditEventType, EvidenceType
 
-from .privacy_types import DataExportFormat
+from ..audit import AuditEventType, AuditLogger, EvidenceType
 from .privacy_models import DataSubjectRequestResponse
+from .privacy_types import DataExportFormat
 
 logger = logging.getLogger(__name__)
 

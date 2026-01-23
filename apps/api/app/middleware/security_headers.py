@@ -1,9 +1,10 @@
 """Security Headers Middleware for Janua API"""
+from typing import Callable
+
+import structlog
 from fastapi import Request
 from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from typing import Callable
-import structlog
 
 logger = structlog.get_logger()
 

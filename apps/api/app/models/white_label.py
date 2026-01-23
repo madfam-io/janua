@@ -3,13 +3,16 @@ White Label Configuration Models
 Supports multi-tenant customization and branding
 """
 
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text
-from app.models.types import GUID as UUID, JSON as JSONB
-from datetime import datetime
+import enum
 import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
+
+from app.models.types import GUID as UUID
+from app.models.types import JSON as JSONB
 
 from . import Base
-import enum
 
 
 class BrandingLevel(str, enum.Enum):

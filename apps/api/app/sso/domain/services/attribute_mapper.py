@@ -2,7 +2,8 @@
 Attribute mapping service for SSO protocols
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from ..protocols.base import UserProvisioningData
 
 

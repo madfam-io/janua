@@ -11,18 +11,17 @@ Routing Logic (with Stripe as Universal Fallback):
 - Stripe is the universal fallback for all provider failures
 """
 
-import os
 import logging
-from typing import Dict, Optional, Any, Tuple
-from enum import Enum
+import os
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, Optional, Tuple
 
 from app.services.payment.base import PaymentProvider
 from app.services.payment.conekta_provider import ConektaProvider
-from app.services.payment.stripe_provider import StripeProvider
-from app.services.payment.polar_provider import PolarProvider
 from app.services.payment.geolocation import GeolocationService
-
+from app.services.payment.polar_provider import PolarProvider
+from app.services.payment.stripe_provider import StripeProvider
 
 logger = logging.getLogger(__name__)
 

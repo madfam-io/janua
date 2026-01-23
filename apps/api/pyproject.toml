@@ -184,7 +184,16 @@ select = [
 ignore = [
     "E501",  # line too long, handled by black
     "B008",  # do not perform function calls in argument defaults
+    "B904",  # raise exceptions with `raise ... from err` - TODO: fix in future cleanup
     "C901",  # too complex
+    "UP006", # use `X | Y` instead of `Union[X, Y]` - modernization, not error
+    "UP035", # deprecated typing imports - modernization, not error
+    "UP045", # use `X | None` instead of `Optional[X]` - modernization, not error
+    "E402",  # module level import not at top - common with patches/mocks
+    "E712",  # comparison to True - intentional in SQLAlchemy queries
+    "B007",  # loop control variable not used - minor style issue
+    "W291",  # trailing whitespace - handled by formatter
+    "W293",  # blank line contains whitespace - handled by formatter
 ]
 
 [tool.ruff.per-file-ignores]
@@ -220,7 +229,9 @@ module = [
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-minversion = "7.0"
+minversion = "8.0"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts = [
     "--strict-markers",
     "--strict-config",
