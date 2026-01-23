@@ -269,8 +269,11 @@ async def _store_auth_code(code: str, data: dict, redis: ResilientRedisClient):
     success = await redis.set(key, json.dumps(data), ex=AUTH_CODE_TTL)
     if not success:
         logger.error("Failed to store auth code in Redis", key=key)
-    else:
-        logger.info("Auth code stored successfully", key=key)
+        raise HTTPException(
+            status_code=503,
+            detail="Authorization service temporarily unavailable. Please try again."
+        )
+    logger.info("Auth code stored successfully", key=key)
 
 
 async def _get_auth_code(code: str, redis: ResilientRedisClient) -> dict | None:

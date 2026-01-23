@@ -140,11 +140,19 @@ async def oauth_authorize(
         from app.core.redis import get_redis
 
         redis_client = await get_redis()
-        await redis_client.set(
+        state_stored = await redis_client.set(
             f"oauth_state:{state}",
             provider,  # Store provider for additional validation
             ex=600,  # 10 minutes
         )
+
+        # Validate Redis state storage succeeded (critical for OAuth security)
+        if not state_stored:
+            logger.error("Failed to store OAuth state in Redis - service unavailable")
+            raise HTTPException(
+                status_code=503,
+                detail="Authentication service temporarily unavailable. Please try again."
+            )
 
         # Build redirect URI if not provided
         if not redirect_uri:
