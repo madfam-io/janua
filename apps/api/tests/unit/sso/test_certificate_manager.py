@@ -5,8 +5,6 @@ Tests X.509 certificate validation, generation, storage, and conversion.
 
 import os
 import tempfile
-from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest

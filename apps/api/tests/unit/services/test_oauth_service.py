@@ -4,8 +4,8 @@ Tests OAuth provider configuration, authorization URL generation,
 token exchange, user info normalization, and user creation flows.
 """
 
-from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import pytest
@@ -86,7 +86,7 @@ class TestProviderConfiguration:
             config = OAuthService.get_provider_config(OAuthProvider.DISCORD)
 
             assert config is not None
-            assert "discord.com" in config["auth_url"]
+            assert urlparse(config["auth_url"]).netloc.endswith("discord.com")
 
     def test_get_linkedin_provider_config(self):
         """Should return LinkedIn provider configuration"""
@@ -100,7 +100,7 @@ class TestProviderConfiguration:
             config = OAuthService.get_provider_config(OAuthProvider.LINKEDIN)
 
             assert config is not None
-            assert "linkedin.com" in config["auth_url"]
+            assert urlparse(config["auth_url"]).netloc.endswith("linkedin.com")
 
 
 class TestStateTokenGeneration:
@@ -151,7 +151,7 @@ class TestAuthorizationUrlGeneration:
             )
 
             assert url is not None
-            assert "accounts.google.com" in url
+            assert urlparse(url).netloc == "accounts.google.com"
             assert "client_id=google_id" in url
             assert "state=test_state" in url
             assert "redirect_uri=" in url
@@ -173,7 +173,7 @@ class TestAuthorizationUrlGeneration:
             )
 
             assert url is not None
-            assert "github.com" in url
+            assert urlparse(url).netloc == "github.com"
             # GitHub scope may be URL-encoded
             assert "user" in url and "email" in url
 
@@ -506,7 +506,7 @@ class TestNormalizeUserInfo:
 
         assert normalized["provider"] == "discord"
         assert normalized["email_verified"] is True
-        assert "cdn.discordapp.com" in normalized["profile_image_url"]
+        assert urlparse(normalized["profile_image_url"]).netloc == "cdn.discordapp.com"
 
     def test_normalize_linkedin_user_info(self):
         """Should normalize LinkedIn user info"""

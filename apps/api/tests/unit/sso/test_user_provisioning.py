@@ -3,7 +3,6 @@ Comprehensive User Provisioning Service Test Suite
 Tests JIT provisioning, user updates, and access validation for SSO.
 """
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -234,13 +233,13 @@ class TestCreateNewUser:
             mock_user.id = "new_user_123"
             mock_user_class.return_value = mock_user
 
-            result = await provisioning_service._create_new_user(
+            _result = await provisioning_service._create_new_user(
                 user_data=user_data,
                 organization_id="org_123",
                 sso_config=sso_config,
             )
 
-            # Verify User was instantiated with correct data
+            # Verify User was instantiated with correct data (result is unused but call must complete)
             mock_user_class.assert_called_once()
             call_kwargs = mock_user_class.call_args.kwargs
             assert call_kwargs["email"] == "new@example.com"
@@ -333,7 +332,7 @@ class TestUpdateExistingUser:
         mock_user.sso_provider = "oidc"
         mock_user.sso_subject_id = "user_123"
 
-        result = await provisioning_service._update_existing_user(
+        _result = await provisioning_service._update_existing_user(
             user=mock_user,
             user_data=user_data,
             sso_config=sso_config,
@@ -363,7 +362,7 @@ class TestUpdateExistingUser:
         mock_user.sso_provider = "oidc"
         mock_user.sso_subject_id = "user_123"
 
-        result = await provisioning_service._update_existing_user(
+        _result = await provisioning_service._update_existing_user(
             user=mock_user,
             user_data=user_data,
             sso_config=sso_config,
@@ -382,7 +381,7 @@ class TestUpdateExistingUser:
         mock_user.sso_provider = "saml2"  # Different from config
         mock_user.sso_subject_id = "user_123"
 
-        result = await provisioning_service._update_existing_user(
+        _result = await provisioning_service._update_existing_user(
             user=mock_user,
             user_data=user_data,
             sso_config=sso_config,

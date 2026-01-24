@@ -4,8 +4,6 @@ Tests SAML 2.0 authentication flow, configuration validation, and callback handl
 """
 
 import base64
-import uuid
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -193,7 +191,7 @@ class TestSAMLAuthentication:
     ):
         """Should store request state in cache"""
         with patch.object(saml_protocol, "_validate_certificate", return_value=True):
-            result = await saml_protocol.initiate_authentication(
+            _result = await saml_protocol.initiate_authentication(
                 organization_id="org_123",
                 return_url="https://app.example.com/callback",
                 config=valid_config,

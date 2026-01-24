@@ -242,7 +242,7 @@ class TestTrustDevice:
         mock_result.scalar_one_or_none = MagicMock(return_value=None)
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        device = await DeviceVerificationService.trust_device(
+        _device = await DeviceVerificationService.trust_device(
             mock_db,
             user_id,
             fingerprint,
@@ -287,7 +287,7 @@ class TestTrustDevice:
         mock_result.scalar_one_or_none = MagicMock(return_value=None)
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        device = await DeviceVerificationService.trust_device(
+        _device = await DeviceVerificationService.trust_device(
             mock_db,
             uuid4(),
             "fingerprint",

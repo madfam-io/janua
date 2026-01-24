@@ -4,8 +4,6 @@ Tests OpenID Connect authentication flow, token handling, and validation.
 """
 
 import base64
-import secrets
-from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
