@@ -5,7 +5,7 @@ failed attempt tracking, and manual unlock operations.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest

@@ -389,7 +389,7 @@ class TestAddCorsOrigin:
         mock_result.scalar_one_or_none.return_value = mock_existing
         service.db.execute.return_value = mock_result
 
-        result = await service.add_cors_origin(
+        _ = await service.add_cors_origin(
             "https://example.com",
             description="Updated description",
         )

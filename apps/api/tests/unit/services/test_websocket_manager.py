@@ -620,7 +620,7 @@ class TestSendToUser:
             mock_task.return_value = MagicMock()
             mock_task.return_value.add_done_callback = MagicMock()
 
-            connection_id = await connection_manager.connect(mock_websocket, user_id="user-123")
+            _ = await connection_manager.connect(mock_websocket, user_id="user-123")
             mock_websocket.send_json.reset_mock()
 
         await connection_manager.send_to_user("user-123", {"test": "message"})

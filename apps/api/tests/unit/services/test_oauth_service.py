@@ -30,7 +30,7 @@ class TestProviderConfiguration:
             assert config is not None
             assert config["client_id"] == "google_client_id"
             assert config["client_secret"] == "google_secret"
-            assert "accounts.google.com" in config["auth_url"]
+            assert urlparse(config["auth_url"]).netloc == "accounts.google.com"
 
     def test_get_github_provider_config(self):
         """Should return GitHub provider configuration"""
@@ -45,7 +45,7 @@ class TestProviderConfiguration:
 
             assert config is not None
             assert config["client_id"] == "github_client_id"
-            assert "github.com" in config["auth_url"]
+            assert urlparse(config["auth_url"]).netloc == "github.com"
 
     def test_get_microsoft_provider_config(self):
         """Should return Microsoft provider configuration"""
@@ -59,7 +59,7 @@ class TestProviderConfiguration:
             config = OAuthService.get_provider_config(OAuthProvider.MICROSOFT)
 
             assert config is not None
-            assert "microsoftonline.com" in config["auth_url"]
+            assert urlparse(config["auth_url"]).netloc.endswith("microsoftonline.com")
 
     def test_get_unconfigured_provider(self):
         """Should return None for unconfigured provider"""

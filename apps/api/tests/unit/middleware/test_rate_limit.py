@@ -108,7 +108,7 @@ class TestRateLimitMiddlewareDispatch:
         mock_request.url.path = "/health"
         call_next = AsyncMock(return_value=MagicMock())
 
-        response = await middleware_no_redis.dispatch(mock_request, call_next)
+        _ = await middleware_no_redis.dispatch(mock_request, call_next)
 
         call_next.assert_called_once_with(mock_request)
 
@@ -117,7 +117,7 @@ class TestRateLimitMiddlewareDispatch:
         mock_request.url.path = "/ready"
         call_next = AsyncMock(return_value=MagicMock())
 
-        response = await middleware_no_redis.dispatch(mock_request, call_next)
+        _ = await middleware_no_redis.dispatch(mock_request, call_next)
 
         call_next.assert_called_once_with(mock_request)
 
@@ -126,7 +126,7 @@ class TestRateLimitMiddlewareDispatch:
         mock_request.url.path = "/.well-known/jwks.json"
         call_next = AsyncMock(return_value=MagicMock())
 
-        response = await middleware_no_redis.dispatch(mock_request, call_next)
+        _ = await middleware_no_redis.dispatch(mock_request, call_next)
 
         call_next.assert_called_once_with(mock_request)
 
@@ -134,7 +134,7 @@ class TestRateLimitMiddlewareDispatch:
         """Test middleware proceeds when Redis is not available."""
         call_next = AsyncMock(return_value=MagicMock())
 
-        response = await middleware_no_redis.dispatch(mock_request, call_next)
+        _ = await middleware_no_redis.dispatch(mock_request, call_next)
 
         # Should proceed without rate limiting when Redis is not available
         call_next.assert_called_once_with(mock_request)

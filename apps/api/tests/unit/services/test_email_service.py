@@ -53,7 +53,7 @@ class TestRedactEmail:
     def test_redact_preserves_domain(self):
         """Test redaction preserves the full domain."""
         result = _redact_email("user@subdomain.example.com")
-        assert "subdomain.example.com" in result
+        assert result.endswith("@subdomain.example.com")
 
 
 class TestEmailServiceInitialization:

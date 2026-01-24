@@ -5,7 +5,7 @@ Tests SAML metadata generation, parsing, and validation.
 
 import tempfile
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
