@@ -10,7 +10,6 @@ from uuid import uuid4
 
 import pytest
 import jwt
-from jwt.exceptions import InvalidTokenError
 
 from app.config import settings
 from app.exceptions import TokenError

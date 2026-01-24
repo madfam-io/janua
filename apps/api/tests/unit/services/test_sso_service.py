@@ -5,6 +5,7 @@ Tests for SSO/SAML enterprise authentication
 
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -582,7 +583,7 @@ class TestOIDCFlow:
 
         result = await service.initiate_oidc_login("azure-ad", provider_config)
 
-        assert "login.microsoftonline.com" in result["auth_url"]
+        assert urlparse(result["auth_url"]).netloc == "login.microsoftonline.com"
 
     async def test_process_oidc_callback(self, service):
         """Test processing OIDC callback."""

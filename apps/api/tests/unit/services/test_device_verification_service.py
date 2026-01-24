@@ -4,7 +4,7 @@ Tests device fingerprinting, trust management, and session tracking.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -242,7 +242,7 @@ class TestTrustDevice:
         mock_result.scalar_one_or_none = MagicMock(return_value=None)
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        _device = await DeviceVerificationService.trust_device(
+        _ = await DeviceVerificationService.trust_device(
             mock_db,
             user_id,
             fingerprint,
@@ -287,7 +287,7 @@ class TestTrustDevice:
         mock_result.scalar_one_or_none = MagicMock(return_value=None)
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        _device = await DeviceVerificationService.trust_device(
+        _ = await DeviceVerificationService.trust_device(
             mock_db,
             uuid4(),
             "fingerprint",

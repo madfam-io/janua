@@ -6,7 +6,6 @@ Tests for audit logging with hash chain integrity and R2 archival
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-import json
 
 import pytest
 
@@ -281,7 +280,7 @@ class TestLogMethod:
         """Test log with all optional parameters."""
         with patch.object(logger, "_get_previous_hash", return_value=None):
             with patch.object(logger, "_store_entry", new_callable=AsyncMock):  # Patch to avoid AuditLog creation
-                result = await logger.log(
+                _ = await logger.log(
                     event_type=AuditEventType.AUTH_SIGNIN,
                     tenant_id="test-tenant",
                     identity_id="user-123",
