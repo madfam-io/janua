@@ -3,13 +3,10 @@ Enhanced JWT Service Test Suite
 Comprehensive coverage for JWT token management
 """
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch, MagicMock
-from uuid import uuid4
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
-import jwt
-from jwt.exceptions import InvalidTokenError
 
 from app.config import settings
 from app.services.jwt_service import JWTService

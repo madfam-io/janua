@@ -3,7 +3,7 @@ Comprehensive Audit Logger Test Suite
 Tests for audit logging with hash chain integrity and R2 archival
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 import json

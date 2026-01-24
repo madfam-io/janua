@@ -5,7 +5,7 @@ Tests for cache key generation, decorators, and CacheManager
 
 import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from app.core.caching import (
     cache_key,

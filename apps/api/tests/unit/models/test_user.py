@@ -2,7 +2,6 @@
 Tests for User model
 """
 
-import pytest
 from app.models import User, UserStatus
 
 

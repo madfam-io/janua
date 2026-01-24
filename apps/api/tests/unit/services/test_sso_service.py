@@ -3,10 +3,8 @@ Comprehensive SSO Service Test Suite
 Tests for SSO/SAML enterprise authentication
 """
 
-import base64
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 import pytest
 

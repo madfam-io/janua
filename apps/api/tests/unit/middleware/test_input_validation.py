@@ -3,11 +3,9 @@ Comprehensive Input Validation Middleware Test Suite
 Tests for security validation, sanitization, and malicious input detection
 """
 
-import json
 import pytest
-from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import Request, status
+from fastapi import Request
 
 from app.middleware.input_validation import (
     ComprehensiveInputValidationMiddleware,

@@ -7,7 +7,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import status
 from fastapi.exceptions import RequestValidationError
-from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import (
     ErrorDetail,

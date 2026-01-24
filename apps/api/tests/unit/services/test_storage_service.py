@@ -3,8 +3,6 @@ Comprehensive Storage Service Test Suite
 Tests for file upload, download, deletion and avatar management
 """
 
-import io
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

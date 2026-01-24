@@ -6,7 +6,6 @@ Tests OAuth 2.0 Authorization Server endpoints with security validation.
 import base64
 import hashlib
 import json
-import secrets
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
