@@ -120,6 +120,9 @@ from app.routers.v1 import (
 from app.routers.v1 import (
     webhooks as webhooks_v1,
 )
+from app.routers.v1 import (
+    webhooks_dhanam as webhooks_dhanam_v1,
+)
 
 # Additional feature routers with optional loading
 additional_routers = {}
@@ -995,7 +998,17 @@ app.include_router(mfa_v1.router, prefix="/api/v1")
 app.include_router(passkeys_v1.router, prefix="/api/v1")
 app.include_router(admin_v1.router, prefix="/api/v1")
 app.include_router(webhooks_v1.router, prefix="/api/v1")
+app.include_router(webhooks_dhanam_v1.router, prefix="/api/v1")
 app.include_router(integrations_v1.router, prefix="/api/v1")
+
+# Dhanam checkout router (for MADFAM billing integration)
+try:
+    from app.routers.v1 import checkout_dhanam as checkout_dhanam_v1
+
+    app.include_router(checkout_dhanam_v1.router, prefix="/api/v1")
+    logger.info("Registered Dhanam checkout router successfully")
+except Exception as e:
+    logger.warning(f"Dhanam checkout router not available: {e}")
 
 # Register newly added core routers
 app.include_router(policies_v1.router, prefix="/api")

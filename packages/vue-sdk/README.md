@@ -451,6 +451,15 @@ const user: User = {
 
 AGPL-3.0 License - see [LICENSE](./LICENSE) file for details.
 
+## Related Documentation
+
+- [SDK Selection Guide](/docs/sdks/CHOOSE_YOUR_SDK.md) - Compare all Janua SDKs
+- [Error Handling Guide](/docs/guides/ERROR_HANDLING_GUIDE.md) - Error codes and handling patterns
+- [Rate Limiting](/docs/api/RATE_LIMITING.md) - API rate limits and best practices
+- [API Reference](/apps/api/docs/api/endpoints-reference.md) - Complete API documentation
+- [Architecture Overview](/docs/architecture/INDEX.md) - System architecture and ADRs
+- [TypeScript SDK](/packages/typescript-sdk/README.md) - Core SDK for Vue integration
+
 ## Support
 
 - 📖 [Documentation](https://docs.janua.dev)

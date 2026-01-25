@@ -166,8 +166,16 @@ Janua undergoes regular security audits:
 - **Bug Bounty Program**: Coming Q2 2025
 - **Status Page**: https://status.janua.dev
 
-## Resources
+## Related Documentation
 
+### Internal Resources
+- [Error Handling Guide](/docs/guides/ERROR_HANDLING_GUIDE.md) - Security error codes (401, 403)
+- [Troubleshooting Guide](/docs/guides/TROUBLESHOOTING_GUIDE.md) - Common security issues
+- [Architecture Overview](/docs/architecture/INDEX.md) - Security architecture layers
+- [Authentication Flow ADR](/docs/architecture/ADR-001_AUTH_FLOW.md) - JWT and session security
+- [Multi-tenancy ADR](/docs/architecture/ADR-003_MULTITENANCY.md) - Data isolation strategy
+
+### External Resources
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [Security Best Practices](https://docs.janua.dev/security/best-practices)
 - [Secure Development Guide](https://docs.janua.dev/security/development)

@@ -505,6 +505,15 @@ Migrating from other auth solutions:
 
 We welcome contributions! Please see our [Contributing Guide](../../CONTRIBUTING.md).
 
+## Related Documentation
+
+- [SDK Selection Guide](/docs/sdks/CHOOSE_YOUR_SDK.md) - Compare all Janua SDKs
+- [Error Handling Guide](/docs/guides/ERROR_HANDLING_GUIDE.md) - Error codes and handling patterns
+- [Rate Limiting](/docs/api/RATE_LIMITING.md) - API rate limits and best practices
+- [API Reference](/apps/api/docs/api/endpoints-reference.md) - Complete API documentation
+- [Architecture Overview](/docs/architecture/INDEX.md) - System architecture and ADRs
+- [React Native SDK](/packages/react-native-sdk/README.md) - Alternative mobile SDK
+
 ## License
 
 AGPL-3.0 License - see [LICENSE](../../LICENSE) for details.

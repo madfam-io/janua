@@ -643,6 +643,15 @@ yarn build
 
 See [React Contributing Guide](../../docs/contributing/react.md) for development guidelines.
 
+## 📚 Related Documentation
+
+- [SDK Selection Guide](/docs/sdks/CHOOSE_YOUR_SDK.md) - Compare all Janua SDKs
+- [Error Handling Guide](/docs/guides/ERROR_HANDLING_GUIDE.md) - Error codes and handling patterns
+- [Rate Limiting](/docs/api/RATE_LIMITING.md) - API rate limits and best practices
+- [API Reference](/apps/api/docs/api/endpoints-reference.md) - Complete API documentation
+- [Architecture Overview](/docs/architecture/INDEX.md) - System architecture and ADRs
+- [TypeScript SDK](/packages/typescript-sdk/README.md) - Core SDK this package builds on
+
 ## 📄 License
 
 Part of the Janua platform. See [LICENSE](../../LICENSE) in the root directory.

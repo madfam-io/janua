@@ -520,6 +520,15 @@ MIT
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
+## Related Documentation
+
+- [SDK Selection Guide](/docs/sdks/CHOOSE_YOUR_SDK.md) - Compare all Janua SDKs
+- [Error Handling Guide](/docs/guides/ERROR_HANDLING_GUIDE.md) - Error codes and handling patterns
+- [Rate Limiting](/docs/api/RATE_LIMITING.md) - API rate limits and best practices
+- [API Reference](/apps/api/docs/api/endpoints-reference.md) - Complete API documentation
+- [Architecture Overview](/docs/architecture/INDEX.md) - System architecture and ADRs
+- [Go SDK](/packages/go-sdk/README.md) - Go SDK for backend services
+
 ## Security
 
 For security issues, please email security@janua.dev instead of using the issue tracker.

@@ -1165,10 +1165,20 @@ env | grep -E "^(JANUA|DATABASE|REDIS|JWT)" | sed 's/=.*/=REDACTED/'
 
 ## Related Documentation
 
-- [Security Checklist](./SECURITY_CHECKLIST.md)
-- [Performance Tuning Guide](./PERFORMANCE_TUNING_GUIDE.md)
-- [API Reference](../api/)
-- [FAQ](../../apps/api/docs/FAQ.md)
+### Guides
+- [Error Handling Guide](./ERROR_HANDLING_GUIDE.md) - Error codes and SDK-specific handling patterns
+- [Security Checklist](./SECURITY_CHECKLIST.md) - Security audit checklist
+- [Performance Tuning Guide](./PERFORMANCE_TUNING_GUIDE.md) - Performance optimization
+
+### API & Architecture
+- [API Reference](/apps/api/docs/api/endpoints-reference.md) - Complete API documentation
+- [Rate Limiting](/docs/api/RATE_LIMITING.md) - Rate limits and 429 handling
+- [Architecture Overview](/docs/architecture/INDEX.md) - System architecture and ADRs
+- [Database Schema](/docs/architecture/DATABASE_SCHEMA.md) - Entity relationships
+
+### SDKs
+- [SDK Selection Guide](/docs/sdks/CHOOSE_YOUR_SDK.md) - Choose the right SDK
+- [FAQ](/apps/api/docs/FAQ.md) - Frequently asked questions
 
 ---
 

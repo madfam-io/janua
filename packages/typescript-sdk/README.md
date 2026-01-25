@@ -504,6 +504,16 @@ This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE)
 - Discord: [https://discord.gg/janua](https://discord.gg/janua)
 - Email: support@janua.dev
 
+## Related Documentation
+
+- [SDK Selection Guide](/docs/sdks/CHOOSE_YOUR_SDK.md) - Compare all Janua SDKs
+- [Error Handling Guide](/docs/guides/ERROR_HANDLING_GUIDE.md) - Error codes and handling patterns
+- [Rate Limiting](/docs/api/RATE_LIMITING.md) - API rate limits and best practices
+- [API Reference](/apps/api/docs/api/endpoints-reference.md) - Complete API documentation
+- [Architecture Overview](/docs/architecture/INDEX.md) - System architecture and ADRs
+- [React SDK](/packages/react-sdk/README.md) - React integration using this SDK
+- [Vue SDK](/packages/vue-sdk/README.md) - Vue integration using this SDK
+
 ## Changelog
 
 See the main [CHANGELOG.md](../../docs/CHANGELOG.md) for a list of changes and migration guides.

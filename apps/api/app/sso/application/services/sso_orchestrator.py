@@ -5,6 +5,8 @@ Main SSO orchestration service
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+from sqlalchemy import select
+
 from ...domain.protocols.base import SSOConfiguration, SSOProtocol, SSOSession
 from ...domain.protocols.oidc import OIDCProtocol
 from ...domain.protocols.saml import SAMLProtocol
@@ -13,6 +15,29 @@ from ...domain.services.user_provisioning import UserProvisioningService
 from ...exceptions import AuthenticationError, ValidationError
 from ...infrastructure.configuration.config_repository import SSOConfigurationRepository
 from ...infrastructure.session.session_repository import SSOSessionRepository
+
+
+def map_subscription_to_foundry_tier(subscription_tier: str | None) -> str:
+    """Map Janua subscription_tier to Foundry tier for JWT claims.
+
+    Tier mapping:
+    - community: 1 project, 3 services (default)
+    - sovereign: 10 projects, unlimited services
+    - ecosystem: unlimited (coming soon)
+    """
+    if not subscription_tier:
+        return "community"
+
+    tier_lower = subscription_tier.lower()
+
+    if tier_lower in ("free", "community", ""):
+        return "community"
+    if tier_lower in ("pro", "sovereign"):
+        return "sovereign"
+    if tier_lower in ("scale", "enterprise", "ecosystem"):
+        return "ecosystem"
+
+    return "community"  # Default fallback
 
 
 class SSOOrchestrator:
@@ -172,13 +197,27 @@ class SSOOrchestrator:
         # Store session
         await self.session_repository.create(sso_session)
 
-        # Generate JWT token
+        # Query organization to get subscription_tier for foundry_tier claim
+        foundry_tier = "community"  # Default if no organization
+        if organization_id:
+            from app.models import Organization
+
+            result = await self.config_repository.db.execute(
+                select(Organization.subscription_tier).where(
+                    Organization.id == organization_id
+                )
+            )
+            org_tier = result.scalar_one_or_none()
+            foundry_tier = map_subscription_to_foundry_tier(org_tier)
+
+        # Generate JWT token with foundry_tier claim
         jwt_payload = {
             "user_id": user.id,
             "organization_id": organization_id,
             "email": user.email,
             "role": user.role,
             "sso_session_id": sso_session.session_id,
+            "foundry_tier": foundry_tier,
         }
 
         tokens = self.jwt_service.create_token_pair(jwt_payload)

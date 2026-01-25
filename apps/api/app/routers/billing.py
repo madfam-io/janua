@@ -16,7 +16,7 @@ from uuid import UUID
 
 import structlog
 
-from app.core.auth import get_current_user
+from app.dependencies import get_current_user
 
 logger = structlog.get_logger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.config import settings
 from app.models.billing import (
     BillingInterval,
     Invoice,
@@ -813,3 +814,224 @@ async def list_invoices(
         .order_by(Invoice.invoice_date.desc())
     )
     return result.scalars().all()
+
+
+# ============================================================================
+# Checkout (Dhanam Integration)
+# ============================================================================
+
+
+class CreateCheckoutRequest(BaseModel):
+    """Request to create a checkout session for Dhanam billing integration."""
+
+    plan_id: str = Field(..., description="Dhanam plan ID (e.g., 'enclii_sovereign', 'pro')")
+    organization_id: UUID = Field(..., description="Janua organization ID to upgrade")
+    success_url: str = Field(..., description="URL to redirect after successful payment")
+    cancel_url: str = Field(..., description="URL to redirect if payment is cancelled")
+
+
+class CheckoutSessionResponse(BaseModel):
+    """Response with checkout session details."""
+
+    checkout_url: str = Field(..., description="URL to redirect user for payment")
+    session_id: str = Field(..., description="Provider-specific checkout session ID")
+    customer_id: str = Field(..., description="Billing customer ID linked to organization")
+    provider: str = Field(..., description="Payment provider (conekta, polar, stripe)")
+    organization_id: str = Field(..., description="Organization ID being upgraded")
+    plan_id: str = Field(..., description="Plan ID for the checkout")
+
+
+# Dhanam plan to Janua tier mapping
+DHANAM_TO_JANUA_TIER = {
+    # Enclii plans
+    "enclii_community": "community",
+    "enclii_sovereign": "pro",
+    "enclii_ecosystem": "enterprise",
+    # Direct plan names
+    "community": "community",
+    "free": "community",
+    "pro": "pro",
+    "sovereign": "pro",
+    "scale": "scale",
+    "enterprise": "enterprise",
+    "ecosystem": "enterprise",
+}
+
+
+@router.post("/checkout", response_model=CheckoutSessionResponse)
+async def create_checkout_session(
+    request_data: CreateCheckoutRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Create a checkout session for Dhanam billing integration.
+
+    This endpoint is called when a user initiates an upgrade from Enclii or other
+    MADFAM applications. It:
+    1. Validates the organization and user permissions
+    2. Creates or retrieves a billing customer
+    3. Links the billing_customer_id to the organization
+    4. Returns a checkout URL for the payment provider
+
+    The flow:
+    - Enclii user hits tier limit
+    - Enclii redirects to Dhanam with org context
+    - Dhanam calls this endpoint to get checkout URL
+    - User completes payment
+    - Dhanam sends webhook to /api/v1/webhooks/dhanam/subscription
+    - Janua updates organization.subscription_tier
+    - User's next JWT has new foundry_tier claim
+    """
+    from sqlalchemy import select
+    from app.models import Organization
+
+    # Validate plan_id
+    janua_tier = DHANAM_TO_JANUA_TIER.get(request_data.plan_id.lower())
+    if not janua_tier:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid plan_id: {request_data.plan_id}. Valid plans: {list(DHANAM_TO_JANUA_TIER.keys())}",
+        )
+
+    # Get the organization
+    result = await db.execute(
+        select(Organization).where(Organization.id == request_data.organization_id)
+    )
+    organization = result.scalar_one_or_none()
+
+    if not organization:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Organization not found: {request_data.organization_id}",
+        )
+
+    # Verify user has permission (must be owner or admin)
+    # For now, check if user is the owner or a member
+    from app.models import OrganizationMember
+
+    is_owner = organization.owner_id == current_user.id
+
+    if not is_owner:
+        # Check if user is an admin member
+        member_result = await db.execute(
+            select(OrganizationMember).where(
+                OrganizationMember.organization_id == organization.id,
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.role.in_(["admin", "owner"]),
+            )
+        )
+        member = member_result.scalar_one_or_none()
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization owners and admins can initiate billing changes",
+            )
+
+    # Initialize payment router for provider detection
+    payment_router = PaymentRouter()
+    client_ip = request.client.host if request.client else "127.0.0.1"
+
+    # Determine provider based on location
+    provider, fallback_info = await payment_router.get_provider(
+        transaction_type=TransactionType.SUBSCRIPTION,
+        ip_address=client_ip,
+        user_country=getattr(current_user, "country", None),
+    )
+
+    if fallback_info:
+        logger.warning(
+            "Provider fallback during checkout",
+            attempted=fallback_info.get("attempted_provider"),
+            fallback=fallback_info.get("fallback_provider"),
+            reason=fallback_info.get("reason"),
+            organization_id=str(organization.id),
+        )
+
+    # Get or create billing customer
+    customer_id = organization.billing_customer_id
+
+    if not customer_id:
+        # Create customer in provider
+        customer_data = CustomerData(
+            email=organization.billing_email or current_user.email,
+            name=organization.name,
+            metadata={
+                "organization_id": str(organization.id),
+                "organization_slug": organization.slug,
+                "janua_tier": janua_tier,
+            },
+        )
+        customer_response = await provider.create_customer(customer_data)
+        customer_id = customer_response["customer_id"]
+
+        # Link customer to organization
+        organization.billing_customer_id = customer_id
+        organization.updated_at = datetime.utcnow()
+        await db.commit()
+
+        logger.info(
+            "Linked billing customer to organization",
+            customer_id=customer_id,
+            organization_id=str(organization.id),
+            provider=provider.provider_name,
+        )
+
+    # Create checkout session
+    # Note: We're using a simplified approach here that works with the provider abstraction
+    # In production, this would use provider-specific checkout session creation
+
+    # For now, we'll construct a redirect URL pattern that Dhanam expects
+    # The actual checkout session creation depends on Dhanam's implementation
+
+    # Generate a unique session ID for tracking
+    import uuid as uuid_mod
+    session_id = f"checkout_{uuid_mod.uuid4().hex[:16]}"
+
+    # Store the checkout session in DB for tracking
+    from app.models import CheckoutSession
+
+    checkout_session = CheckoutSession(
+        session_id=session_id,
+        organization_id=organization.id,
+        user_id=current_user.id,
+        price_id=request_data.plan_id,
+        provider=provider.provider_name,
+        status="pending",
+        session_metadata=str({
+            "success_url": request_data.success_url,
+            "cancel_url": request_data.cancel_url,
+            "janua_tier": janua_tier,
+            "customer_id": customer_id,
+        }),
+    )
+    db.add(checkout_session)
+    await db.commit()
+
+    # The checkout URL would typically be provided by the payment provider
+    # For Dhanam integration, we return metadata for Dhanam to construct its own checkout
+    # This supports both direct provider checkout and Dhanam-orchestrated checkout
+
+    # Construct a checkout URL that works for the payment flow
+    # Dhanam will use this information to create the actual checkout experience
+    checkout_url = f"{settings.DHANAM_URL}/checkout/session/{session_id}"
+
+    logger.info(
+        "Created checkout session",
+        session_id=session_id,
+        organization_id=str(organization.id),
+        plan_id=request_data.plan_id,
+        janua_tier=janua_tier,
+        customer_id=customer_id,
+        provider=provider.provider_name,
+    )
+
+    return CheckoutSessionResponse(
+        checkout_url=checkout_url,
+        session_id=session_id,
+        customer_id=customer_id,
+        provider=provider.provider_name,
+        organization_id=str(organization.id),
+        plan_id=request_data.plan_id,
+    )

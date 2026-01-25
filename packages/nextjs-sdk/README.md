@@ -340,6 +340,15 @@ const org: Organization = await janua.organizations.get('org_123');
 
 AGPL-3.0 License - see [LICENSE](./LICENSE) file for details.
 
+## Related Documentation
+
+- [SDK Selection Guide](/docs/sdks/CHOOSE_YOUR_SDK.md) - Compare all Janua SDKs
+- [Error Handling Guide](/docs/guides/ERROR_HANDLING_GUIDE.md) - Error codes and handling patterns
+- [Rate Limiting](/docs/api/RATE_LIMITING.md) - API rate limits and best practices
+- [API Reference](/apps/api/docs/api/endpoints-reference.md) - Complete API documentation
+- [Architecture Overview](/docs/architecture/INDEX.md) - System architecture and ADRs
+- [React SDK](/packages/react-sdk/README.md) - React hooks and components
+
 ## Support
 
 - 📖 [Documentation](https://docs.janua.dev)

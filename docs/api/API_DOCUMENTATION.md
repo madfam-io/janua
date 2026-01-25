@@ -1,5 +1,15 @@
 # Janua API Documentation
 
+> **⚠️ DEPRECATED**: This file is deprecated and will be removed in a future release.
+>
+> **Please use the canonical API documentation:**
+> - **Endpoint Reference**: [`/apps/api/docs/api/endpoints-reference.md`](/apps/api/docs/api/endpoints-reference.md)
+> - **Rate Limiting**: [`/docs/api/RATE_LIMITING.md`](/docs/api/RATE_LIMITING.md)
+> - **Error Handling**: [`/docs/guides/ERROR_HANDLING_GUIDE.md`](/docs/guides/ERROR_HANDLING_GUIDE.md)
+> - **SDK Selection**: [`/docs/sdks/CHOOSE_YOUR_SDK.md`](/docs/sdks/CHOOSE_YOUR_SDK.md)
+
+---
+
 **Version**: 1.0.0
 **Base URL**: `https://api.janua.dev` (Production) | `http://localhost:8000` (Development)
 

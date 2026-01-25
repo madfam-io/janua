@@ -195,6 +195,14 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: Optional[str] = Field(
         default=None, description="Webhook signing secret for Stripe payment notifications"
     )
+    DHANAM_WEBHOOK_SECRET: Optional[str] = Field(
+        default=None,
+        description="Webhook signing secret for Dhanam subscription notifications",
+    )
+    DHANAM_URL: str = Field(
+        default="https://dhan.am",
+        description="Dhanam billing service URL for checkout redirects",
+    )
 
     # Email aliases for easier access
     FROM_EMAIL: Optional[str] = Field(default=None)
