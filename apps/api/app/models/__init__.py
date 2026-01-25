@@ -561,8 +561,11 @@ class WebhookEndpoint(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class WebhookEvent(Base):
-    __tablename__ = "webhook_events"
+class LegacyWebhookEvent(Base):
+    """Legacy webhook event model - use billing.WebhookEvent for new code."""
+
+    __tablename__ = "legacy_webhook_events"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     type = Column(String(255), nullable=False)
@@ -574,12 +577,13 @@ class WebhookEvent(Base):
 
 class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     webhook_endpoint_id = Column(
         UUID(as_uuid=True), ForeignKey("webhook_endpoints.id"), nullable=False
     )
-    webhook_event_id = Column(UUID(as_uuid=True), ForeignKey("webhook_events.id"), nullable=False)
+    webhook_event_id = Column(UUID(as_uuid=True), ForeignKey("legacy_webhook_events.id"), nullable=False)
     status = Column(SQLEnum(WebhookStatus), default=WebhookStatus.PENDING)
     attempts = Column(Integer, default=0)
     last_attempt = Column(DateTime)
@@ -673,8 +677,11 @@ class ApiKey(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class Invoice(Base):
-    __tablename__ = "invoices"
+class LegacyInvoice(Base):
+    """Legacy invoice model - use billing.Invoice for new code."""
+
+    __tablename__ = "legacy_invoices"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
@@ -693,6 +700,7 @@ class Invoice(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
