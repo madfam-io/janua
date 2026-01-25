@@ -90,8 +90,11 @@ class EnterpriseAuditLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-class Subscription(Base):
-    __tablename__ = "subscriptions"
+class EnterpriseSubscription(Base):
+    """Legacy enterprise subscription model - use billing.Subscription for new code."""
+
+    __tablename__ = "enterprise_subscriptions"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
