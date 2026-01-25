@@ -551,7 +551,7 @@ export default function SSOSettingsPage() {
               ))}
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
         {/* Information Cards */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
