@@ -6,7 +6,6 @@ import { Button } from '@janua/ui'
 import { Badge } from '@janua/ui'
 import { Input } from '@janua/ui'
 import { Label } from '@janua/ui'
-import { Textarea } from '@janua/ui'
 import Link from 'next/link'
 import {
   Palette,
@@ -446,12 +445,12 @@ export default function BrandingSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Textarea
+            <textarea
               value={formData.custom_css}
-              onChange={(e) => setFormData({ ...formData, custom_css: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, custom_css: e.target.value })}
               placeholder={`/* Custom CSS */\n.login-container {\n  /* Your styles */\n}`}
               rows={6}
-              className="font-mono text-sm"
+              className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </CardContent>
         </Card>
