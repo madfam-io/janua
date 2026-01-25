@@ -25,6 +25,12 @@ resources:
   # kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
   # - cert-manager/
 
-commonLabels:
-  app.kubernetes.io/part-of: janua
-  app.kubernetes.io/managed-by: kustomize
+# Use labels transformer with includeSelectors: false to avoid
+# "field is immutable" errors on existing deployments.
+# commonLabels adds labels to spec.selector.matchLabels which cannot be changed.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: janua
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+    includeTemplates: true

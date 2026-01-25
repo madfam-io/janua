@@ -27,6 +27,29 @@ repos:
       - id: check-json
         files: \.(json)$
 
+  # Kubernetes manifest validation
+  - repo: https://github.com/yannh/kubeconform
+    rev: v0.6.4
+    hooks:
+      - id: kubeconform
+        name: Validate Kubernetes manifests
+        args:
+          - -strict
+          - -ignore-missing-schemas
+          - -summary
+        files: ^k8s/.*\.yaml$
+        exclude: ^k8s/.*kustomization\.yaml$
+
+  # Kustomize build validation
+  - repo: local
+    hooks:
+      - id: kustomize-build
+        name: Validate kustomize build
+        entry: bash -c 'command -v kustomize >/dev/null && kustomize build k8s/base > /dev/null || echo "kustomize not installed, skipping"'
+        language: system
+        files: ^k8s/.*\.yaml$
+        pass_filenames: false
+
   # Local custom hooks
   - repo: local
     hooks:
