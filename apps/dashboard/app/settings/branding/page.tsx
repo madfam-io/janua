@@ -64,6 +64,7 @@ export default function BrandingSettingsPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [newDomain, setNewDomain] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -516,11 +517,135 @@ export default function BrandingSettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Preview Modal */}
+        {showPreview && (
+          <Card className="border-primary">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Branding Preview</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setShowPreview(false)}>
+                  Close Preview
+                </Button>
+              </div>
+              <CardDescription>
+                Preview how your branding will appear on login pages
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="rounded-lg border p-8"
+                style={{
+                  backgroundColor: formData.background_color,
+                  fontFamily: formData.font_family,
+                }}
+              >
+                <div
+                  className="mx-auto max-w-sm rounded-lg p-6"
+                  style={{
+                    backgroundColor: formData.surface_color,
+                    borderRadius: formData.border_radius,
+                  }}
+                >
+                  {/* Logo */}
+                  <div className="mb-6 text-center">
+                    {formData.company_logo_url ? (
+                      <img
+                        src={formData.company_logo_url}
+                        alt={formData.company_name || 'Company Logo'}
+                        className="mx-auto h-12 object-contain"
+                      />
+                    ) : (
+                      <div
+                        className="mx-auto flex size-12 items-center justify-center rounded-lg text-xl font-bold"
+                        style={{ backgroundColor: formData.primary_color, color: '#fff' }}
+                      >
+                        {formData.company_name?.charAt(0) || 'J'}
+                      </div>
+                    )}
+                    <h2
+                      className="mt-4 text-xl font-bold"
+                      style={{ color: formData.text_color }}
+                    >
+                      {formData.company_name || 'Your Company'}
+                    </h2>
+                    <p style={{ color: formData.text_color, opacity: 0.7 }} className="text-sm">
+                      Sign in to continue
+                    </p>
+                  </div>
+
+                  {/* Mock Form */}
+                  <div className="space-y-4">
+                    <div>
+                      <label
+                        className="mb-1 block text-sm font-medium"
+                        style={{ color: formData.text_color }}
+                      >
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="you@example.com"
+                        className="w-full border px-3 py-2"
+                        style={{
+                          borderRadius: formData.border_radius,
+                          backgroundColor: formData.background_color,
+                          color: formData.text_color,
+                        }}
+                        disabled
+                      />
+                    </div>
+                    <div>
+                      <label
+                        className="mb-1 block text-sm font-medium"
+                        style={{ color: formData.text_color }}
+                      >
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        className="w-full border px-3 py-2"
+                        style={{
+                          borderRadius: formData.border_radius,
+                          backgroundColor: formData.background_color,
+                          color: formData.text_color,
+                        }}
+                        disabled
+                      />
+                    </div>
+                    <button
+                      className="w-full py-2 font-medium text-white"
+                      style={{
+                        backgroundColor: formData.primary_color,
+                        borderRadius: formData.border_radius,
+                      }}
+                      disabled
+                    >
+                      Sign In
+                    </button>
+                  </div>
+
+                  {/* Footer */}
+                  <p
+                    className="mt-4 text-center text-xs"
+                    style={{ color: formData.text_color, opacity: 0.5 }}
+                  >
+                    Powered by{' '}
+                    <span style={{ color: formData.accent_color }}>
+                      {formData.company_name || 'Janua'}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Actions */}
         <div className="flex justify-end gap-4">
-          <Button variant="outline" disabled>
+          <Button variant="outline" onClick={() => setShowPreview(!showPreview)}>
             <Eye className="mr-2 size-4" />
-            Preview
+            {showPreview ? 'Hide Preview' : 'Preview'}
           </Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? (

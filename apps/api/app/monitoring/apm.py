@@ -161,8 +161,8 @@ class APMCollector:
         self._setup_tracing()
         self._setup_metrics()
 
-        # Start background tasks
-        asyncio.create_task(self._system_metrics_collector())
+        # Background task will be started lazily when first needed
+        self._metrics_task = None
 
     def _setup_tracing(self):
         """Initialize distributed tracing"""
@@ -203,6 +203,12 @@ class APMCollector:
 
         except Exception as e:
             logger.warning("Failed to initialize metrics", error=str(e))
+
+    async def start_background_tasks(self):
+        """Start background metrics collection tasks. Call this after event loop is running."""
+        if self._metrics_task is None:
+            self._metrics_task = asyncio.create_task(self._system_metrics_collector())
+            logger.info("APM background metrics collection started")
 
     async def initialize_redis(self):
         """Initialize Redis connection for APM data storage"""

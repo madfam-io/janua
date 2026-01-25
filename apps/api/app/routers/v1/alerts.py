@@ -7,7 +7,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 import structlog
-from app.alerting.alert_system import (
+from app.alerting import (
     AlertChannel,
     AlertRule,
     AlertSeverity,
@@ -16,8 +16,8 @@ from app.alerting.alert_system import (
     get_alert_health,
     trigger_manual_alert,
 )
-from app.core.auth import get_current_admin_user
-from app.core.models import User
+from app.dependencies import require_admin
+from app.models import User
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -34,7 +34,7 @@ class AlertRuleCreate(BaseModel):
     metric_name: str = Field(..., description="Metric to monitor")
     threshold_value: float = Field(..., description="Threshold value")
     comparison_operator: str = Field(
-        ..., regex="^(>|<|>=|<=|==|!=)$", description="Comparison operator"
+        ..., pattern="^(>|<|>=|<=|==|!=)$", description="Comparison operator"
     )
     evaluation_window: int = Field(300, ge=60, le=3600, description="Evaluation window in seconds")
     trigger_count: int = Field(1, ge=1, le=10, description="Consecutive evaluations to trigger")
@@ -48,7 +48,7 @@ class AlertRuleUpdate(BaseModel):
     description: Optional[str] = None
     severity: Optional[AlertSeverity] = None
     threshold_value: Optional[float] = None
-    comparison_operator: Optional[str] = Field(None, regex="^(>|<|>=|<=|==|!=)$")
+    comparison_operator: Optional[str] = Field(None, pattern="^(>|<|>=|<=|==|!=)$")
     evaluation_window: Optional[int] = Field(None, ge=60, le=3600)
     trigger_count: Optional[int] = Field(None, ge=1, le=10)
     cooldown_period: Optional[int] = Field(None, ge=60, le=3600)
@@ -92,7 +92,7 @@ async def alerting_health_check():
 @router.get("/statistics")
 async def get_alert_statistics(
     hours: int = Query(24, ge=1, le=168, description="Hours to analyze"),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Get alert statistics for the specified time period"""
     try:
@@ -105,7 +105,7 @@ async def get_alert_statistics(
 
 @router.get("/active")
 async def get_active_alerts(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     """Get all active alerts"""
     try:
@@ -140,7 +140,7 @@ async def get_active_alerts(
 
 @router.post("/manual")
 async def create_manual_alert(
-    alert_data: ManualAlertCreate, current_user: User = Depends(get_current_admin_user)
+    alert_data: ManualAlertCreate, current_user: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """Create a manual alert"""
     try:
@@ -167,7 +167,7 @@ async def create_manual_alert(
 
 @router.post("/{alert_id}/acknowledge")
 async def acknowledge_alert(
-    alert_id: str, current_user: User = Depends(get_current_admin_user)
+    alert_id: str, current_user: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """Acknowledge an alert"""
     try:
@@ -187,7 +187,7 @@ async def acknowledge_alert(
 
 @router.post("/{alert_id}/resolve")
 async def resolve_alert(
-    alert_id: str, current_user: User = Depends(get_current_admin_user)
+    alert_id: str, current_user: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """Resolve an alert"""
     try:
@@ -207,7 +207,7 @@ async def resolve_alert(
 
 @router.get("/rules")
 async def get_alert_rules(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     """Get all alert rules"""
     try:
@@ -241,7 +241,7 @@ async def get_alert_rules(
 
 @router.post("/rules")
 async def create_alert_rule(
-    rule_data: AlertRuleCreate, current_user: User = Depends(get_current_admin_user)
+    rule_data: AlertRuleCreate, current_user: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """Create a new alert rule"""
     try:
@@ -305,7 +305,7 @@ async def create_alert_rule(
 async def update_alert_rule(
     rule_id: str,
     rule_updates: AlertRuleUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Update an alert rule"""
     try:
@@ -358,7 +358,7 @@ async def update_alert_rule(
 
 @router.delete("/rules/{rule_id}")
 async def delete_alert_rule(
-    rule_id: str, current_user: User = Depends(get_current_admin_user)
+    rule_id: str, current_user: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """Delete an alert rule"""
     try:
@@ -385,7 +385,7 @@ async def delete_alert_rule(
 
 @router.get("/channels")
 async def get_notification_channels(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     """Get all notification channels"""
     try:
@@ -419,7 +419,7 @@ async def get_notification_channels(
 
 @router.post("/channels")
 async def create_notification_channel(
-    channel_data: NotificationChannelCreate, current_user: User = Depends(get_current_admin_user)
+    channel_data: NotificationChannelCreate, current_user: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """Create a new notification channel"""
     try:
@@ -471,7 +471,7 @@ async def create_notification_channel(
 async def update_notification_channel(
     channel_id: str,
     channel_updates: NotificationChannelUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Update a notification channel"""
     try:
@@ -518,7 +518,7 @@ async def update_notification_channel(
 
 @router.delete("/channels/{channel_id}")
 async def delete_notification_channel(
-    channel_id: str, current_user: User = Depends(get_current_admin_user)
+    channel_id: str, current_user: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """Delete a notification channel"""
     try:
@@ -547,7 +547,7 @@ async def delete_notification_channel(
 
 @router.post("/test/{channel_id}")
 async def test_notification_channel(
-    channel_id: str, current_user: User = Depends(get_current_admin_user)
+    channel_id: str, current_user: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """Test a notification channel"""
     try:

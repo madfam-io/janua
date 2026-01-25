@@ -18,7 +18,7 @@ from app.database import get_db
 from app.routers.v1.auth import get_current_user
 from app.services.auth_service import AuthService
 
-from ...models import Organization, OrganizationMember, User, UserStatus
+from ...models import Organization, OrganizationMember, User, UserStatus, UserConsent
 from ...models import Session as UserSession
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -485,3 +485,147 @@ async def reactivate_user(
     await db.commit()
 
     return {"message": "User reactivated successfully"}
+
+
+# ==========================================
+# User Consents Endpoints
+# ==========================================
+
+
+class ConsentResponse(BaseModel):
+    """User consent response model"""
+
+    id: str
+    user_id: str
+    client_id: str
+    scopes: List[str]
+    granted_at: datetime
+    expires_at: Optional[datetime]
+    revoked_at: Optional[datetime]
+    created_at: datetime
+
+
+class ConsentCreateRequest(BaseModel):
+    """Create consent request"""
+
+    client_id: str = Field(..., min_length=1, max_length=255)
+    scopes: List[str] = Field(default_factory=list)
+    expires_at: Optional[datetime] = None
+
+
+class ConsentsListResponse(BaseModel):
+    """List of user consents"""
+
+    consents: List[ConsentResponse]
+    total: int
+
+
+@router.get("/me/consents", response_model=ConsentsListResponse)
+async def list_user_consents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all OAuth consents granted by the current user"""
+    result = await db.execute(
+        select(UserConsent)
+        .where(UserConsent.user_id == current_user.id, UserConsent.revoked_at.is_(None))
+        .order_by(UserConsent.granted_at.desc())
+    )
+    consents = result.scalars().all()
+
+    return ConsentsListResponse(
+        consents=[
+            ConsentResponse(
+                id=str(consent.id),
+                user_id=str(consent.user_id),
+                client_id=consent.client_id,
+                scopes=consent.scopes or [],
+                granted_at=consent.granted_at,
+                expires_at=consent.expires_at,
+                revoked_at=consent.revoked_at,
+                created_at=consent.created_at,
+            )
+            for consent in consents
+        ],
+        total=len(consents),
+    )
+
+
+@router.post("/me/consents", response_model=ConsentResponse)
+async def create_user_consent(
+    request: ConsentCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Grant OAuth consent to a client application"""
+    # Check if consent already exists for this client
+    existing_result = await db.execute(
+        select(UserConsent).where(
+            UserConsent.user_id == current_user.id,
+            UserConsent.client_id == request.client_id,
+            UserConsent.revoked_at.is_(None),
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+
+    if existing:
+        # Update existing consent with new scopes
+        existing.scopes = list(set(existing.scopes or []) | set(request.scopes))
+        existing.granted_at = datetime.utcnow()
+        existing.expires_at = request.expires_at
+        await db.commit()
+        await db.refresh(existing)
+        consent = existing
+    else:
+        # Create new consent
+        consent = UserConsent(
+            user_id=current_user.id,
+            client_id=request.client_id,
+            scopes=request.scopes,
+            granted_at=datetime.utcnow(),
+            expires_at=request.expires_at,
+        )
+        db.add(consent)
+        await db.commit()
+        await db.refresh(consent)
+
+    return ConsentResponse(
+        id=str(consent.id),
+        user_id=str(consent.user_id),
+        client_id=consent.client_id,
+        scopes=consent.scopes or [],
+        granted_at=consent.granted_at,
+        expires_at=consent.expires_at,
+        revoked_at=consent.revoked_at,
+        created_at=consent.created_at,
+    )
+
+
+@router.delete("/me/consents/{consent_id}")
+async def revoke_user_consent(
+    consent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke a previously granted OAuth consent"""
+    try:
+        consent_uuid = uuid.UUID(consent_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid consent ID")
+
+    result = await db.execute(
+        select(UserConsent).where(
+            UserConsent.id == consent_uuid,
+            UserConsent.user_id == current_user.id,
+            UserConsent.revoked_at.is_(None),
+        )
+    )
+    consent = result.scalar_one_or_none()
+
+    if not consent:
+        raise HTTPException(status_code=404, detail="Consent not found")
+
+    consent.revoked_at = datetime.utcnow()
+    await db.commit()
+
+    return {"message": "Consent revoked successfully"}

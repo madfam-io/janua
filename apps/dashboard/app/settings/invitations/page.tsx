@@ -59,6 +59,9 @@ export default function InvitationsPage() {
   const [_error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [newInvite, setNewInvite] = useState({ email: '', role: 'member', message: '' })
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
+  const [bulkUploading, setBulkUploading] = useState(false)
+  const [bulkCsvText, setBulkCsvText] = useState('')
 
   useEffect(() => {
     fetchInvitations()
@@ -155,6 +158,70 @@ export default function InvitationsPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to revoke invitation')
     }
+  }
+
+  const handleBulkUpload = async () => {
+    if (!bulkCsvText.trim()) {
+      alert('Please enter CSV data')
+      return
+    }
+
+    setBulkUploading(true)
+    const lines = bulkCsvText.trim().split('\n')
+    const results = { success: 0, failed: 0, errors: [] as string[] }
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue // Skip empty lines and comments
+
+      const parts = trimmed.split(',').map(p => p.trim())
+      const email = parts[0]
+      const role = (parts[1] as 'member' | 'admin') || 'member'
+
+      if (!email || !email.includes('@')) {
+        results.failed++
+        results.errors.push(`Invalid email: ${email || 'empty'}`)
+        continue
+      }
+
+      try {
+        const response = await apiCall(`${API_BASE_URL}/api/v1/invitations`, {
+          method: 'POST',
+          body: JSON.stringify({ email, role }),
+        })
+
+        if (response.ok) {
+          results.success++
+        } else {
+          const errorData = await response.json().catch(() => ({}))
+          results.failed++
+          results.errors.push(`${email}: ${errorData.detail || 'Failed'}`)
+        }
+      } catch {
+        results.failed++
+        results.errors.push(`${email}: Network error`)
+      }
+    }
+
+    setBulkUploading(false)
+    setBulkCsvText('')
+    setShowBulkUpload(false)
+    fetchInvitations()
+
+    const message = `Bulk upload complete:\n✓ ${results.success} sent successfully\n✗ ${results.failed} failed${results.errors.length > 0 ? '\n\nErrors:\n' + results.errors.slice(0, 5).join('\n') + (results.errors.length > 5 ? '\n...' : '') : ''}`
+    alert(message)
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      setBulkCsvText(text)
+    }
+    reader.readAsText(file)
   }
 
   const formatDate = (dateString: string) => {
@@ -294,12 +361,72 @@ export default function InvitationsPage() {
                     </>
                   )}
                 </Button>
-                <Button type="button" variant="outline">
+                <Button type="button" variant="outline" onClick={() => setShowBulkUpload(!showBulkUpload)}>
                   <Upload className="mr-2 size-4" />
                   Bulk Upload
                 </Button>
               </div>
             </form>
+
+            {/* Bulk Upload Form */}
+            {showBulkUpload && (
+              <div className="mt-6 space-y-4 rounded-lg border p-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Bulk Upload Invitations</h4>
+                  <button
+                    onClick={() => setShowBulkUpload(false)}
+                    className="text-muted-foreground hover:text-foreground text-sm"
+                  >
+                    Close
+                  </button>
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  Upload a CSV file or paste email addresses below. Format: <code className="bg-muted rounded px-1">email,role</code>
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="csv-file">Upload CSV File</Label>
+                  <Input
+                    id="csv-file"
+                    type="file"
+                    accept=".csv,.txt"
+                    onChange={handleFileUpload}
+                    className="max-w-xs"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="csv-text">Or paste CSV data</Label>
+                  <textarea
+                    id="csv-text"
+                    value={bulkCsvText}
+                    onChange={(e) => setBulkCsvText(e.target.value)}
+                    placeholder="john@example.com,member&#10;jane@example.com,admin&#10;# Lines starting with # are ignored"
+                    rows={6}
+                    className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[120px] w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleBulkUpload}
+                    disabled={bulkUploading || !bulkCsvText.trim()}
+                  >
+                    {bulkUploading ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 size-4" />
+                        Send All Invitations
+                      </>
+                    )}
+                  </Button>
+                  <Button variant="outline" onClick={() => { setBulkCsvText(''); setShowBulkUpload(false) }}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

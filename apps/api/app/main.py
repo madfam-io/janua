@@ -81,7 +81,7 @@ from app.routers.v1 import (
     invitations as invitations_v1,
 )
 from app.routers.v1 import (
-    # alerts as alerts_v1,  # Disabled - requires opentelemetry.exporter dependency
+    alerts as alerts_v1,
     localization as localization_v1,
 )
 from app.routers.v1 import (
@@ -128,6 +128,9 @@ from app.routers.v1 import (
 )
 from app.routers.v1 import (
     roles as roles_v1,
+)
+from app.routers.v1 import (
+    billing as billing_v1,
 )
 
 # Additional feature routers with optional loading
@@ -1019,8 +1022,9 @@ except Exception as e:
 app.include_router(policies_v1.router, prefix="/api")
 app.include_router(invitations_v1.router, prefix="/api")
 app.include_router(audit_logs_v1.router, prefix="/api")
-# app.include_router(alerts_v1.router, prefix="/api/v1")  # Disabled - requires opentelemetry.exporter dependency
+app.include_router(alerts_v1.router, prefix="/api/v1")
 app.include_router(localization_v1.router, prefix="/api/v1")  # Localization model now available
+app.include_router(billing_v1.router, prefix="/api/v1")  # Billing and plans
 
 # Internal service API routers (for MADFAM service-to-service communication)
 try:

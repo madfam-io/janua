@@ -75,6 +75,9 @@ export default function ProfilePage() {
     new_password: '',
     confirm_password: ''
   })
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     fetchProfileData()
@@ -229,6 +232,37 @@ export default function ProfilePage() {
     } catch (err) {
       console.error('Failed to revoke all sessions:', err)
       alert(err instanceof Error ? err.message : 'Failed to revoke sessions')
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      alert('Please type DELETE to confirm account deletion')
+      return
+    }
+
+    setDeleting(true)
+    try {
+      const response = await apiCall(`${API_BASE_URL}/api/v1/users/me`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to delete account')
+      }
+
+      // Clear local storage and redirect to login
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('janua_access_token')
+        localStorage.removeItem('janua_refresh_token')
+        window.location.href = '/login?message=account_deleted'
+      }
+    } catch (err) {
+      console.error('Failed to delete account:', err)
+      alert(err instanceof Error ? err.message : 'Failed to delete account')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -513,7 +547,7 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-destructive/50">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Trash2 className="text-destructive size-5" />
@@ -523,13 +557,81 @@ export default function ProfilePage() {
                   Irreversible and destructive actions
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Button variant="destructive" size="sm">
-                  Delete Account
-                </Button>
-                <p className="text-muted-foreground mt-2 text-xs">
-                  This action cannot be undone. All your data will be permanently deleted.
-                </p>
+              <CardContent className="space-y-4">
+                {!showDeleteConfirm ? (
+                  <>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowDeleteConfirm(true)}
+                    >
+                      Delete Account
+                    </Button>
+                    <p className="text-muted-foreground text-xs">
+                      This action cannot be undone. All your data will be permanently deleted.
+                    </p>
+                  </>
+                ) : (
+                  <div className="space-y-4 rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="text-destructive size-5" />
+                      <span className="font-medium text-destructive">
+                        Are you sure you want to delete your account?
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      This will permanently delete:
+                    </p>
+                    <ul className="text-muted-foreground list-inside list-disc space-y-1 text-sm">
+                      <li>Your profile and all personal data</li>
+                      <li>Your organization memberships</li>
+                      <li>Your API keys and sessions</li>
+                      <li>All associated audit logs</li>
+                    </ul>
+                    <div className="space-y-2">
+                      <Label htmlFor="delete-confirm">
+                        Type <span className="font-mono font-bold">DELETE</span> to confirm
+                      </Label>
+                      <Input
+                        id="delete-confirm"
+                        value={deleteConfirmText}
+                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                        placeholder="DELETE"
+                        className="max-w-xs"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDeleteAccount}
+                        disabled={deleting || deleteConfirmText !== 'DELETE'}
+                      >
+                        {deleting ? (
+                          <>
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                            Deleting...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="mr-2 size-4" />
+                            Permanently Delete Account
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowDeleteConfirm(false)
+                          setDeleteConfirmText('')
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

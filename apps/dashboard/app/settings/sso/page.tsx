@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@janua/ui'
 import { Button } from '@janua/ui'
 import { Badge } from '@janua/ui'
+import { Input } from '@janua/ui'
+import { Label } from '@janua/ui'
 import { Tabs as _Tabs, TabsContent as _TabsContent, TabsList as _TabsList, TabsTrigger as _TabsTrigger } from '@janua/ui'
 import Link from 'next/link'
 import {
@@ -60,6 +62,22 @@ export default function SSOSettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
+  const [showConfigForm, setShowConfigForm] = useState<'saml' | 'oidc' | null>(null)
+  const [configuring, setConfiguring] = useState(false)
+  const [configFormData, setConfigFormData] = useState({
+    // SAML fields
+    saml_entity_id: '',
+    saml_sso_url: '',
+    saml_certificate: '',
+    // OIDC fields
+    oidc_issuer: '',
+    oidc_client_id: '',
+    oidc_client_secret: '',
+    // Common fields
+    jit_provisioning: true,
+    default_role: 'member',
+    allowed_domains: '',
+  })
 
   useEffect(() => {
     fetchConfigurations()
@@ -157,6 +175,62 @@ export default function SSOSettingsPage() {
     }
   }
 
+  const handleConfigureSSO = async (provider: 'saml' | 'oidc') => {
+    if (!organizationId) {
+      alert('Organization ID not found. Please refresh the page.')
+      return
+    }
+
+    setConfiguring(true)
+    try {
+      const payload: Record<string, unknown> = {
+        provider,
+        organization_id: organizationId,
+        jit_provisioning: configFormData.jit_provisioning,
+        default_role: configFormData.default_role,
+        allowed_domains: configFormData.allowed_domains.split(',').map(d => d.trim()).filter(Boolean),
+      }
+
+      if (provider === 'saml') {
+        payload.saml_entity_id = configFormData.saml_entity_id
+        payload.saml_sso_url = configFormData.saml_sso_url
+        payload.saml_certificate = configFormData.saml_certificate
+      } else {
+        payload.oidc_issuer = configFormData.oidc_issuer
+        payload.oidc_client_id = configFormData.oidc_client_id
+        payload.oidc_client_secret = configFormData.oidc_client_secret
+      }
+
+      const response = await apiCall(`${API_BASE_URL}/api/v1/sso/configurations/${organizationId}`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to configure SSO')
+      }
+
+      setShowConfigForm(null)
+      setConfigFormData({
+        saml_entity_id: '',
+        saml_sso_url: '',
+        saml_certificate: '',
+        oidc_issuer: '',
+        oidc_client_id: '',
+        oidc_client_secret: '',
+        jit_provisioning: true,
+        default_role: 'member',
+        allowed_domains: '',
+      })
+      fetchConfigurations()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to configure SSO')
+    } finally {
+      setConfiguring(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="bg-background flex min-h-screen items-center justify-center">
@@ -203,8 +277,138 @@ export default function SSOSettingsPage() {
           </Card>
         )}
 
+        {/* SSO Configuration Form */}
+        {showConfigForm && (
+          <Card className="border-primary">
+            <CardHeader>
+              <CardTitle>
+                Configure {showConfigForm === 'saml' ? 'SAML 2.0' : 'OpenID Connect'}
+              </CardTitle>
+              <CardDescription>
+                Enter your identity provider details
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {showConfigForm === 'saml' ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="saml_entity_id">Entity ID (Issuer)</Label>
+                    <Input
+                      id="saml_entity_id"
+                      value={configFormData.saml_entity_id}
+                      onChange={(e) => setConfigFormData({ ...configFormData, saml_entity_id: e.target.value })}
+                      placeholder="https://idp.example.com/entity"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="saml_sso_url">SSO URL</Label>
+                    <Input
+                      id="saml_sso_url"
+                      value={configFormData.saml_sso_url}
+                      onChange={(e) => setConfigFormData({ ...configFormData, saml_sso_url: e.target.value })}
+                      placeholder="https://idp.example.com/sso"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="saml_certificate">X.509 Certificate</Label>
+                    <textarea
+                      id="saml_certificate"
+                      value={configFormData.saml_certificate}
+                      onChange={(e) => setConfigFormData({ ...configFormData, saml_certificate: e.target.value })}
+                      placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                      rows={4}
+                      className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc_issuer">Issuer URL</Label>
+                    <Input
+                      id="oidc_issuer"
+                      value={configFormData.oidc_issuer}
+                      onChange={(e) => setConfigFormData({ ...configFormData, oidc_issuer: e.target.value })}
+                      placeholder="https://accounts.google.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc_client_id">Client ID</Label>
+                    <Input
+                      id="oidc_client_id"
+                      value={configFormData.oidc_client_id}
+                      onChange={(e) => setConfigFormData({ ...configFormData, oidc_client_id: e.target.value })}
+                      placeholder="your-client-id"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc_client_secret">Client Secret</Label>
+                    <Input
+                      id="oidc_client_secret"
+                      type="password"
+                      value={configFormData.oidc_client_secret}
+                      onChange={(e) => setConfigFormData({ ...configFormData, oidc_client_secret: e.target.value })}
+                      placeholder="your-client-secret"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="allowed_domains">Allowed Email Domains (comma-separated)</Label>
+                <Input
+                  id="allowed_domains"
+                  value={configFormData.allowed_domains}
+                  onChange={(e) => setConfigFormData({ ...configFormData, allowed_domains: e.target.value })}
+                  placeholder="example.com, company.org"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="default_role">Default Role for New Users</Label>
+                <select
+                  id="default_role"
+                  className="bg-background h-10 w-full rounded-md border px-3"
+                  value={configFormData.default_role}
+                  onChange={(e) => setConfigFormData({ ...configFormData, default_role: e.target.value })}
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="jit_provisioning"
+                  checked={configFormData.jit_provisioning}
+                  onChange={(e) => setConfigFormData({ ...configFormData, jit_provisioning: e.target.checked })}
+                />
+                <Label htmlFor="jit_provisioning">Enable Just-in-Time Provisioning</Label>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => handleConfigureSSO(showConfigForm)}
+                  disabled={configuring}
+                >
+                  {configuring ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Plus className="mr-2 size-4" />
+                  )}
+                  Save Configuration
+                </Button>
+                <Button variant="outline" onClick={() => setShowConfigForm(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Provider Selection */}
-        {configurations.length === 0 ? (
+        {configurations.length === 0 && !showConfigForm ? (
           <Card>
             <CardHeader>
               <CardTitle>Configure SSO Provider</CardTitle>
@@ -229,7 +433,7 @@ export default function SSOSettingsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <Button className="w-full" variant="outline">
+                    <Button className="w-full" variant="outline" onClick={() => setShowConfigForm('saml')}>
                       <Plus className="mr-2 size-4" />
                       Configure SAML
                     </Button>
@@ -251,7 +455,7 @@ export default function SSOSettingsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <Button className="w-full" variant="outline">
+                    <Button className="w-full" variant="outline" onClick={() => setShowConfigForm('oidc')}>
                       <Plus className="mr-2 size-4" />
                       Configure OIDC
                     </Button>
@@ -260,7 +464,7 @@ export default function SSOSettingsPage() {
               </div>
             </CardContent>
           </Card>
-        ) : (
+        ) : configurations.length > 0 ? (
           /* Existing Configurations */
           <Card>
             <CardHeader>
