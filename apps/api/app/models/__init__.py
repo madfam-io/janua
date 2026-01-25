@@ -704,7 +704,7 @@ class Payment(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"))
+    invoice_id = Column(UUID(as_uuid=True))  # No FK - reference billing.Invoice if needed
     amount = Column(Integer, nullable=False)  # Amount in cents
     currency = Column(String(3), default="USD")
     status = Column(String(50), default="pending")
