@@ -2,17 +2,20 @@
 White-label and branding API endpoints
 """
 
+import hashlib
 import logging
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.white_label import (
@@ -361,6 +364,393 @@ async def update_branding_configuration(
 
     except Exception as e:
         logger.error(f"Failed to update branding configuration: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Logo Upload Endpoints
+# =============================================================================
+
+ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/svg+xml"]
+MAX_LOGO_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FAVICON_SIZE = 1 * 1024 * 1024  # 1MB
+
+
+async def _upload_branding_image(
+    file: UploadFile,
+    organization_id: str,
+    image_type: str,
+    max_size: int,
+) -> str:
+    """
+    Helper to upload branding images (logos, favicons).
+
+    Args:
+        file: The uploaded file
+        organization_id: Organization ID for the image
+        image_type: Type of image (logo, logo-dark, favicon)
+        max_size: Maximum file size in bytes
+
+    Returns:
+        URL path to the uploaded image
+    """
+    # Validate file type
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_IMAGE_TYPES)}",
+        )
+
+    # Read and validate file size
+    contents = await file.read()
+    if len(contents) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum size: {max_size // (1024 * 1024)}MB",
+        )
+
+    # Generate unique filename
+    file_extension = file.filename.split(".")[-1] if file.filename else "png"
+    content_hash = hashlib.md5(contents).hexdigest()[:12]
+    unique_filename = f"{organization_id}_{image_type}_{content_hash}.{file_extension}"
+
+    # Create upload directory
+    upload_dir = os.path.join(settings.UPLOAD_DIR, "branding", organization_id)
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Save file
+    file_path = os.path.join(upload_dir, unique_filename)
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    # Return URL path
+    return f"/uploads/branding/{organization_id}/{unique_filename}"
+
+
+@router.post("/branding/{organization_id}/logo")
+async def upload_logo(
+    organization_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload primary logo for organization branding.
+
+    Accepts: JPEG, PNG, GIF, WebP, SVG
+    Max size: 5MB
+
+    Recommended dimensions: 200x50px or similar aspect ratio
+    """
+    try:
+        # Get branding configuration
+        result = await db.execute(
+            select(BrandingConfiguration).where(
+                BrandingConfiguration.organization_id == organization_id
+            )
+        )
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Branding configuration not found")
+
+        # Delete old logo if exists
+        if config.company_logo_url and config.company_logo_url.startswith("/uploads/"):
+            old_path = os.path.join(
+                settings.UPLOAD_DIR, config.company_logo_url.replace("/uploads/", "")
+            )
+            if os.path.exists(old_path):
+                os.remove(old_path)
+
+        # Upload new logo
+        logo_url = await _upload_branding_image(
+            file, organization_id, "logo", MAX_LOGO_SIZE
+        )
+
+        # Update branding configuration
+        config.company_logo_url = logo_url
+        config.updated_at = datetime.utcnow()
+        await db.commit()
+
+        return {
+            "message": "Logo uploaded successfully",
+            "company_logo_url": logo_url,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload logo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/branding/{organization_id}/logo-dark")
+async def upload_logo_dark(
+    organization_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload dark mode logo for organization branding.
+
+    Accepts: JPEG, PNG, GIF, WebP, SVG
+    Max size: 5MB
+
+    Use this for logos that display well on dark backgrounds.
+    """
+    try:
+        # Get branding configuration
+        result = await db.execute(
+            select(BrandingConfiguration).where(
+                BrandingConfiguration.organization_id == organization_id
+            )
+        )
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Branding configuration not found")
+
+        # Delete old logo if exists
+        if config.company_logo_dark_url and config.company_logo_dark_url.startswith("/uploads/"):
+            old_path = os.path.join(
+                settings.UPLOAD_DIR, config.company_logo_dark_url.replace("/uploads/", "")
+            )
+            if os.path.exists(old_path):
+                os.remove(old_path)
+
+        # Upload new logo
+        logo_url = await _upload_branding_image(
+            file, organization_id, "logo-dark", MAX_LOGO_SIZE
+        )
+
+        # Update branding configuration
+        config.company_logo_dark_url = logo_url
+        config.updated_at = datetime.utcnow()
+        await db.commit()
+
+        return {
+            "message": "Dark mode logo uploaded successfully",
+            "company_logo_dark_url": logo_url,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload dark mode logo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/branding/{organization_id}/favicon")
+async def upload_favicon(
+    organization_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload favicon for organization branding.
+
+    Accepts: JPEG, PNG, GIF, WebP, SVG, ICO
+    Max size: 1MB
+
+    Recommended: 32x32px or 16x16px PNG/ICO
+    """
+    try:
+        # Get branding configuration
+        result = await db.execute(
+            select(BrandingConfiguration).where(
+                BrandingConfiguration.organization_id == organization_id
+            )
+        )
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Branding configuration not found")
+
+        # Delete old favicon if exists
+        if config.company_favicon_url and config.company_favicon_url.startswith("/uploads/"):
+            old_path = os.path.join(
+                settings.UPLOAD_DIR, config.company_favicon_url.replace("/uploads/", "")
+            )
+            if os.path.exists(old_path):
+                os.remove(old_path)
+
+        # Upload new favicon (allow ICO files too)
+        allowed_types = ALLOWED_IMAGE_TYPES + ["image/x-icon", "image/vnd.microsoft.icon"]
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}",
+            )
+
+        # Read and validate file size
+        contents = await file.read()
+        if len(contents) > MAX_FAVICON_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Maximum size: {MAX_FAVICON_SIZE // (1024 * 1024)}MB",
+            )
+
+        # Generate unique filename
+        file_extension = file.filename.split(".")[-1] if file.filename else "png"
+        content_hash = hashlib.md5(contents).hexdigest()[:12]
+        unique_filename = f"{organization_id}_favicon_{content_hash}.{file_extension}"
+
+        # Create upload directory
+        upload_dir = os.path.join(settings.UPLOAD_DIR, "branding", organization_id)
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Save file
+        file_path = os.path.join(upload_dir, unique_filename)
+        with open(file_path, "wb") as f:
+            f.write(contents)
+
+        favicon_url = f"/uploads/branding/{organization_id}/{unique_filename}"
+
+        # Update branding configuration
+        config.company_favicon_url = favicon_url
+        config.updated_at = datetime.utcnow()
+        await db.commit()
+
+        return {
+            "message": "Favicon uploaded successfully",
+            "company_favicon_url": favicon_url,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload favicon: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/branding/{organization_id}/logo")
+async def delete_logo(
+    organization_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete the primary logo for organization branding.
+    """
+    try:
+        # Get branding configuration
+        result = await db.execute(
+            select(BrandingConfiguration).where(
+                BrandingConfiguration.organization_id == organization_id
+            )
+        )
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Branding configuration not found")
+
+        # Delete logo file if exists
+        if config.company_logo_url:
+            if config.company_logo_url.startswith("/uploads/"):
+                file_path = os.path.join(
+                    settings.UPLOAD_DIR, config.company_logo_url.replace("/uploads/", "")
+                )
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
+            config.company_logo_url = None
+            config.updated_at = datetime.utcnow()
+            await db.commit()
+
+        return {"message": "Logo deleted successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete logo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/branding/{organization_id}/logo-dark")
+async def delete_logo_dark(
+    organization_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete the dark mode logo for organization branding.
+    """
+    try:
+        # Get branding configuration
+        result = await db.execute(
+            select(BrandingConfiguration).where(
+                BrandingConfiguration.organization_id == organization_id
+            )
+        )
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Branding configuration not found")
+
+        # Delete logo file if exists
+        if config.company_logo_dark_url:
+            if config.company_logo_dark_url.startswith("/uploads/"):
+                file_path = os.path.join(
+                    settings.UPLOAD_DIR, config.company_logo_dark_url.replace("/uploads/", "")
+                )
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
+            config.company_logo_dark_url = None
+            config.updated_at = datetime.utcnow()
+            await db.commit()
+
+        return {"message": "Dark mode logo deleted successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete dark mode logo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/branding/{organization_id}/favicon")
+async def delete_favicon(
+    organization_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete the favicon for organization branding.
+    """
+    try:
+        # Get branding configuration
+        result = await db.execute(
+            select(BrandingConfiguration).where(
+                BrandingConfiguration.organization_id == organization_id
+            )
+        )
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=404, detail="Branding configuration not found")
+
+        # Delete favicon file if exists
+        if config.company_favicon_url:
+            if config.company_favicon_url.startswith("/uploads/"):
+                file_path = os.path.join(
+                    settings.UPLOAD_DIR, config.company_favicon_url.replace("/uploads/", "")
+                )
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
+            config.company_favicon_url = None
+            config.updated_at = datetime.utcnow()
+            await db.commit()
+
+        return {"message": "Favicon deleted successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete favicon: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

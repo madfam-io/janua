@@ -11,33 +11,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ..models import OrganizationMember, User
-
-
-# Temporary mock classes until models are implemented
-class RBACPolicy:
-    """Mock RBACPolicy model"""
-
-    id = None
-    name = None
-    resource_type = None
-    resource_id = None
-    permission = None
-    conditions = None
-    effect = "allow"
-
-
-class Permission:
-    """Mock Permission model"""
-
-    id = None
-    name = None
-    resource = None
-    action = None
-
-
 from ..core.events import EventEmitter
 from ..core.redis import ResilientRedisClient
+from ..models import OrganizationMember, Permission, RBACPolicy, Role, User
 
 
 class RBACService:

@@ -13,6 +13,10 @@ import {
   Lock,
   ChevronRight,
   ArrowLeft,
+  Palette,
+  Code,
+  Bell,
+  UserCog,
 } from 'lucide-react'
 
 interface SettingsSection {
@@ -52,6 +56,32 @@ const settingsSections: SettingsSection[] = [
     description: 'Configure password policies, MFA requirements, and session settings',
     href: '/profile',
     icon: <Shield className="size-5" />,
+  },
+  {
+    title: 'Branding & White Label',
+    description: 'Customize logo, colors, and domain for your organization',
+    href: '/settings/branding',
+    icon: <Palette className="size-5" />,
+    badge: 'Enterprise',
+    badgeVariant: 'secondary',
+  },
+  {
+    title: 'API Keys',
+    description: 'Manage programmatic access to the Janua API',
+    href: '/settings/api-keys',
+    icon: <Code className="size-5" />,
+  },
+  {
+    title: 'Security Alerts',
+    description: 'Configure security notifications and alert rules',
+    href: '/settings/alerts',
+    icon: <Bell className="size-5" />,
+  },
+  {
+    title: 'Roles & Permissions',
+    description: 'Manage custom roles and fine-grained access control',
+    href: '/settings/roles',
+    icon: <UserCog className="size-5" />,
   },
 ]
 

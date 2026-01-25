@@ -123,6 +123,12 @@ from app.routers.v1 import (
 from app.routers.v1 import (
     webhooks_dhanam as webhooks_dhanam_v1,
 )
+from app.routers.v1 import (
+    api_keys as api_keys_v1,
+)
+from app.routers.v1 import (
+    roles as roles_v1,
+)
 
 # Additional feature routers with optional loading
 additional_routers = {}
@@ -139,13 +145,6 @@ try:
     additional_routers["websocket"] = websocket_v1
 except Exception as e:
     logger.warning(f"WebSocket router not available: {e}")
-
-try:
-    from app.routers.v1 import apm as apm_v1
-
-    additional_routers["apm"] = apm_v1
-except Exception as e:
-    logger.warning(f"APM router not available: {e}")
 
 try:
     from app.routers.v1 import iot as iot_v1
@@ -370,6 +369,10 @@ Rate limit headers returned in response:
         {
             "name": "Compliance",
             "description": "GDPR, SOC 2, and regulatory compliance features including data export and deletion.",
+        },
+        {
+            "name": "API Keys",
+            "description": "API key management for programmatic access with scoped permissions.",
         },
     ],
     contact={
@@ -1000,6 +1003,8 @@ app.include_router(admin_v1.router, prefix="/api/v1")
 app.include_router(webhooks_v1.router, prefix="/api/v1")
 app.include_router(webhooks_dhanam_v1.router, prefix="/api/v1")
 app.include_router(integrations_v1.router, prefix="/api/v1")
+app.include_router(api_keys_v1.router, prefix="/api/v1")
+app.include_router(roles_v1.router, prefix="/api/v1")
 
 # Dhanam checkout router (for MADFAM billing integration)
 try:

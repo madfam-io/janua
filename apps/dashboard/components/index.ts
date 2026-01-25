@@ -16,7 +16,6 @@ export type { FeatureKey } from './feature-gate'
 // Dashboard components
 export { DashboardStats } from './dashboard/stats'
 export { RecentActivity } from './dashboard/recent-activity'
-export { SystemHealth } from './dashboard/system-health'
 
 // Entity components
 export { IdentityList } from './identities/identity-list'

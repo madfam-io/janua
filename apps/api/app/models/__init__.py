@@ -759,6 +759,36 @@ class RolePermission(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class RBACPolicy(Base):
+    """
+    RBAC Policy model for conditional access control.
+
+    Policies allow fine-grained permission rules with conditions like:
+    - Time-based access (only during business hours)
+    - Resource-specific access (only for specific resources)
+    - User-specific access (grant permission to specific users)
+    - Custom conditions (JSON-based condition evaluation)
+    """
+    __tablename__ = "rbac_policies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    permission = Column(String(255), nullable=False)  # e.g., "users:read", "org:update"
+    resource_type = Column(String(255))  # Optional: restrict to specific resource type
+    resource_id = Column(UUID(as_uuid=True))  # Optional: restrict to specific resource
+    conditions = Column(JSONB, default={})  # Conditional rules
+    effect = Column(String(20), default="allow")  # "allow" or "deny"
+    is_active = Column(Boolean, default=True)
+    priority = Column(Integer, default=0)  # Higher priority policies evaluated first
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    updated_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at = Column(DateTime)  # Soft delete
+
+
 class Plan(Base):
     __tablename__ = "plans"
 

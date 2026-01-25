@@ -38,10 +38,6 @@ janua_admin_uptime_seconds ${Math.floor(uptime / 1000)}
 # HELP janua_admin_build_info Build information
 # TYPE janua_admin_build_info gauge
 janua_admin_build_info{version="1.0.0",environment="${process.env.NODE_ENV || 'development'}"} 1
-
-# HELP janua_admin_memory_usage_bytes Memory usage in bytes
-# TYPE janua_admin_memory_usage_bytes gauge
-janua_admin_memory_usage_bytes ${process.memoryUsage().rss}
 `.trim()
 
   return new NextResponse(prometheusMetrics, {

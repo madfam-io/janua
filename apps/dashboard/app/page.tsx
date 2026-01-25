@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import { DashboardStats } from '@/components/dashboard/stats'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
-import { SystemHealth } from '@/components/dashboard/system-health'
 import { IdentityList } from '@/components/identities/identity-list'
 import { SessionList } from '@/components/sessions/session-list'
 import { OrganizationList } from '@/components/organizations/organization-list'
@@ -187,32 +186,18 @@ function DashboardContent() {
 
           <TabsContent value="overview" className="space-y-6">
             <DashboardStats />
-            
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                  <CardDescription>
-                    Latest authentication and user events
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RecentActivity />
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>System Health</CardTitle>
-                  <CardDescription>
-                    Service status and performance metrics
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <SystemHealth />
-                </CardContent>
-              </Card>
-            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Activity</CardTitle>
+                <CardDescription>
+                  Latest authentication and user events
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RecentActivity />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="identities">
