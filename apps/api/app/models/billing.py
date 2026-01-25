@@ -81,6 +81,7 @@ class SubscriptionPlan(Base):
     """
 
     __tablename__ = "subscription_plans"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(100), nullable=False)
@@ -144,6 +145,7 @@ class Subscription(Base):
     """
 
     __tablename__ = "subscriptions"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
@@ -233,6 +235,7 @@ class PaymentMethod(Base):
     """
 
     __tablename__ = "payment_methods"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
@@ -294,6 +297,7 @@ class Invoice(Base):
     """
 
     __tablename__ = "invoices"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
@@ -380,6 +384,7 @@ class WebhookEvent(Base):
     """
 
     __tablename__ = "webhook_events"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
