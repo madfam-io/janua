@@ -685,7 +685,7 @@ class LegacyInvoice(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    subscription_id = Column(UUID(as_uuid=True), ForeignKey("subscriptions.id"))
+    subscription_id = Column(UUID(as_uuid=True))  # No FK - legacy model, reference billing.Subscription if needed
     invoice_number = Column(String(255), unique=True, nullable=False)
     amount = Column(Integer, nullable=False)  # Amount in cents
     currency = Column(String(3), default="USD")
