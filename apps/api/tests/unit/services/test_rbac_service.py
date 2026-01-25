@@ -8,7 +8,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.services.rbac_service import RBACService, RBACPolicy, Permission
+from app.services.rbac_service import RBACService
+from app.models import RBACPolicy, Permission
 
 pytestmark = pytest.mark.asyncio
 
@@ -330,7 +331,8 @@ class TestRBACPolicyModel:
 
     def test_policy_default_effect(self):
         """Test policy default effect is allow."""
-        assert RBACPolicy.effect == "allow"
+        # RBACPolicy is now a real SQLAlchemy model, check column default
+        assert RBACPolicy.__table__.c.effect.default.arg == "allow"
 
 
 class TestPermissionModel:
