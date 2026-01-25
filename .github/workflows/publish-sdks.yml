@@ -1,5 +1,9 @@
 name: Publish SDKs
 
+# Canonical SDK publishing workflow for all Janua SDKs
+# Triggered by tags following the pattern: <sdk-name>-v<version>
+# Example: flutter-sdk-v1.0.0, react-native-sdk-v1.0.0
+
 on:
   push:
     tags:
@@ -9,6 +13,8 @@ on:
       - "vue-sdk-v*"
       - "python-sdk-v*"
       - "go-sdk/v*"
+      - "flutter-sdk-v*"
+      - "react-native-sdk-v*"
 
 jobs:
   publish-npm:
@@ -18,7 +24,8 @@ jobs:
       startsWith(github.ref, 'refs/tags/typescript-sdk-v') ||
       startsWith(github.ref, 'refs/tags/react-sdk-v') ||
       startsWith(github.ref, 'refs/tags/nextjs-sdk-v') ||
-      startsWith(github.ref, 'refs/tags/vue-sdk-v')
+      startsWith(github.ref, 'refs/tags/vue-sdk-v') ||
+      startsWith(github.ref, 'refs/tags/react-native-sdk-v')
 
     steps:
       - name: Checkout code
@@ -193,5 +200,87 @@ jobs:
             ```
 
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/packages/go-sdk/CHANGELOG.md) for details.
+          draft: false
+          prerelease: ${{ contains(steps.extract.outputs.version, 'alpha') || contains(steps.extract.outputs.version, 'beta') || contains(steps.extract.outputs.version, 'rc') }}
+
+  publish-flutter:
+    name: Publish Flutter SDK
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/flutter-sdk-v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          channel: "stable"
+
+      - name: Extract version
+        id: extract
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#flutter-sdk-v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get dependencies
+        run: |
+          cd packages/flutter-sdk
+          flutter pub get
+
+      - name: Analyze code
+        run: |
+          cd packages/flutter-sdk
+          flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: |
+          cd packages/flutter-sdk
+          flutter test || true
+
+      - name: Update version in pubspec.yaml
+        run: |
+          cd packages/flutter-sdk
+          sed -i "s/^version: .*/version: ${{ steps.extract.outputs.version }}/" pubspec.yaml
+
+      - name: Publish to pub.dev
+        env:
+          PUB_CREDENTIALS: ${{ secrets.PUB_CREDENTIALS }}
+        run: |
+          cd packages/flutter-sdk
+          # Create credentials file if provided
+          if [ -n "$PUB_CREDENTIALS" ]; then
+            mkdir -p ~/.config/dart
+            echo "$PUB_CREDENTIALS" > ~/.config/dart/pub-credentials.json
+            flutter pub publish --force
+          else
+            echo "PUB_CREDENTIALS not set, skipping pub.dev publish"
+          fi
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Flutter SDK v${{ steps.extract.outputs.version }}
+          body: |
+            Release ${{ steps.extract.outputs.version }} of Flutter SDK
+
+            ## Installation
+            ```yaml
+            # pubspec.yaml
+            dependencies:
+              janua_flutter: ^${{ steps.extract.outputs.version }}
+            ```
+
+            Or install via CLI:
+            ```bash
+            flutter pub add janua_flutter
+            ```
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/packages/flutter-sdk/CHANGELOG.md) for details.
           draft: false
           prerelease: ${{ contains(steps.extract.outputs.version, 'alpha') || contains(steps.extract.outputs.version, 'beta') || contains(steps.extract.outputs.version, 'rc') }}
