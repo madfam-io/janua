@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant_context import TenantContext
 
-from ..models import WebhookDelivery, WebhookEndpoint, WebhookEvent, WebhookStatus
+from ..models import WebhookDelivery, WebhookEndpoint, LegacyWebhookEvent as WebhookEvent, WebhookStatus
 
 logger = structlog.get_logger()
 
