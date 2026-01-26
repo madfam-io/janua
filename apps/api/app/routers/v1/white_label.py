@@ -4,7 +4,6 @@ White-label and branding API endpoints
 
 import hashlib
 import logging
-import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -377,6 +376,42 @@ MAX_LOGO_SIZE = 5 * 1024 * 1024  # 5MB
 MAX_FAVICON_SIZE = 1 * 1024 * 1024  # 1MB
 
 
+def _safe_delete_uploaded_file(url_path: Optional[str]) -> bool:
+    """
+    Safely delete an uploaded file with path traversal protection.
+
+    Security: Prevents path traversal (CWE-22) by validating the resolved
+    path is within the upload directory before deletion.
+
+    Args:
+        url_path: The URL path of the uploaded file (e.g., "/uploads/branding/...")
+
+    Returns:
+        True if file was deleted, False otherwise
+    """
+    if not url_path or not url_path.startswith("/uploads/"):
+        return False
+
+    try:
+        # Remove the /uploads/ prefix to get relative path
+        relative_path = url_path.replace("/uploads/", "", 1)
+
+        # Resolve both base and target paths
+        base_dir = Path(settings.UPLOAD_DIR).resolve()
+        target_path = (base_dir / relative_path).resolve()
+
+        # CRITICAL: Verify path is within base directory (prevents path traversal)
+        target_path.relative_to(base_dir)
+
+        if target_path.exists() and target_path.is_file():
+            target_path.unlink()
+            return True
+        return False
+    except (ValueError, OSError) as e:
+        logger.warning(f"Failed to delete uploaded file: {e}")
+        return False
+
+
 def _validate_safe_path_component(component: str) -> str:
     """
     Validate path component doesn't contain traversal sequences.
@@ -489,13 +524,8 @@ async def upload_logo(
         if not config:
             raise HTTPException(status_code=404, detail="Branding configuration not found")
 
-        # Delete old logo if exists
-        if config.company_logo_url and config.company_logo_url.startswith("/uploads/"):
-            old_path = os.path.join(
-                settings.UPLOAD_DIR, config.company_logo_url.replace("/uploads/", "")
-            )
-            if os.path.exists(old_path):
-                os.remove(old_path)
+        # Delete old logo if exists (using safe deletion to prevent path traversal)
+        _safe_delete_uploaded_file(config.company_logo_url)
 
         # Upload new logo
         logo_url = await _upload_branding_image(
@@ -546,13 +576,8 @@ async def upload_logo_dark(
         if not config:
             raise HTTPException(status_code=404, detail="Branding configuration not found")
 
-        # Delete old logo if exists
-        if config.company_logo_dark_url and config.company_logo_dark_url.startswith("/uploads/"):
-            old_path = os.path.join(
-                settings.UPLOAD_DIR, config.company_logo_dark_url.replace("/uploads/", "")
-            )
-            if os.path.exists(old_path):
-                os.remove(old_path)
+        # Delete old logo if exists (using safe deletion to prevent path traversal)
+        _safe_delete_uploaded_file(config.company_logo_dark_url)
 
         # Upload new logo
         logo_url = await _upload_branding_image(
@@ -603,13 +628,8 @@ async def upload_favicon(
         if not config:
             raise HTTPException(status_code=404, detail="Branding configuration not found")
 
-        # Delete old favicon if exists
-        if config.company_favicon_url and config.company_favicon_url.startswith("/uploads/"):
-            old_path = os.path.join(
-                settings.UPLOAD_DIR, config.company_favicon_url.replace("/uploads/", "")
-            )
-            if os.path.exists(old_path):
-                os.remove(old_path)
+        # Delete old favicon if exists (using safe deletion to prevent path traversal)
+        _safe_delete_uploaded_file(config.company_favicon_url)
 
         # Upload new favicon (allow ICO files too)
         allowed_types = ALLOWED_IMAGE_TYPES + ["image/x-icon", "image/vnd.microsoft.icon"]
@@ -692,15 +712,9 @@ async def delete_logo(
         if not config:
             raise HTTPException(status_code=404, detail="Branding configuration not found")
 
-        # Delete logo file if exists
+        # Delete logo file if exists (using safe deletion to prevent path traversal)
         if config.company_logo_url:
-            if config.company_logo_url.startswith("/uploads/"):
-                file_path = os.path.join(
-                    settings.UPLOAD_DIR, config.company_logo_url.replace("/uploads/", "")
-                )
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-
+            _safe_delete_uploaded_file(config.company_logo_url)
             config.company_logo_url = None
             config.updated_at = datetime.utcnow()
             await db.commit()
@@ -735,15 +749,9 @@ async def delete_logo_dark(
         if not config:
             raise HTTPException(status_code=404, detail="Branding configuration not found")
 
-        # Delete logo file if exists
+        # Delete logo file if exists (using safe deletion to prevent path traversal)
         if config.company_logo_dark_url:
-            if config.company_logo_dark_url.startswith("/uploads/"):
-                file_path = os.path.join(
-                    settings.UPLOAD_DIR, config.company_logo_dark_url.replace("/uploads/", "")
-                )
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-
+            _safe_delete_uploaded_file(config.company_logo_dark_url)
             config.company_logo_dark_url = None
             config.updated_at = datetime.utcnow()
             await db.commit()
@@ -778,15 +786,9 @@ async def delete_favicon(
         if not config:
             raise HTTPException(status_code=404, detail="Branding configuration not found")
 
-        # Delete favicon file if exists
+        # Delete favicon file if exists (using safe deletion to prevent path traversal)
         if config.company_favicon_url:
-            if config.company_favicon_url.startswith("/uploads/"):
-                file_path = os.path.join(
-                    settings.UPLOAD_DIR, config.company_favicon_url.replace("/uploads/", "")
-                )
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-
+            _safe_delete_uploaded_file(config.company_favicon_url)
             config.company_favicon_url = None
             config.updated_at = datetime.utcnow()
             await db.commit()

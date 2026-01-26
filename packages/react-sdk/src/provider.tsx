@@ -176,12 +176,12 @@ export function JanuaProvider({ children, config }: JanuaProviderProps) {
 
   /**
    * Clear tokens from localStorage
+   * Note: User data is not stored in localStorage (CWE-312 security fix)
    */
   const clearTokens = useCallback(() => {
     localStorage.removeItem(STORAGE_KEYS.accessToken);
     localStorage.removeItem(STORAGE_KEYS.refreshToken);
     localStorage.removeItem(STORAGE_KEYS.idToken);
-    localStorage.removeItem(STORAGE_KEYS.user);
   }, []);
 
   /**
@@ -198,11 +198,11 @@ export function JanuaProvider({ children, config }: JanuaProviderProps) {
       storeTokens(tokens.access_token, tokens.refresh_token);
 
       // Fetch updated user
+      // Security: User data stored in React state only, not localStorage (CWE-312)
       const currentUser = await client.getCurrentUser();
       if (currentUser) {
         const mappedUser = mapApiUserToJanuaUser(currentUser);
         setUser(mappedUser);
-        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(mappedUser));
       }
     } catch (err) {
       const errorState = mapErrorToState(err);
@@ -263,11 +263,11 @@ export function JanuaProvider({ children, config }: JanuaProviderProps) {
           }
         } else {
           // Token is valid, fetch current user
+          // Security: User data stored in React state only, not localStorage (CWE-312)
           const currentUser = await client.getCurrentUser();
           if (currentUser) {
             const mappedUser = mapApiUserToJanuaUser(currentUser);
             setUser(mappedUser);
-            localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(mappedUser));
           }
         }
       } catch (err) {
@@ -296,11 +296,11 @@ export function JanuaProvider({ children, config }: JanuaProviderProps) {
 
         storeTokens(response.tokens.access_token, response.tokens.refresh_token);
 
+        // Security: User data stored in React state only, not localStorage (CWE-312)
         const currentUser = await client.getCurrentUser();
         if (currentUser) {
           const mappedUser = mapApiUserToJanuaUser(currentUser);
           setUser(mappedUser);
-          localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(mappedUser));
         }
       } catch (err) {
         const errorState = mapErrorToState(err);
@@ -332,9 +332,9 @@ export function JanuaProvider({ children, config }: JanuaProviderProps) {
 
         storeTokens(response.tokens.access_token, response.tokens.refresh_token);
 
+        // Security: User data stored in React state only, not localStorage (CWE-312)
         const mappedUser = mapApiUserToJanuaUser(response.user);
         setUser(mappedUser);
-        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(mappedUser));
       } catch (err) {
         const errorState = mapErrorToState(err);
         setError(errorState);
@@ -460,11 +460,11 @@ export function JanuaProvider({ children, config }: JanuaProviderProps) {
         clearPKCEParams();
 
         // Fetch current user
+        // Security: User data stored in React state only, not localStorage (CWE-312)
         const currentUser = await client.getCurrentUser();
         if (currentUser) {
           const mappedUser = mapApiUserToJanuaUser(currentUser);
           setUser(mappedUser);
-          localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(mappedUser));
         }
       } catch (err) {
         clearPKCEParams();

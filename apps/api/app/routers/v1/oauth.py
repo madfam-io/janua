@@ -373,8 +373,6 @@ async def link_oauth_account(
         link_state = f"link_{current_user.id}_{state}"
 
         # Store link state in Redis with metadata (final redirect, user, etc.)
-        import json
-
         from app.core.redis import get_redis
 
         redis_client = await get_redis()
@@ -446,7 +444,6 @@ async def link_oauth_callback(
     2. Links the OAuth account to the user
     3. Redirects to the final destination (the original client page)
     """
-    import json
     from urllib.parse import urlencode
 
     from starlette.responses import RedirectResponse

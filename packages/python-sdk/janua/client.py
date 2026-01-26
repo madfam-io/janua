@@ -128,7 +128,8 @@ class JanuaClient:
     
     def _init_service_clients(self) -> None:
         """Initialize all service clients."""
-        self.auth = AuthClient(self.http, self.config, self)
+        # AuthClient accepts (http, config, client) - third arg is Optional[JanuaClient]
+        self.auth = AuthClient(self.http, self.config, self)  # noqa: E501
         self.users = UsersClient(self.http, self.config)
         self.organizations = OrganizationsClient(self.http, self.config)
         self.sessions = SessionsClient(self.http, self.config)

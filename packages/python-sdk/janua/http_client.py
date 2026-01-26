@@ -5,8 +5,9 @@ import random
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
-import httpx
-from httpx import Response, TimeoutException, NetworkError, AsyncClient
+# httpx module imports consolidated: Client and Timeout for constructors,
+# Response/TimeoutException/NetworkError for type hints and exception handling
+from httpx import Client, Timeout, Response, TimeoutException, NetworkError, AsyncClient
 
 from .exceptions import (
     JanuaError,
@@ -212,8 +213,8 @@ class HTTPClient:
             self.headers.update(custom_headers)
         
         # Create HTTP client with connection pooling
-        self.client = httpx.Client(
-            timeout=httpx.Timeout(timeout),
+        self.client = Client(
+            timeout=Timeout(timeout),
             headers=self.headers,
             follow_redirects=True,
         )

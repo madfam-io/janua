@@ -6,6 +6,7 @@ Works alongside RBACService for permission enforcement.
 """
 
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple
@@ -16,6 +17,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AuditLog, OrganizationMember, Role, User
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_log_value(value: str, max_length: int = 100) -> str:
+    """
+    Sanitize a string for safe logging.
+
+    Security: Prevents log injection (CWE-117) by removing newlines,
+    carriage returns, and control characters from log values.
+
+    Args:
+        value: The string to sanitize
+        max_length: Maximum length of the sanitized string
+
+    Returns:
+        Sanitized string safe for logging
+    """
+    if not value:
+        return ""
+    # Remove newlines, carriage returns, and control characters
+    sanitized = value.replace("\n", "").replace("\r", "")
+    sanitized = re.sub(r"[\x00-\x1f\x7f]", "", sanitized)
+    # Truncate to max length
+    return sanitized[:max_length] if len(sanitized) > max_length else sanitized
 
 
 # Default system roles with their permissions
@@ -218,11 +242,12 @@ class RoleService:
         await self.db.commit()
         await self.db.refresh(role)
 
+        # Security: Sanitize user-provided values before logging (CWE-117)
         logger.info(
             "Role created",
             extra={
                 "role_id": str(role.id),
-                "role_name": name,
+                "role_name": _sanitize_log_value(name),
                 "organization_id": str(organization_id),
             },
         )
@@ -427,10 +452,11 @@ class RoleService:
         await self.db.commit()
         await self.db.refresh(member)
 
+        # Security: Sanitize user-provided values before logging (CWE-117)
         logger.info(
             "Role assigned",
             extra={
-                "role_name": role_name,
+                "role_name": _sanitize_log_value(role_name),
                 "user_id": str(user_id),
                 "organization_id": str(organization_id),
             },
