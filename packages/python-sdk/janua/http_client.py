@@ -1,13 +1,12 @@
 """HTTP client for making API requests with retry logic and error handling."""
 
-import asyncio
 import random
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
-# httpx module imports consolidated: Client and Timeout for constructors,
-# Response/TimeoutException/NetworkError for type hints and exception handling
-from httpx import Client, Timeout, Response, TimeoutException, NetworkError, AsyncClient
+
+# httpx imports: Client/Timeout for constructors, Response/exceptions for handling
+from httpx import Client, Timeout, Response, TimeoutException, NetworkError
 
 from .exceptions import (
     JanuaError,
