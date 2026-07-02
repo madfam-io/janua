@@ -45,7 +45,7 @@ def upgrade() -> None:
         sa.Column("oauth_scopes", json_type, nullable=True),
         sa.Column("oauth_expires_at", sa.DateTime(), nullable=True),
         sa.Column("status", sa.String(20), server_default="active"),
-        sa.Column("metadata", json_type, nullable=True),
+        sa.Column("account_metadata", json_type, nullable=True),
         sa.Column("last_used_at", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=True),
         sa.Column("updated_at", sa.DateTime(), nullable=True),
