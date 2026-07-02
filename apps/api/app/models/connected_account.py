@@ -54,7 +54,9 @@ class ConnectedAccount(Base):
     oauth_expires_at = Column(DateTime, nullable=True)
 
     status = Column(String(20), default=ConnectedAccountStatus.ACTIVE.value)
-    account_metadata = Column("metadata", JSONB, default=dict)
+    # Column name must NOT be "metadata" — SQLAlchemy 2.0 Declarative reserves it
+    # on Base, which crashes the mapper at import (broke janua-api rollout 2913).
+    account_metadata = Column("account_metadata", JSONB, default=dict)
     last_used_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
