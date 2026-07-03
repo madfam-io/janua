@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        sdk: [typescript-sdk, react-sdk, nextjs-sdk, vue-sdk]
+        sdk: [typescript-sdk, react-sdk, nextjs-sdk, vue-sdk, edge]
 
     steps:
       - name: Checkout code

@@ -3,8 +3,8 @@
  * Ultra-lightweight JWT verification optimized for edge environments
  */
 
-import { importSPKI, jwtVerify, SignJWT, importPKCS8 } from 'jose';
-import type { JWTPayload, JWTHeaderParameters } from 'jose';
+import { importSPKI, importJWK, decodeProtectedHeader, jwtVerify, SignJWT, importPKCS8 } from 'jose';
+import type { JWTPayload, JWK } from 'jose';
 
 export { JWTPayload };
 
@@ -42,14 +42,14 @@ export interface VerificationResult {
 }
 
 /**
- * Cache interface for JWKS
+ * Cache entry for a fetched JWKS, keyed by JWKS URL
  */
-interface JWKSCache {
-  keys: any;
+interface JWKSCacheEntry {
+  jwks: { keys: JWK[] };
   expires: number;
 }
 
-let jwksCache: JWKSCache | null = null;
+const jwksCache = new Map<string, JWKSCacheEntry>();
 
 /**
  * Main verification function for edge environments
@@ -122,11 +122,9 @@ async function verifyWithJWKS(
 ): Promise<VerificationResult> {
   // Get JWKS (from cache if available)
   const jwks = await getJWKS(config.jwksUrl!);
-  
+
   // Extract kid from token header
-  const [header] = token.split('.');
-  const decodedHeader = JSON.parse(atob(header)) as JWTHeaderParameters;
-  const kid = decodedHeader.kid;
+  const { kid } = decodeProtectedHeader(token);
 
   if (!kid) {
     return {
@@ -136,7 +134,7 @@ async function verifyWithJWKS(
   }
 
   // Find matching key
-  const key = jwks.keys.find((k: any) => k.kid === kid);
+  const key = jwks.keys.find((k) => k.kid === kid);
   if (!key) {
     return {
       valid: false,
@@ -144,9 +142,11 @@ async function verifyWithJWKS(
     };
   }
 
-  // Import and verify
-  const publicKey = await importSPKI(key.x5c[0], key.alg);
-  
+  // Import the JWK itself (x5c holds DER certificates, not SPKI keys).
+  // "alg" is optional on JWKS keys; Janua issues RS256 tokens.
+  const publicKey = await importJWK(key, key.alg ?? 'RS256');
+
+
   const { payload } = await jwtVerify(token, publicKey, {
     issuer: config.issuer,
     audience: config.audience,
@@ -163,10 +163,11 @@ async function verifyWithJWKS(
 /**
  * Get JWKS with caching
  */
-async function getJWKS(url: string): Promise<any> {
+async function getJWKS(url: string): Promise<{ keys: JWK[] }> {
   // Check cache
-  if (jwksCache && jwksCache.expires > Date.now()) {
-    return jwksCache.keys;
+  const cached = jwksCache.get(url);
+  if (cached && cached.expires > Date.now()) {
+    return cached.jwks;
   }
 
   // Fetch JWKS
@@ -175,13 +176,16 @@ async function getJWKS(url: string): Promise<any> {
     throw new Error(`Failed to fetch JWKS: ${response.statusText}`);
   }
 
-  const jwks = await response.json();
+  const jwks = (await response.json()) as { keys: JWK[] };
+  if (!jwks.keys || !Array.isArray(jwks.keys)) {
+    throw new Error('Invalid JWKS format: missing keys array');
+  }
 
   // Cache for 1 hour
-  jwksCache = {
-    keys: jwks,
+  jwksCache.set(url, {
+    jwks,
     expires: Date.now() + 3600000,
-  };
+  });
 
   return jwks;
 }
