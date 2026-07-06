@@ -274,9 +274,7 @@ async def _get_admin_user_id(engine: AsyncEngine) -> uuid.UUID:
     """Return the id of the first admin user, or abort."""
     async with engine.connect() as conn:
         result = await conn.execute(
-            text(
-                "SELECT id FROM users WHERE is_admin = true ORDER BY created_at ASC LIMIT 1"
-            )
+            text("SELECT id FROM users WHERE is_admin = true ORDER BY created_at ASC LIMIT 1")
         )
         row = result.fetchone()
 
@@ -292,8 +290,20 @@ async def _get_admin_user_id(engine: AsyncEngine) -> uuid.UUID:
     return admin_id
 
 
-async def _seed_clients(engine: AsyncEngine) -> None:
-    """Insert missing ecosystem clients into ``oauth_clients``."""
+DEFAULT_GRANT_TYPES = ["authorization_code", "refresh_token"]
+
+
+async def _seed_clients(
+    engine: AsyncEngine,
+    clients: list[dict[str, Any]] | None = None,
+) -> None:
+    """Insert missing ecosystem clients into ``oauth_clients``.
+
+    Each client definition may carry an optional ``grant_types`` list
+    (default: interactive ``authorization_code`` + ``refresh_token``).
+    Machine clients (e.g. seeded by ``seed_service_clients.py``) set
+    ``grant_types: ["client_credentials"]`` and empty ``redirect_uris``.
+    """
     admin_id = await _get_admin_user_id(engine)
     now = datetime.utcnow()  # naive UTC — matches DB column type
 
@@ -301,16 +311,13 @@ async def _seed_clients(engine: AsyncEngine) -> None:
     skipped_count = 0
 
     async with engine.begin() as conn:
-        for client_def in ECOSYSTEM_CLIENTS:
+        for client_def in clients if clients is not None else ECOSYSTEM_CLIENTS:
             name = client_def["name"]
 
             # Idempotency check — match by name or pre-assigned client_id
             pre_assigned_id = client_def.get("client_id")
             existing = await conn.execute(
-                text(
-                    "SELECT id FROM oauth_clients "
-                    "WHERE name = :name OR client_id = :cid"
-                ),
+                text("SELECT id FROM oauth_clients " "WHERE name = :name OR client_id = :cid"),
                 {"name": name, "cid": pre_assigned_id or ""},
             )
             existing_row = existing.fetchone()
@@ -335,7 +342,7 @@ async def _seed_clients(engine: AsyncEngine) -> None:
                         "redirect_uris": _json_dumps(client_def["redirect_uris"]),
                         "allowed_scopes": _json_dumps(client_def["allowed_scopes"]),
                         "grant_types": _json_dumps(
-                            ["authorization_code", "refresh_token"]
+                            client_def.get("grant_types", DEFAULT_GRANT_TYPES)
                         ),
                         "audience": client_def.get("audience"),
                         "is_confidential": client_def.get("is_confidential", True),
@@ -399,9 +406,7 @@ async def _seed_clients(engine: AsyncEngine) -> None:
                     "description": client_def.get("description"),
                     "redirect_uris": _json_dumps(client_def["redirect_uris"]),
                     "allowed_scopes": _json_dumps(client_def["allowed_scopes"]),
-                    "grant_types": _json_dumps(
-                        ["authorization_code", "refresh_token"]
-                    ),
+                    "grant_types": _json_dumps(client_def.get("grant_types", DEFAULT_GRANT_TYPES)),
                     "audience": client_def.get("audience"),
                     "is_confidential": client_def.get("is_confidential", True),
                     "now": now,

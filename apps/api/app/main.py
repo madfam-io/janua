@@ -675,7 +675,15 @@ def openid_configuration():
         "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"],
-        "scopes_supported": ["openid", "profile", "email", "offline_access"],
+        "scopes_supported": [
+            "openid",
+            "profile",
+            "email",
+            "offline_access",
+            # Service-to-service (client_credentials) scopes — see docs/service-tokens.md
+            "cfdi:issue",
+            "billing:events",
+        ],
         "token_endpoint_auth_methods_supported": [
             "client_secret_basic",
             "client_secret_post",
