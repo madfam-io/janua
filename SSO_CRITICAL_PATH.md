@@ -9,14 +9,14 @@
 
 
 **Created**: 2026-02-26
-**Status**: In progress — 3 of 7 fixes merged, 4 remaining
+**Status**: In progress — 4 of 8 fixes merged (Fix 8 also promoted to prod), 4 remaining
 **Branch**: `fix/sso-verification-failures` (merged to `main`)
 
 ---
 
 ## Summary
 
-Browser-based verification of Janua SSO login across all MADFAM platforms revealed 7 issues. Fixes 1-3 are merged into `madfam-org/janua` main. Fixes 4-7 require action in other repos or production ops.
+Browser-based verification of Janua SSO login across all MADFAM platforms revealed 7 issues. Fixes 1-3 are merged into `madfam-org/janua` main. Fixes 4-7 require action in other repos or production ops. Fix 8 (admin.janua.dev login) was found and fixed separately on 2026-07-08 — merged and promoted to production.
 
 | # | Fix | Status | Owner Repo |
 |---|-----|--------|------------|
@@ -27,6 +27,7 @@ Browser-based verification of Janua SSO login across all MADFAM platforms reveal
 | 5 | Yantra4D AuthButton env vars | **TODO** | `yantra4d` |
 | 6 | Dashboard social buttons deployment | **TODO** (deploy only) | `janua` |
 | 7 | Tezca auth UI | **Deferred** | `tezca` |
+| 8 | Admin login — broken `enableJanuaSSO` → email/password | **Merged + Promoted** | `janua` |
 
 ---
 
@@ -73,6 +74,23 @@ Added `settings.COOKIE_DOMAIN` to `set_cookie()` calls in the `/signin` form-log
 Added `STORAGE_ENABLED`, `STORAGE_BUCKET_NAME`, `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY` to the Settings class. These are referenced by the admin health endpoint (`admin.py:238`) and previously caused `AttributeError` on the System Health page.
 
 **No production action required** — defaults to disabled.
+
+### Fix 8: Admin Login — Broken `enableJanuaSSO` Replaced with Email/Password
+
+**Commit**: `d4ae513` (PR #445, merged to `main`)
+**Promoted to prod**: `51ac8b6` (`deploy(prod): promote`) — prod overlay `janua-admin` pin `sha256:8568baa4…`; `admin.janua.dev` is live on the fixed build.
+**Files**: `apps/admin/app/login/page.tsx`
+
+**Problem**: `admin.janua.dev/login` was configured SSO-only (`showEmailPassword={false}`, `socialProviders={{}}`, `enableJanuaSSO={true}`). Its only control was a "Sign in with Janua" button that called `januaClient.auth.initiateOAuth('janua')`, which posts to the **social**-OAuth endpoint `POST /api/v1/auth/oauth/authorize/janua`. But `janua` is not a valid social provider — the `OAuthProvider` enum is `google/github/microsoft/apple/discord/twitter/linkedin/slack` — so the API returned `400 "Invalid provider: janua"`. Admin login was impossible.
+
+**Fix**: Dropped `enableJanuaSSO` and set `showEmailPassword=true`. Admin operators now authenticate directly against Janua via email/password (`januaClient.auth.signIn`), matching the working `apps/dashboard` pattern. The `@janua.dev` / `@madfam.io` domain + `admin`/`superadmin` role gate (`lib/auth.tsx` + middleware) is unchanged.
+
+**No further production action required** — merged and already promoted.
+
+> [!WARNING]
+> **TODO — open follow-up in `@janua/ui` (NOT yet fixed):** The underlying defect lives in the shared UI package. Both `enableJanuaSSO` (`packages/ui/src/components/auth/sign-in.tsx`) and `JanuaSSOLoginButton` (`packages/ui/src/components/auth/janua-sso-button.tsx`) push `'janua'` onto the **social**-OAuth path (`initiateOAuth('janua')`) instead of Janua's **OIDC provider** authorize endpoint (`GET /api/v1/oauth/authorize?client_id=…&response_type=code`). A real "Sign in with Janua" button for other ecosystem apps must use the OIDC flow with a registered `client_id` (ties into **Fix 1** above). **Any app still rendering that button has the same broken login.** The admin fix side-steps this by using email/password rather than repairing the button.
+>
+> Also worth noting (orthogonal): `GET /api/v1/auth/oauth/providers` returns `[]` in prod because the social-provider env vars are unset.
 
 ---
 
