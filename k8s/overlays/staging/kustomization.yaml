@@ -30,7 +30,7 @@ replicas:
 
 # Staging image digests — CI overwrites on each main-branch push.
 images:
-- digest: sha256:6f8e2886492aae0db65dcf1f5f56b5c44459c68ee6a516b37c4e020ec8946ffa
+- digest: sha256:8568baa486fe1d13403f599f09a5358713ea951b0d5a9207291db079773622fb
   name: ghcr.io/madfam-org/janua-admin
   newName: ghcr.io/madfam-org/janua-admin
 - digest: sha256:f940ff15c1f4abb09c6331c91bb77b9fb8905776fb11133213ab19005de04f95
