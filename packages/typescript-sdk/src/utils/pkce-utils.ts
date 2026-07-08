@@ -108,6 +108,20 @@ export function parseOAuthCallback(url?: string): {
   };
 }
 
+/**
+ * Strip trailing slashes without a backtracking regex.
+ * `String.replace(/\/+$/, '')` is a polynomial-regex ReDoS risk on
+ * library-supplied input (CodeQL js/polynomial-redos); a linear scan is both
+ * safe and clearer. Shared so the token-exchange path uses the same routine.
+ */
+export function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47 /* '/' */) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 /** Build OAuth authorization URL with PKCE parameters */
 export function buildAuthorizationUrl(
   baseURL: string,
@@ -126,6 +140,59 @@ export function buildAuthorizationUrl(
   url.searchParams.set('code_challenge', codeChallenge);
   url.searchParams.set('code_challenge_method', 'S256');
   url.searchParams.set('state', state);
+  return url.toString();
+}
+
+/**
+ * Build the Janua **OIDC provider** authorization URL (`GET /api/v1/oauth/authorize`).
+ *
+ * This is the "Sign in with Janua" entrypoint for MADFAM ecosystem apps that
+ * treat Janua as their identity provider. It is DISTINCT from
+ * {@link buildAuthorizationUrl}, which targets the social-login proxy path
+ * (`/api/v1/auth/oauth/authorize/{provider}`) used to federate Google/GitHub/etc.
+ *
+ * The endpoint (`oauth_provider.py::authorize_get`) requires:
+ * `response_type=code`, `client_id`, `redirect_uri`, and — for public clients —
+ * PKCE (`code_challenge` + `code_challenge_method=S256`). `scope` defaults to
+ * `openid` server-side; `state` and `nonce` are optional but recommended.
+ */
+export function buildJanuaAuthorizeUrl(params: {
+  baseURL: string;
+  clientId: string;
+  redirectUri: string;
+  codeChallenge: string;
+  state: string;
+  scopes?: string;
+  nonce?: string;
+  prompt?: string;
+}): string {
+  const {
+    baseURL,
+    clientId,
+    redirectUri,
+    codeChallenge,
+    state,
+    scopes = 'openid profile email',
+    nonce,
+    prompt,
+  } = params;
+
+  // Trim a trailing slash so `${baseURL}/api/...` never double-slashes.
+  const normalizedBase = stripTrailingSlashes(baseURL);
+  const url = new URL(`${normalizedBase}/api/v1/oauth/authorize`);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('client_id', clientId);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('scope', scopes);
+  url.searchParams.set('code_challenge', codeChallenge);
+  url.searchParams.set('code_challenge_method', 'S256');
+  url.searchParams.set('state', state);
+  if (nonce) {
+    url.searchParams.set('nonce', nonce);
+  }
+  if (prompt) {
+    url.searchParams.set('prompt', prompt);
+  }
   return url.toString();
 }
 

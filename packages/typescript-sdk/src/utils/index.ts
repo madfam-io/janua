@@ -49,6 +49,8 @@ export {
   validateState,
   parseOAuthCallback,
   buildAuthorizationUrl,
+  buildJanuaAuthorizeUrl,
+  stripTrailingSlashes,
   PKCE_STORAGE_KEYS,
 } from './pkce-utils';
 

@@ -25,7 +25,66 @@ import type {
   PublicKeyCredentialJSON
 } from './types';
 import { AuthenticationError, ValidationError } from './errors';
-import { ValidationUtils, TokenManager } from './utils';
+import {
+  ValidationUtils,
+  TokenManager,
+  generateCodeVerifier,
+  generateCodeChallenge,
+  generateState,
+  storePKCEParams,
+  retrievePKCEParams,
+  clearPKCEParams,
+  validateState,
+  buildJanuaAuthorizeUrl,
+  stripTrailingSlashes,
+} from './utils';
+
+/**
+ * Options for initiating the "Sign in with Janua" OIDC flow.
+ */
+export interface JanuaSSOOptions {
+  /** Registered OAuth `client_id` for this consuming app (required). */
+  clientId: string;
+  /** Redirect URI registered for `clientId`; where Janua returns `code`+`state`. */
+  redirectUri: string;
+  /** OIDC scopes. Defaults to `['openid', 'profile', 'email']`. */
+  scopes?: string[];
+  /** CSRF state. Auto-generated (and persisted) when omitted. */
+  state?: string;
+  /** OIDC nonce for replay protection of the id_token. */
+  nonce?: string;
+  /** OIDC `prompt` (e.g. `'none'` for silent auth on first-party clients). */
+  prompt?: string;
+  /**
+   * Override the Janua issuer base URL. Defaults to the client's configured
+   * `baseURL`. Only needed when the SDK client points somewhere else.
+   */
+  baseUrl?: string;
+}
+
+/**
+ * Result of building the Janua OIDC authorize URL.
+ */
+export interface JanuaAuthorizeUrlResult {
+  /** Fully-built `GET /api/v1/oauth/authorize` URL to redirect the browser to. */
+  url: string;
+  /** The `state` value persisted for callback validation. */
+  state: string;
+  /** The PKCE `code_verifier` persisted for the token exchange. */
+  codeVerifier: string;
+}
+
+/**
+ * Token response from the Janua OIDC token endpoint.
+ */
+export interface JanuaSSOTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token?: string;
+  id_token?: string;
+  scope?: string;
+}
 
 /**
  * Authentication operations
@@ -35,7 +94,12 @@ export class Auth {
     private http: HttpClient,
     private tokenManager: TokenManager,
     private onSignIn?: (data?: { user: User }) => void,
-    private onSignOut?: () => void
+    private onSignOut?: () => void,
+    /**
+     * Janua issuer base URL. Required for the OIDC "Sign in with Janua" flow
+     * ({@link initiateJanuaSSO}), which builds absolute redirect/token URLs.
+     */
+    private baseUrl: string = ''
   ) {}
 
   /**
@@ -554,6 +618,172 @@ export class Auth {
       skipAuth: true
     });
     return response.data;
+  }
+
+  // ---------------------------------------------------------------------------
+  // "Sign in with Janua" — OIDC PROVIDER flow
+  //
+  // These target Janua's own OIDC authorization server
+  // (`/api/v1/oauth/authorize` + `/api/v1/oauth/token`), used when an app in the
+  // MADFAM ecosystem treats Janua as its identity provider. This is DISTINCT
+  // from the social `initiateOAuth(...)` methods above, which federate external
+  // IdPs (Google/GitHub/…). `janua` is NOT a valid social `OAuthProvider`, so it
+  // must never be routed through those methods.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build the Janua OIDC authorization URL with PKCE, persisting the
+   * `code_verifier` + `state` in sessionStorage for the callback exchange.
+   *
+   * Use this when you want to control the redirect yourself (e.g. render a link
+   * or open a popup). Most callers want {@link initiateJanuaSSO}.
+   */
+  async getJanuaAuthorizeUrl(options: JanuaSSOOptions): Promise<JanuaAuthorizeUrlResult> {
+    if (!options?.clientId) {
+      throw new ValidationError('januaClientId (clientId) is required for Sign in with Janua');
+    }
+    if (!options.redirectUri) {
+      throw new ValidationError('redirectUri is required for Sign in with Janua');
+    }
+
+    const baseURL = options.baseUrl || this.baseUrl;
+    if (!baseURL) {
+      throw new ValidationError(
+        'A Janua base URL is required (configure the SDK client baseURL or pass baseUrl)'
+      );
+    }
+
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+    const state = options.state || generateState();
+
+    // Persist verifier + state so the callback (possibly on another page load)
+    // can validate state and complete the PKCE exchange.
+    storePKCEParams(codeVerifier, state);
+
+    const scopes = (options.scopes && options.scopes.length > 0)
+      ? options.scopes.join(' ')
+      : 'openid profile email';
+
+    const url = buildJanuaAuthorizeUrl({
+      baseURL,
+      clientId: options.clientId,
+      redirectUri: options.redirectUri,
+      codeChallenge,
+      state,
+      scopes,
+      nonce: options.nonce,
+      prompt: options.prompt,
+    });
+
+    return { url, state, codeVerifier };
+  }
+
+  /**
+   * Begin the "Sign in with Janua" OIDC flow by redirecting the browser to
+   * Janua's authorization endpoint. Requires a browser environment.
+   */
+  async initiateJanuaSSO(options: JanuaSSOOptions): Promise<void> {
+    const { url } = await this.getJanuaAuthorizeUrl(options);
+
+    if (typeof window === 'undefined' || !window.location) {
+      throw new AuthenticationError(
+        'initiateJanuaSSO requires a browser environment; use getJanuaAuthorizeUrl on the server'
+      );
+    }
+    window.location.href = url;
+  }
+
+  /**
+   * Complete the "Sign in with Janua" OIDC flow: validate `state`, exchange the
+   * authorization `code` (with the stored PKCE `code_verifier`) at
+   * `POST /api/v1/oauth/token`, and store the resulting tokens.
+   *
+   * The token endpoint is a standard OAuth 2.0 endpoint that consumes
+   * `application/x-www-form-urlencoded`, so this uses a direct form POST rather
+   * than the JSON HTTP client. Intended for public clients (no client secret) —
+   * confidential clients must exchange the code server-side.
+   */
+  async handleJanuaSSOCallback(
+    code: string,
+    state: string,
+    options: {
+      clientId: string;
+      redirectUri: string;
+      /** Explicit PKCE verifier; falls back to the persisted one when omitted. */
+      codeVerifier?: string;
+      /** Override the Janua base URL (defaults to the client's configured baseURL). */
+      baseUrl?: string;
+    }
+  ): Promise<JanuaSSOTokenResponse> {
+    if (!code) {
+      throw new ValidationError('Authorization code is required');
+    }
+    if (!options?.clientId || !options.redirectUri) {
+      throw new ValidationError('clientId and redirectUri are required to complete Sign in with Janua');
+    }
+
+    // CSRF: the returned state must match what we stored at initiation.
+    if (!validateState(state)) {
+      throw new AuthenticationError('Invalid OAuth state — possible CSRF, aborting token exchange');
+    }
+
+    const codeVerifier = options.codeVerifier || retrievePKCEParams()?.verifier;
+    if (!codeVerifier) {
+      throw new AuthenticationError('Missing PKCE code_verifier for token exchange');
+    }
+
+    const baseURL = stripTrailingSlashes(options.baseUrl || this.baseUrl);
+    if (!baseURL) {
+      throw new ValidationError(
+        'A Janua base URL is required (configure the SDK client baseURL or pass baseUrl)'
+      );
+    }
+
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: options.redirectUri,
+      client_id: options.clientId,
+      code_verifier: codeVerifier,
+    });
+
+    const response = await fetch(`${baseURL}/api/v1/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    if (!response.ok) {
+      let detail = `Token exchange failed (${response.status})`;
+      try {
+        const errData = await response.json();
+        detail = errData?.detail || errData?.error_description || errData?.error || detail;
+      } catch {
+        // non-JSON error body; keep the status-based message
+      }
+      clearPKCEParams();
+      throw new AuthenticationError(detail);
+    }
+
+    const tokens = (await response.json()) as JanuaSSOTokenResponse;
+
+    // One-time material — clear it as soon as the exchange succeeds.
+    clearPKCEParams();
+
+    if (tokens.access_token && tokens.refresh_token) {
+      await this.tokenManager.setTokens({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: Date.now() + (tokens.expires_in * 1000),
+      });
+    }
+
+    if (this.onSignIn) {
+      this.onSignIn();
+    }
+
+    return tokens;
   }
 
   /**

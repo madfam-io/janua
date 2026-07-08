@@ -9,8 +9,12 @@
 
 
 **Created**: 2026-02-26
-**Status**: In progress — 4 of 8 fixes merged (Fix 8 also promoted to prod), 4 remaining
-**Branch**: `fix/sso-verification-failures` (merged to `main`)
+**Status**: In progress — 4 of 8 fixes merged (Fix 8 admin login also promoted to
+prod), 4 remaining. The "Sign in with Janua" OIDC rewire (Fix 8 follow-up) is
+implemented in PR #447 — needs the 3-step go-live sequence below (seed → env
+vars → merge).
+**Branch**: `fix/sso-verification-failures` (merged to `main`);
+`claude/janua-sso-oidc-rewire` (PR #447 — the OIDC rewire)
 
 ---
 
@@ -28,6 +32,7 @@ Browser-based verification of Janua SSO login across all MADFAM platforms reveal
 | 6 | Dashboard social buttons deployment | **TODO** (deploy only) | `janua` |
 | 7 | Tezca auth UI | **Deferred** | `tezca` |
 | 8 | Admin login — broken `enableJanuaSSO` → email/password | **Merged + Promoted** | `janua` |
+| 8b | "Sign in with Janua" OIDC rewire + env-var wiring (Fix 8 follow-up) | Implemented in **PR #447** — needs seed + env vars + merge | `janua` |
 
 ---
 
@@ -91,6 +96,84 @@ Added `STORAGE_ENABLED`, `STORAGE_BUCKET_NAME`, `STORAGE_ACCESS_KEY_ID`, `STORAG
 > **TODO — open follow-up in `@janua/ui` (NOT yet fixed):** The underlying defect lives in the shared UI package. Both `enableJanuaSSO` (`packages/ui/src/components/auth/sign-in.tsx`) and `JanuaSSOLoginButton` (`packages/ui/src/components/auth/janua-sso-button.tsx`) push `'janua'` onto the **social**-OAuth path (`initiateOAuth('janua')`) instead of Janua's **OIDC provider** authorize endpoint (`GET /api/v1/oauth/authorize?client_id=…&response_type=code`). A real "Sign in with Janua" button for other ecosystem apps must use the OIDC flow with a registered `client_id` (ties into **Fix 1** above). **Any app still rendering that button has the same broken login.** The admin fix side-steps this by using email/password rather than repairing the button.
 >
 > Also worth noting (orthogonal): `GET /api/v1/auth/oauth/providers` returns `[]` in prod because the social-provider env vars are unset.
+
+---
+
+## "Sign in with Janua" OIDC rewire (Fix 8 follow-up — PR #447)
+
+**Repo**: `madfam-org/janua` · **Branch**: `claude/janua-sso-oidc-rewire` (draft PR #447)
+
+### What #447 changes (already implemented)
+
+The old "Sign in with Janua" button routed `janua` through the **social** OAuth
+path (`initiateOAuth('janua')`), which the API rejects with `400 "Invalid
+provider: janua"`. #447 rewires the button to Janua's **OIDC provider** flow:
+
+- **SDK** (`@janua/typescript-sdk`): adds `initiateJanuaSSO` /
+  `getJanuaAuthorizeUrl` / `handleJanuaSSOCallback` driving
+  `GET /api/v1/oauth/authorize` + PKCE (S256).
+- **UI** (`@janua/ui`): `SignIn` and `JanuaSSOLoginButton` now use the OIDC flow
+  and **fail loud** — the button is not rendered and an error is logged when no
+  `client_id` is available (instead of silently hitting the invalid social path).
+- **Env-var wiring (zero per-app code)**: `januaClientId` defaults to
+  `process.env.NEXT_PUBLIC_JANUA_CLIENT_ID` and `januaRedirectUri` to
+  `process.env.NEXT_PUBLIC_JANUA_REDIRECT_URI` (falling back to
+  `${origin}/auth/callback`). Threaded through `@janua/nextjs-sdk` `SignInForm`
+  and the `madfamAuthConfig` preset (`packages/ui/src/config/madfam-preset.ts`).
+  An explicit prop still overrides the env var. **Result: any ecosystem app gets
+  a working button by setting one public env var — no code change.**
+
+> `client_id` is a **public, PKCE-protected identifier** (OIDC), safe to commit,
+> print, and put in `NEXT_PUBLIC_*`. It is **NOT a secret** — these are public
+> clients with no `client_secret` (PKCE replaces it). Never confuse this with the
+> confidential `jnc_*` clients + `client_secret`s from Fix 1.
+
+### OIDC client seed (one operator command)
+
+**File**: `apps/api/scripts/seed_oidc_clients.py` (idempotent upsert on `client_id`).
+
+Registers each consuming app as a **first-party PUBLIC OIDC client** (public /
+PKCE-required, `grant_types = authorization_code + refresh_token`, scopes
+`openid profile email`, `redirect_uris` = the app's real `/auth/callback`):
+
+| `client_id` (public) | App | Redirect URI |
+|----------------------|-----|--------------|
+| `dhanam-web` | Dhanam web | `https://app.dhan.am/auth/callback` |
+| `enclii-switchyard` | Enclii Switchyard | `https://app.enclii.dev/auth/callback` |
+| `enclii-dispatch` | Enclii Dispatch | `https://admin.enclii.dev/auth/callback` |
+| `yantra4d-web` | Yantra4D studio | `https://app.yantra4d.com/auth/callback` (host resolved 2026-07-08: `app.yantra4d.com` is live; `4d-app.madfam.io` / `studio.yantra4d.com` do not resolve) |
+| `tezca-web` | Tezca web | `https://tezca.mx/auth/callback` |
+| `dashboard` | Janua dashboard | `https://app.janua.dev/auth/callback` |
+
+Each entry also registers a localhost dev callback. The script prints the
+`client_id → app → redirect_uri` map at the end (all public). It is **not** run
+automatically — a prod DB write is an operator action.
+
+### Operator go-live sequence (NO broken-button gap)
+
+Run in this exact order so the button is functional the moment #447 merges:
+
+**1. Seed the public OIDC clients against prod** (registers the `client_id`s above):
+
+```bash
+# Port-forward to production Postgres (break-glass; prefer Enclii DB access)
+kubectl port-forward svc/janua-postgres -n janua 5432:5432
+
+cd apps/api
+DATABASE_URL=postgresql://<user>:<pass>@localhost:5432/janua \
+  python scripts/seed_oidc_clients.py
+# Idempotent — safe to re-run. Prints the client_id → app → redirect_uri map.
+# No client_secret is printed: these are PUBLIC (PKCE) clients.
+```
+
+**2. Set `NEXT_PUBLIC_JANUA_CLIENT_ID` for each app (via Enclii)** to its
+`client_id` from the table above (e.g. Dhanam → `dhanam-web`). Optionally set
+`NEXT_PUBLIC_JANUA_REDIRECT_URI` if an app's callback differs from
+`${origin}/auth/callback`. These are **public** build-time env vars — no secret
+store required. This is the entire per-app change (no code).
+
+**3. Merge PR #447.** Once the SDK/UI ship with steps 1–2 already in place, the
+button works for every app on first load — no gap.
 
 ---
 
