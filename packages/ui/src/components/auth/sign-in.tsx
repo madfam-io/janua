@@ -57,6 +57,17 @@ export interface SignInProps {
   enableMagicLink?: boolean
   /** Show "Sign in with Janua" button for MADFAM apps */
   enableJanuaSSO?: boolean
+  /**
+   * Registered Janua OAuth `client_id` for this app. REQUIRED when
+   * `enableJanuaSSO` is true — the button uses Janua's OIDC provider flow
+   * (`/api/v1/oauth/authorize`), not the social path. Without it the button
+   * is not rendered and an error is logged (fail-loud), because there is no
+   * safe fallback: routing `janua` through the social OAuth path returns
+   * `400 Invalid provider: janua`.
+   */
+  januaClientId?: string
+  /** Redirect URI for the Janua OIDC flow. Defaults to `${origin}/auth/callback`. */
+  januaRedirectUri?: string
   /** Callback when API returns MFA challenge */
   onMFARequired?: (session: any) => void
   /** Custom header text */
@@ -96,6 +107,8 @@ export function SignIn({
   onSSODetected,
   enableMagicLink = false,
   enableJanuaSSO = false,
+  januaClientId,
+  januaRedirectUri,
   onMFARequired,
   headerText = 'Sign in to your account',
   headerDescription = 'Welcome back! Please enter your details',
@@ -181,6 +194,23 @@ export function SignIn({
   const handleSocialLogin = async (provider: string) => {
     setIsLoading(true)
     try {
+      // "Sign in with Janua" uses Janua's OIDC PROVIDER flow, NOT the social
+      // OAuth path. `janua` is not a valid social provider, so it must be
+      // routed through initiateJanuaSSO with a registered client_id.
+      if (provider === 'janua') {
+        if (!januaClient) {
+          throw new Error('Sign in with Janua requires a januaClient with the OIDC SDK')
+        }
+        await januaClient.auth.initiateJanuaSSO({
+          clientId: januaClientId,
+          redirectUri:
+            januaRedirectUri ||
+            redirectUrl ||
+            `${window.location.origin}/auth/callback`,
+        })
+        return
+      }
+
       if (januaClient) {
         const response = await januaClient.auth.initiateOAuth(provider, {
           redirectUrl: redirectUrl || window.location.origin,
@@ -214,7 +244,22 @@ export function SignIn({
   if (socialProviders.github) socialProviderList.push('github')
   if (socialProviders.microsoft) socialProviderList.push('microsoft')
   if (socialProviders.apple) socialProviderList.push('apple')
-  if (enableJanuaSSO) socialProviderList.push('janua')
+  // FAIL-LOUD: "Sign in with Janua" requires a registered OIDC client_id.
+  // Never silently render a button that would hit the invalid social path
+  // (`initiateOAuth('janua')` → 400 "Invalid provider: janua"). If the app
+  // asked for the button but gave no client id, log an error and skip it.
+  if (enableJanuaSSO) {
+    if (januaClientId) {
+      socialProviderList.push('janua')
+    } else {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[janua/ui] enableJanuaSSO is set but januaClientId is missing. ' +
+          'The "Sign in with Janua" button was not rendered. Pass a registered ' +
+          'januaClientId (OIDC client_id) to enable it.'
+      )
+    }
+  }
 
   const hasSocialProviders = socialProviderList.length > 0
   // Default is `true` when the prop is omitted (see destructuring above).

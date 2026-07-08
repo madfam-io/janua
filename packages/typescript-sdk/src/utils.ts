@@ -46,6 +46,7 @@ export {
   validateState,
   parseOAuthCallback,
   buildAuthorizationUrl,
+  buildJanuaAuthorizeUrl,
   PKCE_STORAGE_KEYS,
 } from './utils/index';
 

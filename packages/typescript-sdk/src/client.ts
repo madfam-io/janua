@@ -89,7 +89,8 @@ export class JanuaClient extends EventEmitter<SdkEventMap> {
       this._httpClient,
       this.tokenManager,
       () => this.emit('auth:signedIn', { user: {} as any }),
-      () => this.emit('auth:signedOut', {})
+      () => this.emit('auth:signedOut', {}),
+      this.config.baseURL
     );
     this.users = new Users(this._httpClient);
     this.sessions = new Sessions(this._httpClient);

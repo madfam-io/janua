@@ -28,6 +28,10 @@ export interface SignInFormProps {
   enableSSO?: boolean;
   enableMagicLink?: boolean;
   enableJanuaSSO?: boolean;
+  /** Registered Janua OIDC client_id — required when enableJanuaSSO is true. */
+  januaClientId?: string;
+  /** Redirect URI for the Janua OIDC flow. */
+  januaRedirectUri?: string;
   onMFARequired?: (session: any) => void;
   headerText?: string;
   headerDescription?: string;
@@ -49,6 +53,8 @@ export function SignInForm({
   enableSSO,
   enableMagicLink,
   enableJanuaSSO,
+  januaClientId,
+  januaRedirectUri,
   onMFARequired,
   headerText,
   headerDescription,
@@ -73,6 +79,8 @@ export function SignInForm({
       enableSSO={enableSSO}
       enableMagicLink={enableMagicLink}
       enableJanuaSSO={enableJanuaSSO}
+      januaClientId={januaClientId}
+      januaRedirectUri={januaRedirectUri}
       onMFARequired={onMFARequired}
       headerText={headerText}
       headerDescription={headerDescription}

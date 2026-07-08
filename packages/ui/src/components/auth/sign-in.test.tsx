@@ -395,10 +395,53 @@ describe('SignIn', () => {
       expect(screen.getByText(/email me a sign-in link/i)).toBeInTheDocument()
     })
 
-    it('should render Enterprise SSO button when enableJanuaSSO is true', () => {
-      render(<SignIn enableJanuaSSO={true} />)
+    it('should render Enterprise SSO button when enableJanuaSSO is true and januaClientId is provided', () => {
+      render(<SignIn enableJanuaSSO={true} januaClientId="app-client-id" />)
 
       expect(screen.getByRole('button', { name: /enterprise sso/i })).toBeInTheDocument()
+    })
+
+    // FAIL-LOUD: enableJanuaSSO without a client id must NOT render the button
+    // (it would otherwise hit the invalid social path). It logs an error instead.
+    it('should NOT render Enterprise SSO button when januaClientId is missing, and logs an error', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<SignIn enableJanuaSSO={true} />)
+
+      expect(screen.queryByRole('button', { name: /enterprise sso/i })).not.toBeInTheDocument()
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('januaClientId is missing')
+      )
+
+      errorSpy.mockRestore()
+    })
+
+    it('should route the Enterprise SSO button through initiateJanuaSSO (OIDC), not initiateOAuth', async () => {
+      const user = userEvent.setup()
+      const initiateJanuaSSO = vi.fn().mockResolvedValue(undefined)
+      const initiateOAuth = vi.fn()
+      const januaClient = { auth: { initiateJanuaSSO, initiateOAuth } }
+
+      delete (window as any).location
+      window.location = { href: '', origin: 'http://localhost:3000' } as any
+
+      render(
+        <SignIn
+          enableJanuaSSO={true}
+          januaClientId="app-client-id"
+          januaRedirectUri="http://localhost:3000/auth/callback"
+          januaClient={januaClient}
+          socialProviders={{}}
+        />
+      )
+
+      await user.click(screen.getByRole('button', { name: /enterprise sso/i }))
+
+      expect(initiateJanuaSSO).toHaveBeenCalledWith({
+        clientId: 'app-client-id',
+        redirectUri: 'http://localhost:3000/auth/callback',
+      })
+      expect(initiateOAuth).not.toHaveBeenCalled()
     })
   })
 
@@ -440,7 +483,7 @@ describe('SignIn', () => {
     })
 
     it('should hide email/password form when showEmailPassword is false', () => {
-      render(<SignIn showEmailPassword={false} enableJanuaSSO={true} />)
+      render(<SignIn showEmailPassword={false} enableJanuaSSO={true} januaClientId="app-client-id" />)
 
       expect(screen.queryByRole('textbox', { name: /email/i })).not.toBeInTheDocument()
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
@@ -449,7 +492,7 @@ describe('SignIn', () => {
     })
 
     it('should still render legal links when email/password is hidden', () => {
-      render(<SignIn showEmailPassword={false} enableJanuaSSO={true} />)
+      render(<SignIn showEmailPassword={false} enableJanuaSSO={true} januaClientId="app-client-id" />)
 
       expect(screen.getByRole('link', { name: /terms of service/i })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /privacy policy/i })).toBeInTheDocument()
@@ -461,13 +504,16 @@ describe('SignIn', () => {
       expect(screen.queryByText(/or continue with email/i)).not.toBeInTheDocument()
     })
 
-    // Regression: admin.janua.dev fidelity audit AJ-5 (2026-05-02). Mirrors the
-    // exact prop set used by apps/admin/app/login/page.tsx so a future regression
-    // in <SignIn> would fail this test before reaching production.
-    it('should hide email/password with the admin.janua.dev prop combo', () => {
+    // Regression: guards the SSO-only rendering path (showEmailPassword=false +
+    // enableJanuaSSO). NOTE: admin.janua.dev itself migrated to email/password
+    // (SSO_CRITICAL_PATH Fix 8, PR #445) and no longer uses enableJanuaSSO; this
+    // test now covers other ecosystem apps that render the Janua button. A
+    // registered januaClientId is required for the button to render (fail-loud).
+    it('should hide email/password with an SSO-only prop combo', () => {
       render(
         <SignIn
           enableJanuaSSO={true}
+          januaClientId="app-client-id"
           showEmailPassword={false}
           showRememberMe={false}
           socialProviders={{}}

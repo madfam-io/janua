@@ -29,6 +29,10 @@ export const madfamAuthConfig: Partial<JanuaAuthConfig> = {
       methods: ['totp', 'sms'],
     },
     enableJanuaSSO: true,
+    // NOTE: `januaClientId` is intentionally NOT set here — it is per-app and
+    // must be supplied by each consuming app (its registered OIDC client_id,
+    // see SSO_CRITICAL_PATH Fix 1). Without it, the "Sign in with Janua" button
+    // fails loud (not rendered) rather than hitting the invalid social path.
   },
   flows: {
     signIn: {
