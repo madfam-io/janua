@@ -141,7 +141,7 @@ PKCE-required, `grant_types = authorization_code + refresh_token`, scopes
 | `dhanam-web` | Dhanam web | `https://app.dhan.am/auth/callback` |
 | `enclii-switchyard` | Enclii Switchyard | `https://app.enclii.dev/auth/callback` |
 | `enclii-dispatch` | Enclii Dispatch | `https://admin.enclii.dev/auth/callback` |
-| `yantra4d-web` | Yantra4D studio | `https://app.yantra4d.com/auth/callback` **(TODO: verify host — sources disagree: `app.yantra4d.com` vs `4d-app.madfam.io` vs `studio.yantra4d.com`)** |
+| `yantra4d-web` | Yantra4D studio | `https://app.yantra4d.com/auth/callback` (host resolved 2026-07-08: `app.yantra4d.com` is live; `4d-app.madfam.io` / `studio.yantra4d.com` do not resolve) |
 | `tezca-web` | Tezca web | `https://tezca.mx/auth/callback` |
 | `dashboard` | Janua dashboard | `https://app.janua.dev/auth/callback` |
 

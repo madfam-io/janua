@@ -116,16 +116,14 @@ OIDC_CLIENTS: list[dict[str, Any]] = [
     {
         "client_id": "yantra4d-web",
         "name": "yantra4d-web",
-        # TODO(operator): confirm the production host before go-live. Ecosystem
-        # sources disagree: enclii AI_CONTEXT maps the studio app to
-        # `app.yantra4d.com`, while SSO_CRITICAL_PATH Fix 5 references
-        # `4d-app.madfam.io` and seed_core_clients uses `studio.yantra4d.com`.
-        # `app.yantra4d.com` is used here as the most authoritative (enclii
-        # domain registry). Adjust if the deployed host differs.
+        # Host resolved 2026-07-08: `app.yantra4d.com` responds 200 (live),
+        # while the two alternate candidates from stale docs
+        # (`4d-app.madfam.io`, `studio.yantra4d.com`) do not resolve. Matches
+        # the enclii domain registry.
         "description": "Yantra4D studio web app — Sign in with Janua (OIDC/PKCE)",
         "audience": "yantra4d-api",
         "redirect_uris": [
-            "https://app.yantra4d.com/auth/callback",  # TODO(operator): verify host
+            "https://app.yantra4d.com/auth/callback",
             "http://localhost:5173/auth/callback",
         ],
     },
@@ -296,9 +294,8 @@ def _print_mapping() -> None:
             (u for u in client_def["redirect_uris"] if u.startswith("https://")),
             client_def["redirect_uris"][0],
         )
-        todo = "  [TODO: verify host]" if "yantra4d" in client_def["client_id"] else ""
         print(f"  NEXT_PUBLIC_JANUA_CLIENT_ID={client_def['client_id']:<18} "
-              f"-> {prod_uri}{todo}")
+              f"-> {prod_uri}")
     print(f"{'=' * 72}\n")
 
 
