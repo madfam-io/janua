@@ -28,9 +28,16 @@ export interface SignInFormProps {
   enableSSO?: boolean;
   enableMagicLink?: boolean;
   enableJanuaSSO?: boolean;
-  /** Registered Janua OIDC client_id — required when enableJanuaSSO is true. */
+  /**
+   * Registered Janua OIDC client_id — required when enableJanuaSSO is true.
+   * Defaults to `process.env.NEXT_PUBLIC_JANUA_CLIENT_ID` (zero per-app code:
+   * an app just sets that public env var). Explicit prop overrides the env var.
+   */
   januaClientId?: string;
-  /** Redirect URI for the Janua OIDC flow. */
+  /**
+   * Redirect URI for the Janua OIDC flow. Defaults to
+   * `process.env.NEXT_PUBLIC_JANUA_REDIRECT_URI`, then to `${origin}/auth/callback`.
+   */
   januaRedirectUri?: string;
   onMFARequired?: (session: any) => void;
   headerText?: string;
@@ -53,8 +60,11 @@ export function SignInForm({
   enableSSO,
   enableMagicLink,
   enableJanuaSSO,
-  januaClientId,
-  januaRedirectUri,
+  // Env defaults (zero per-app code): an app that sets NEXT_PUBLIC_JANUA_CLIENT_ID
+  // gets a working "Sign in with Janua" button without passing any prop. An
+  // explicit prop overrides the env var; fail-loud applies when both are absent.
+  januaClientId = process.env.NEXT_PUBLIC_JANUA_CLIENT_ID,
+  januaRedirectUri = process.env.NEXT_PUBLIC_JANUA_REDIRECT_URI,
   onMFARequired,
   headerText,
   headerDescription,

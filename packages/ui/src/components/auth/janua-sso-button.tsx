@@ -7,9 +7,17 @@ export interface JanuaSSOButtonProps {
    * The button uses Janua's OIDC provider flow (`/api/v1/oauth/authorize`);
    * without a client id there is no valid entrypoint, so the button renders
    * nothing and logs an error (fail-loud).
+   *
+   * Defaults to `process.env.NEXT_PUBLIC_JANUA_CLIENT_ID` when the prop is not
+   * passed (zero per-app code — an app just sets that public env var). An
+   * explicit prop overrides the env var. `client_id` is a public,
+   * PKCE-protected identifier, not a secret.
    */
   januaClientId?: string
-  /** OIDC redirect URI — defaults to `${origin}/auth/callback` */
+  /**
+   * OIDC redirect URI — defaults to `process.env.NEXT_PUBLIC_JANUA_REDIRECT_URI`,
+   * then to `${origin}/auth/callback`.
+   */
   redirectUri?: string
   /** Janua SDK client instance (must expose `auth.initiateJanuaSSO`) */
   januaClient?: any
@@ -30,8 +38,10 @@ export interface JanuaSSOButtonProps {
  * back to the invalid social path.
  */
 export function JanuaSSOLoginButton({
-  januaClientId,
-  redirectUri,
+  // Env defaults (zero per-app code): setting NEXT_PUBLIC_JANUA_CLIENT_ID is
+  // enough to render a working button. Explicit props override the env vars.
+  januaClientId = process.env.NEXT_PUBLIC_JANUA_CLIENT_ID,
+  redirectUri = process.env.NEXT_PUBLIC_JANUA_REDIRECT_URI,
   januaClient,
   disabled,
   className,

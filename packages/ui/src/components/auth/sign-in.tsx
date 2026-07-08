@@ -64,9 +64,17 @@ export interface SignInProps {
    * is not rendered and an error is logged (fail-loud), because there is no
    * safe fallback: routing `janua` through the social OAuth path returns
    * `400 Invalid provider: janua`.
+   *
+   * Defaults to `process.env.NEXT_PUBLIC_JANUA_CLIENT_ID` when the prop is not
+   * passed, so any MADFAM app gets a working button with ZERO code change —
+   * it just sets that public env var. An explicit prop overrides the env var.
+   * `client_id` is a public (PKCE-protected) identifier, not a secret.
    */
   januaClientId?: string
-  /** Redirect URI for the Janua OIDC flow. Defaults to `${origin}/auth/callback`. */
+  /**
+   * Redirect URI for the Janua OIDC flow. Defaults to
+   * `process.env.NEXT_PUBLIC_JANUA_REDIRECT_URI`, then to `${origin}/auth/callback`.
+   */
   januaRedirectUri?: string
   /** Callback when API returns MFA challenge */
   onMFARequired?: (session: any) => void
@@ -107,8 +115,12 @@ export function SignIn({
   onSSODetected,
   enableMagicLink = false,
   enableJanuaSSO = false,
-  januaClientId,
-  januaRedirectUri,
+  // Env defaults (zero per-app code): an app that sets NEXT_PUBLIC_JANUA_CLIENT_ID
+  // gets a working "Sign in with Janua" button without passing any prop. An
+  // explicit prop still overrides the env var; fail-loud still applies when both
+  // the prop and the env var are absent.
+  januaClientId = process.env.NEXT_PUBLIC_JANUA_CLIENT_ID,
+  januaRedirectUri = process.env.NEXT_PUBLIC_JANUA_REDIRECT_URI,
   onMFARequired,
   headerText = 'Sign in to your account',
   headerDescription = 'Welcome back! Please enter your details',

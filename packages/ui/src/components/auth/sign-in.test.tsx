@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { SignIn } from './sign-in'
@@ -442,6 +442,94 @@ describe('SignIn', () => {
         redirectUri: 'http://localhost:3000/auth/callback',
       })
       expect(initiateOAuth).not.toHaveBeenCalled()
+    })
+  })
+
+  // Zero per-app code: an app that sets NEXT_PUBLIC_JANUA_CLIENT_ID gets a
+  // working "Sign in with Janua" button with no prop. Explicit prop overrides
+  // the env var; fail-loud still applies when both are absent.
+  describe('Janua SSO env-var defaults', () => {
+    const ENV_CLIENT = 'NEXT_PUBLIC_JANUA_CLIENT_ID'
+    const ENV_REDIRECT = 'NEXT_PUBLIC_JANUA_REDIRECT_URI'
+    let savedClient: string | undefined
+    let savedRedirect: string | undefined
+
+    beforeEach(() => {
+      savedClient = process.env[ENV_CLIENT]
+      savedRedirect = process.env[ENV_REDIRECT]
+      delete process.env[ENV_CLIENT]
+      delete process.env[ENV_REDIRECT]
+    })
+
+    afterEach(() => {
+      if (savedClient === undefined) delete process.env[ENV_CLIENT]
+      else process.env[ENV_CLIENT] = savedClient
+      if (savedRedirect === undefined) delete process.env[ENV_REDIRECT]
+      else process.env[ENV_REDIRECT] = savedRedirect
+    })
+
+    it('renders the Janua button from NEXT_PUBLIC_JANUA_CLIENT_ID when the prop is absent', () => {
+      process.env[ENV_CLIENT] = 'env-client-id'
+
+      render(<SignIn enableJanuaSSO={true} socialProviders={{}} />)
+
+      expect(screen.getByRole('button', { name: /enterprise sso/i })).toBeInTheDocument()
+    })
+
+    it('lets an explicit januaClientId prop override the env var', async () => {
+      const user = userEvent.setup()
+      const initiateJanuaSSO = vi.fn().mockResolvedValue(undefined)
+      const januaClient = { auth: { initiateJanuaSSO, initiateOAuth: vi.fn() } }
+      process.env[ENV_CLIENT] = 'env-client-id'
+
+      delete (window as any).location
+      window.location = { href: '', origin: 'http://localhost:3000' } as any
+
+      render(
+        <SignIn
+          enableJanuaSSO={true}
+          januaClientId="prop-client-id"
+          januaClient={januaClient}
+          socialProviders={{}}
+        />
+      )
+
+      await user.click(screen.getByRole('button', { name: /enterprise sso/i }))
+
+      expect(initiateJanuaSSO).toHaveBeenCalledWith(
+        expect.objectContaining({ clientId: 'prop-client-id' })
+      )
+    })
+
+    it('uses NEXT_PUBLIC_JANUA_REDIRECT_URI as the default redirect URI', async () => {
+      const user = userEvent.setup()
+      const initiateJanuaSSO = vi.fn().mockResolvedValue(undefined)
+      const januaClient = { auth: { initiateJanuaSSO, initiateOAuth: vi.fn() } }
+      process.env[ENV_CLIENT] = 'env-client-id'
+      process.env[ENV_REDIRECT] = 'https://env.example.com/auth/callback'
+
+      delete (window as any).location
+      window.location = { href: '', origin: 'http://localhost:3000' } as any
+
+      render(<SignIn enableJanuaSSO={true} januaClient={januaClient} socialProviders={{}} />)
+
+      await user.click(screen.getByRole('button', { name: /enterprise sso/i }))
+
+      expect(initiateJanuaSSO).toHaveBeenCalledWith({
+        clientId: 'env-client-id',
+        redirectUri: 'https://env.example.com/auth/callback',
+      })
+    })
+
+    it('fails loud (no button + error) when both the prop and the env var are absent', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<SignIn enableJanuaSSO={true} socialProviders={{}} />)
+
+      expect(screen.queryByRole('button', { name: /enterprise sso/i })).not.toBeInTheDocument()
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('januaClientId is missing'))
+
+      errorSpy.mockRestore()
     })
   })
 
