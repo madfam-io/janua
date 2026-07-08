@@ -108,6 +108,20 @@ export function parseOAuthCallback(url?: string): {
   };
 }
 
+/**
+ * Strip trailing slashes without a backtracking regex.
+ * `String.replace(/\/+$/, '')` is a polynomial-regex ReDoS risk on
+ * library-supplied input (CodeQL js/polynomial-redos); a linear scan is both
+ * safe and clearer. Shared so the token-exchange path uses the same routine.
+ */
+export function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47 /* '/' */) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 /** Build OAuth authorization URL with PKCE parameters */
 export function buildAuthorizationUrl(
   baseURL: string,
@@ -164,7 +178,7 @@ export function buildJanuaAuthorizeUrl(params: {
   } = params;
 
   // Trim a trailing slash so `${baseURL}/api/...` never double-slashes.
-  const normalizedBase = baseURL.replace(/\/+$/, '');
+  const normalizedBase = stripTrailingSlashes(baseURL);
   const url = new URL(`${normalizedBase}/api/v1/oauth/authorize`);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', clientId);

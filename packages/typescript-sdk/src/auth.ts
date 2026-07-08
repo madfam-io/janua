@@ -36,6 +36,7 @@ import {
   clearPKCEParams,
   validateState,
   buildJanuaAuthorizeUrl,
+  stripTrailingSlashes,
 } from './utils';
 
 /**
@@ -732,7 +733,7 @@ export class Auth {
       throw new AuthenticationError('Missing PKCE code_verifier for token exchange');
     }
 
-    const baseURL = (options.baseUrl || this.baseUrl).replace(/\/+$/, '');
+    const baseURL = stripTrailingSlashes(options.baseUrl || this.baseUrl);
     if (!baseURL) {
       throw new ValidationError(
         'A Janua base URL is required (configure the SDK client baseURL or pass baseUrl)'
