@@ -466,7 +466,7 @@ Use this script to demonstrate Janua's capabilities:
 **Talking Points**:
 - "Direct database writes - no webhooks, no sync failures"
 - "Full REST API with OpenAPI documentation"
-- "Production-ready with comprehensive error handling"
+- "Comprehensive error handling"
 
 ### Minute 5-8: UI Components
 
@@ -490,7 +490,7 @@ Use this script to demonstrate Janua's capabilities:
    - Show MFA challenge flow
 
 **Talking Points**:
-- "40+ production-ready UI components"
+- "40+ pre-built UI components"
 - "Fully customizable - theme, colors, logos"
 - "10-minute integration from npm install to working auth flow"
 
@@ -553,7 +553,7 @@ Use this script to demonstrate Janua's capabilities:
 - "One authentication platform for all your apps"
 
 **Close**:
-- "Production-ready today"
+- "Running in production for the MADFAM ecosystem today; private alpha for design partners"
 - "100% free and open source"
 - "No vendor lock-in, complete data control"
 - "Questions?"

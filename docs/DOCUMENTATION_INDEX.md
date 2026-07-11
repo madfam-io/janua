@@ -33,7 +33,7 @@ This index provides a navigable structure for all Janua documentation. Organized
 ### Feature Documentation  
 - [Authentication Features](features/authentication.md) - Auth methods and flows
 - [Organization Management](features/organizations.md) - Multi-tenancy guide
-- [Enterprise Features](features/enterprise.md) - SSO, SCIM, RBAC
+- [Enterprise Features](features/enterprise.md) - SSO, SCIM, RBAC *(SAML/SCIM roadmap-beta, RBAC beta — see [GA claim matrix](enterprise/GA_CLAIM_MATRIX.md))*
 
 ### Billing & Payments
 - [Billing Integration Guide](guides/BILLING_INTEGRATION_GUIDE.md) - Payment providers overview, subscriptions, webhooks

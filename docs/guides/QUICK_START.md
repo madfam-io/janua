@@ -173,8 +173,8 @@ Once you've validated everything works:
    - Publish Python SDK to PyPI
 
 2. **✅ Marketing Launch**
-   - Landing site is production-ready
-   - All claims validated
+   - Landing site ready for private-alpha traffic
+   - Claims checked against the [GA claim matrix](../enterprise/GA_CLAIM_MATRIX.md)
    - Documentation complete
 
 3. **✅ Beta User Onboarding**

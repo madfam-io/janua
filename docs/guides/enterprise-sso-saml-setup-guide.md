@@ -2,9 +2,15 @@
 
 > **Complete guide to configuring SAML 2.0 Single Sign-On for enterprise identity providers**
 
+> [!NOTE]
+> **Claim status: Roadmap/Beta.** Per the
+> [GA claim matrix](../enterprise/GA_CLAIM_MATRIX.md), SAML SSO is not
+> commercially GA; per-IdP compatibility must be proven with a
+> customer-specific integration before it is sold or committed to.
+
 ## Overview
 
-Janua API provides enterprise-grade SSO/SAML 2.0 integration that works with all major identity providers including Okta, Azure AD, Google Workspace, AWS SSO, PingIdentity, and OneLogin. This guide covers complete setup and configuration.
+Janua API provides SSO/SAML 2.0 integration designed to work with major identity providers such as Okta, Azure AD, Google Workspace, AWS SSO, PingIdentity, and OneLogin. This guide covers complete setup and configuration.
 
 ## 🏢 SSO Features
 
