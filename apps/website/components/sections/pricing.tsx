@@ -97,7 +97,7 @@ export function PricingSection() {
       price: { monthly: 'Custom', annual: 'Custom' },
       featured: false,
       cta: 'Contact Sales',
-      href: 'https://app.janua.dev/contact-sales',
+      href: '/contact',
       features: [
         'Unlimited MAU',
         'Everything in Scale',

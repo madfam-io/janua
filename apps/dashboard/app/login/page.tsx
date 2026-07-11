@@ -101,8 +101,8 @@ function LoginForm() {
 
       <div className="text-muted-foreground text-center text-sm mt-4">
         Don&apos;t have an account?{' '}
-        <a href="#" className="text-primary hover:underline">
-          Contact support
+        <a href="/auth/signup" className="text-primary hover:underline">
+          Sign up
         </a>
       </div>
     </div>

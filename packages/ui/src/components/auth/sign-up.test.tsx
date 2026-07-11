@@ -295,8 +295,8 @@ describe('SignUp', () => {
         const callArgs = (global.fetch as any).mock.calls[0]
         const body = JSON.parse(callArgs[1].body)
         expect(body).toEqual(expect.objectContaining({
-          firstName: 'John',
-          lastName: 'Doe',
+          first_name: 'John',
+          last_name: 'Doe',
           email: 'john@example.com',
           password: 'VeryStrongPassword123!',
         }))
