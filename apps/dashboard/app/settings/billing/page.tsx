@@ -21,8 +21,27 @@ import {
   Star,
 } from 'lucide-react'
 import { getBillingCurrent, getInvoices, getPaymentMethods, createCheckout } from '@/lib/api'
-import { TOAST_DISMISS_MS } from '@/lib/constants'
 import { useAuth } from '@/lib/auth'
+import { januaClient } from '@/lib/janua-client'
+
+/** Roles allowed to initiate billing changes (mirrors the checkout API's owner/admin check). */
+const BILLING_ROLES: string[] = ['owner', 'admin']
+
+/**
+ * Resolve the organization to bill: the first org where the current user is
+ * owner or admin (POST /api/v1/checkout/dhanam rejects anyone else with 403).
+ * The dashboard has no persistent "active org" store — pages resolve org
+ * context ad hoc (see settings/branding, settings/scim); billing needs an org
+ * the user can actually upgrade, so we pick from the user's org memberships.
+ */
+async function resolveBillableOrganizationId(): Promise<string | null> {
+  const orgs = await januaClient.organizations.listOrganizations()
+  if (!Array.isArray(orgs) || orgs.length === 0) return null
+  const billable = orgs.find(
+    (org) => org.is_owner || (org.user_role && BILLING_ROLES.includes(org.user_role))
+  )
+  return billable?.id ?? null
+}
 
 /** Format an ISO date string, returning a dash for null/undefined/invalid values. */
 function formatBillingDate(value: string | null | undefined): string {
@@ -192,10 +211,29 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [upgrading, setUpgrading] = useState<string | null>(null)
 
   useEffect(() => {
     fetchBillingData()
+  }, [])
+
+  // Handle return from Dhanam checkout (?checkout=success|cancelled)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const checkoutState = new URLSearchParams(window.location.search).get('checkout')
+    if (!checkoutState) return
+
+    if (checkoutState === 'success') {
+      setSuccess(
+        'Checkout complete. Your plan will update once payment is confirmed — this may take a moment.'
+      )
+    } else if (checkoutState === 'cancelled') {
+      setNotice('Checkout was cancelled. Your plan has not changed.')
+    }
+
+    // Drop the query param so a refresh does not re-show the notice
+    window.history.replaceState(null, '', window.location.pathname)
   }, [])
 
   const fetchBillingData = async () => {
@@ -251,15 +289,32 @@ export default function BillingPage() {
     try {
       setUpgrading(planId)
       setError(null)
+      setNotice(null)
 
-      const data = await createCheckout({ plan_id: planId })
+      const organizationId = await resolveBillableOrganizationId()
+      if (!organizationId) {
+        setError(
+          'No organization found where you are an owner or admin. Create an organization before upgrading.'
+        )
+        return
+      }
+
+      // POST /api/v1/checkout/dhanam requires organization_id, success_url and
+      // cancel_url alongside plan_id; the API answers with a Dhanam-hosted
+      // checkout URL we redirect to (Janua stays identity-only — no billing UI).
+      const returnUrl = `${window.location.origin}/settings/billing`
+      const data = await createCheckout({
+        plan_id: planId,
+        organization_id: organizationId,
+        success_url: `${returnUrl}?checkout=success`,
+        cancel_url: `${returnUrl}?checkout=cancelled`,
+      })
 
       if (data.checkout_url) {
         window.location.href = data.checkout_url
       } else {
-        setSuccess(`Successfully switched to ${planId} plan`)
-        setTimeout(() => setSuccess(null), TOAST_DISMISS_MS)
-        fetchBillingData()
+        // Contract violation guard — the API always returns checkout_url
+        setError('Checkout could not be started. Please try again.')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process upgrade')
@@ -321,11 +376,22 @@ export default function BillingPage() {
         )}
 
         {success && (
-          <Card className="border-green-500">
+          <Card className="border-green-500" data-testid="billing-success-notice">
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                 <CheckCircle2 className="size-5" />
                 <span>{success}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {notice && (
+          <Card data-testid="billing-checkout-notice">
+            <CardContent className="pt-6">
+              <div className="text-muted-foreground flex items-center gap-2">
+                <AlertCircle className="size-5" />
+                <span>{notice}</span>
               </div>
             </CardContent>
           </Card>
