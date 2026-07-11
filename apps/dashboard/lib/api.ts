@@ -241,8 +241,32 @@ export async function getPaymentMethods(): Promise<PaymentMethod[]> {
   return response.data
 }
 
-export async function createCheckout(data: { plan_id: string; provider?: string }): Promise<{ checkout_url: string }> {
-  const response = await januaClient.http.post<{ checkout_url: string }>('/api/v1/checkout/dhanam', data)
+/**
+ * Full request contract for POST /api/v1/checkout/dhanam
+ * (apps/api/app/routers/v1/checkout_dhanam.py → CreateCheckoutRequest).
+ * All four fields are required — omitting any of them is a 422.
+ */
+export interface CreateCheckoutRequest {
+  plan_id: string
+  organization_id: string
+  success_url: string
+  cancel_url: string
+}
+
+/** Response contract (CheckoutSessionResponse). */
+export interface CheckoutSessionResponse {
+  checkout_url: string
+  session_id: string
+  customer_id: string | null
+  provider: string
+  organization_id: string
+  plan_id: string
+  product: string
+  janua_tier: string
+}
+
+export async function createCheckout(data: CreateCheckoutRequest): Promise<CheckoutSessionResponse> {
+  const response = await januaClient.http.post<CheckoutSessionResponse>('/api/v1/checkout/dhanam', data)
   return response.data
 }
 
