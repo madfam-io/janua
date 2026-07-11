@@ -354,7 +354,17 @@ export function HonestPricing() {
                 className="w-full"
                 asChild
               >
-                <Link href={tier.price === 'Custom' ? '/contact' : '/signup'}>
+                <Link
+                  href={
+                    tier.price === 'Custom'
+                      ? '/contact'
+                      : `https://app.janua.dev/auth/signup${
+                          tier.name === 'Pro' || tier.name === 'Scale'
+                            ? `?plan=${tier.name.toLowerCase()}`
+                            : ''
+                        }`
+                  }
+                >
                   {tier.price === 'Custom' ? 'Contact Sales' : 'Get Started'}
                 </Link>
               </Button>

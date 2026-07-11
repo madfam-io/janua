@@ -1089,6 +1089,19 @@ async def login_form(
     return response
 
 
+# Alias for /signup (the TypeScript SDK and @janua/ui components post to /register)
+@router.post("/register", response_model=SignInResponse)
+@limiter.limit("3/minute")  # Same strict rate limiting as /signup
+async def register(
+    request: Request,
+    signup_data: SignUpRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Create a new user account (alias for /signup)"""
+    return await sign_up(request, signup_data, background_tasks, db)
+
+
 # Alias for /signin (tests expect /login)
 @router.post("/login", response_model=SignInResponse)
 @limiter.limit("5/minute")

@@ -109,8 +109,8 @@ export function SignUp({
         const response = await januaClient.auth.signUp({
           email,
           password,
-          firstName,
-          lastName,
+          first_name: firstName,
+          last_name: lastName,
         })
 
         if (requireEmailVerification) {
@@ -129,8 +129,8 @@ export function SignUp({
           body: JSON.stringify({
             email,
             password,
-            firstName,
-            lastName,
+            first_name: firstName,
+            last_name: lastName,
           }),
         })
 

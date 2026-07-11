@@ -32,6 +32,7 @@ function isValidTokenStructure(token: string | null | undefined): boolean {
 // Routes that don't require authentication
 const PUBLIC_ROUTES = [
   '/login',
+  '/auth/signup',
   '/api/',
   '/_next/',
   '/favicon.ico',
