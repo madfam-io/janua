@@ -221,6 +221,21 @@ class Settings(BaseSettings):
         default=None,
         description="Dhanam billing service URL for checkout redirects. Set via DHANAM_URL env var.",
     )
+    DHANAM_FEDERATION_URL: Optional[str] = Field(
+        default=None,
+        description=(
+            "Dhanam federation API origin (e.g. https://api.dhan.am) used by the checkout "
+            "relay (/v1/customers/resolve + /v1/customers/{id}/checkout). "
+            "Set via DHANAM_FEDERATION_URL env var."
+        ),
+    )
+    FEDERATION_API_TOKEN: Optional[str] = Field(
+        default=None,
+        description=(
+            "Shared bearer token for Dhanam customer-federation calls "
+            "(ecosystem-standard name, same as the RouteCraft/Avala consumers)."
+        ),
+    )
 
     # Email aliases for easier access
     FROM_EMAIL: Optional[str] = Field(default=None)
@@ -649,6 +664,7 @@ class Settings(BaseSettings):
             "OAUTH_DISCORD_CLIENT_SECRET", "OAUTH_TWITTER_CLIENT_SECRET",
             "OAUTH_LINKEDIN_CLIENT_SECRET", "OAUTH_SLACK_CLIENT_SECRET",
             "CONEKTA_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET", "DHANAM_WEBHOOK_SECRET",
+            "FEDERATION_API_TOKEN",
             "CLOUDFLARE_TURNSTILE_SECRET", "CLOUDFLARE_R2_SECRET_KEY", "R2_SECRET_ACCESS_KEY",
             "MONITORING_API_KEY", "SMTP_PASSWORD",
         ]
