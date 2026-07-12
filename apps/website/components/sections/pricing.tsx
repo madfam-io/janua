@@ -2,15 +2,27 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, X, ArrowRight } from 'lucide-react'
+import { Check, X, ArrowRight, AlertCircle } from 'lucide-react'
 import { Button } from '@janua/ui'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
+type Plan = {
+  name: string
+  description: string
+  price: { monthly: number | string; annual: number | string }
+  featured: boolean
+  cta: string
+  href: string
+  note?: string
+  features: string[]
+  limitations: string[]
+}
+
 export function PricingSection() {
   const [isAnnual, setIsAnnual] = useState(false)
 
-  const plans = [
+  const plans: Plan[] = [
     {
       name: 'Community',
       description: 'Perfect for side projects and MVPs',
@@ -36,13 +48,16 @@ export function PricingSection() {
     },
     {
       name: 'Pro',
-      description: 'For growing startups and teams',
-      price: { monthly: 69, annual: 59 },
+      description: 'Managed hosting for growing startups and teams',
+      // Ratified packaging (internal-devops decisions/2026-07-11): janua
+      // Managed (Pro) = $29/mo (MX$499 gross). Flat per-org, NOT per-MAU —
+      // up to 10,000 MAU under fair use. Yearly ≈ 2 months free.
+      price: { monthly: 29, annual: 24 },
       featured: true,
-      cta: 'Start 14-day trial',
+      cta: 'Get started',
       href: 'https://app.janua.dev/auth/signup?plan=pro',
       features: [
-        '10,000 monthly active users',
+        'Up to 10,000 MAU (flat, fair use)',
         'Everything in Community',
         'Social logins (OAuth)',
         'Organizations & RBAC',
@@ -65,14 +80,17 @@ export function PricingSection() {
       ]
     },
     {
-      name: 'Scale',
-      description: 'For scale-ups with compliance needs',
-      price: { monthly: 299, annual: 249 },
+      name: 'Business',
+      description: 'SSO/SAML for compliance-driven teams',
+      // Ratified packaging (internal-devops decisions/2026-07-11): janua
+      // Business (SSO) = $149/mo, deferred to phase 2 — design-partner /
+      // contract motion first, NOT self-serve. CTA routes to /contact.
+      price: { monthly: 149, annual: 149 },
       featured: false,
-      cta: 'Start 14-day trial',
-      href: 'https://app.janua.dev/auth/signup?plan=scale',
+      cta: 'Contact us',
+      href: '/contact',
+      note: 'Early access via our design-partner program.',
       features: [
-        '50,000 monthly active users',
         'Everything in Pro',
         'SSO/SAML',
         'Advanced security policies',
@@ -100,7 +118,7 @@ export function PricingSection() {
       href: '/contact',
       features: [
         'Unlimited MAU',
-        'Everything in Scale',
+        'Everything in Business',
         'SCIM provisioning',
         'Custom contracts & SLAs',
         'Dedicated support',
@@ -130,10 +148,16 @@ export function PricingSection() {
           <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-4">
             Simple, transparent pricing
           </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto mb-8">
+          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto mb-4">
             Start free with 2,000 MAU. No credit card required.
-            Scale as you grow with predictable pricing.
+            Flat, per-project pricing as you grow — not per-user metering.
           </p>
+
+          {/* Honest positioning — mirrors the home page HonestPricing note. */}
+          <div className="mb-8 inline-flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+            <AlertCircle className="w-4 h-4" />
+            <span>Currently in Private Alpha. Managed billing is rolling out — self-host stays free.</span>
+          </div>
 
           {/* Billing toggle */}
           <div className="flex items-center justify-center gap-4">
@@ -208,7 +232,7 @@ export function PricingSection() {
                   <span className="text-gray-600 dark:text-gray-400 ml-2">
                     /month
                   </span>
-                  {isAnnual && typeof plan.price.monthly === 'number' && plan.price.monthly > 0 && typeof plan.price.annual === 'number' && (
+                  {isAnnual && typeof plan.price.monthly === 'number' && plan.price.monthly > 0 && typeof plan.price.annual === 'number' && plan.price.annual < plan.price.monthly && (
                     <div className="text-sm text-gray-500 mt-1">
                       <span className="line-through">${plan.price.monthly * 12}</span>
                       <span className="ml-2 text-green-600 dark:text-green-400">
@@ -221,6 +245,11 @@ export function PricingSection() {
                 <span className="text-3xl font-bold text-gray-900 dark:text-white">
                   {plan.price.monthly}
                 </span>
+              )}
+              {plan.note && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  {plan.note}
+                </p>
               )}
             </div>
 
@@ -269,40 +298,40 @@ export function PricingSection() {
         className="mt-16 p-8 bg-gray-50 dark:bg-gray-900 rounded-2xl"
       >
         <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-          Overage Pricing
+          Flat pricing, no per-user meter
         </h3>
         <div className="grid md:grid-cols-3 gap-8">
           <div className="text-center">
             <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-              $10
+              $0
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              per 1,000 additional MAU
+              Self-host under AGPL-3.0
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              Pro tier
+              Any scale, forever
             </div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-              $8
+              $29
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              per 1,000 additional MAU
+              Flat per project, up to 10,000 MAU (fair use)
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              Scale tier
+              Managed (Pro) tier
             </div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-              Custom
+              Talk to us
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              Volume discounts available
+              Higher volume or SSO/SAML needs
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              Enterprise tier
+              Business &amp; Enterprise
             </div>
           </div>
         </div>
@@ -339,11 +368,11 @@ export function PricingSection() {
           </div>
           <div>
             <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-              Do you offer startup discounts?
+              Do you offer startup or design-partner discounts?
             </h4>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Yes! Startups in accelerators or with less than $1M funding can get 
-              50% off Pro tier for the first year. Contact us for details.
+              Yes. While we&apos;re in Private Alpha we run a design-partner program:
+              a reduced rate on Managed (Pro) in exchange for feedback. Contact us for details.
             </p>
           </div>
           <div>
