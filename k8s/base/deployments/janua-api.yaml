@@ -98,6 +98,19 @@ spec:
                 secretKeyRef:
                   name: janua-secrets
                   key: dhanam-webhook-secret
+            # Dhanam customer-federation checkout relay (#453). The relay
+            # fails closed (503 "Billing is not configured") unless BOTH
+            # DHANAM_FEDERATION_URL and FEDERATION_API_TOKEN resolve
+            # (_federation_configured in checkout_dhanam.py), so the optional
+            # token ref is crash-safe in envs the operator hasn't provisioned.
+            - name: DHANAM_FEDERATION_URL
+              value: 'https://api.dhan.am'
+            - name: FEDERATION_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: federation-api-token
+                  optional: true
             - name: JANUA_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:

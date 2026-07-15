@@ -70,6 +70,11 @@ spec:
                   name: janua-staging-secrets
                   key: metrics-token
                   optional: true
+            # Keep the Dhanam federation relay hard-off in staging: an empty
+            # URL fails _federation_configured() regardless of any token, so
+            # staging can never provision customers against prod Dhanam.
+            - name: DHANAM_FEDERATION_URL
+              value: ''
             - name: RESEND_API_KEY
               valueFrom:
                 secretKeyRef:
