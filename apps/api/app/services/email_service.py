@@ -63,8 +63,11 @@ class EmailService:
                 token_key, 24 * 60 * 60, json.dumps(token_data)
             )  # 24 hours
 
-        # Generate verification URL
-        verification_url = f"{settings.BASE_URL}/auth/verify-email?token={verification_token}"
+        # Generate verification URL. This must point at the dashboard app
+        # (FRONTEND_URL, app.janua.dev), which serves /auth/verify-email —
+        # not BASE_URL (janua.dev), the marketing site, which has no such
+        # route and 404s.
+        verification_url = f"{settings.FRONTEND_URL}/auth/verify-email?token={verification_token}"
 
         # Prepare email content
         template_data = {
