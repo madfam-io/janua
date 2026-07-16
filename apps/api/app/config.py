@@ -49,7 +49,11 @@ class Settings(BaseSettings):
     )
     DOMAIN: str = Field(default="localhost")
     UPLOAD_DIR: str = Field(default="/tmp/uploads")
-    FRONTEND_URL: Optional[str] = Field(default="http://localhost:3000")
+    # Dashboard app URL (app.janua.dev), used for verification/invitation/security
+    # links. Matches the fallback already used in app/services/email/notifications.py
+    # — a localhost default here would break those links in any deployment that
+    # forgets to set FRONTEND_URL explicitly.
+    FRONTEND_URL: Optional[str] = Field(default="https://app.janua.dev")
 
     # Database
     DATABASE_URL: str = Field(

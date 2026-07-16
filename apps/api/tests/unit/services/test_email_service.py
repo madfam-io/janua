@@ -280,6 +280,26 @@ class TestSendVerificationEmail:
 
         assert "Failed to send verification email" in str(exc_info.value)
 
+    async def test_send_verification_url_points_to_dashboard_app(self, service):
+        """Verification link must target FRONTEND_URL (app.janua.dev, which
+        serves /auth/verify-email) — not BASE_URL (janua.dev, the marketing
+        site with no such route, which 404s)."""
+        with patch("app.services.email_service.settings") as mock_settings:
+            mock_settings.FRONTEND_URL = "https://app.janua.dev"
+            mock_settings.BASE_URL = "https://janua.dev"
+            mock_settings.SUPPORT_EMAIL = None
+
+            with patch.object(service, "_send_email", return_value=True):
+                with patch.object(
+                    service, "_render_template", return_value="content"
+                ) as mock_render:
+                    token = await service.send_verification_email(email="test@example.com")
+
+        rendered_data = mock_render.call_args_list[0].args[1]
+        assert rendered_data["verification_url"] == (
+            f"https://app.janua.dev/auth/verify-email?token={token}"
+        )
+
 
 class TestVerifyEmailToken:
     """Test email token verification."""

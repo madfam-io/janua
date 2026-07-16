@@ -33,6 +33,7 @@ function isValidTokenStructure(token: string | null | undefined): boolean {
 const PUBLIC_ROUTES = [
   '/login',
   '/auth/signup',
+  '/auth/verify-email',
   '/api/',
   '/_next/',
   '/favicon.ico',

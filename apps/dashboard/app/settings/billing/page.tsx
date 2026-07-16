@@ -94,7 +94,7 @@ interface PlanDetails {
 // Source of truth for prices and MAU caps:
 //   apps/api/app/services/billing_service.py → PRICING_TIERS
 // Community: free, 2,000 MAU
-// Pro:       $69 / 1,380 MXN, 10,000 MAU
+// Pro:       $29 / MX$499, 10,000 MAU (ratified internal-devops decisions/2026-07-11)
 // Scale:     $299 / 5,980 MXN, 50,000 MAU
 // Enterprise: custom
 //
@@ -121,7 +121,7 @@ const plans: PlanDetails[] = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '$69',
+    price: '$29',
     period: '/month',
     description: 'For growing teams that need more power and flexibility.',
     features: [
