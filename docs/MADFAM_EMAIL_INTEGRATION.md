@@ -39,11 +39,11 @@ Generate secure keys for production:
 ```bash
 # Generate INTERNAL_API_KEY (share across all services)
 openssl rand -hex 32
-# Example: 6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
+# Example: <64-hex-from: openssl rand -hex 32>
 
 # Generate JANUA_WEBHOOK_SECRET (for webhook signature verification)
 openssl rand -hex 32
-# Example: c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+# Example: <64-hex-from: openssl rand -hex 32>
 ```
 
 ## Step 2: Configure Janua (Central Hub)
@@ -58,10 +58,10 @@ EMAIL_PROVIDER=resend
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Internal API (service-to-service)
-INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
+INTERNAL_API_KEY=<64-hex-from: openssl rand -hex 32>
 
 # Webhook Secret (for billing webhooks to apps)
-JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+JANUA_WEBHOOK_SECRET=<64-hex-from: openssl rand -hex 32>
 ```
 
 ### Deploy Janua
@@ -95,8 +95,8 @@ Expected response:
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
-JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+JANUA_INTERNAL_API_KEY=<64-hex-from: openssl rand -hex 32>
+JANUA_WEBHOOK_SECRET=<64-hex-from: openssl rand -hex 32>
 ```
 
 ### Digifab-Quoting
@@ -104,8 +104,8 @@ JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa3
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
-JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+JANUA_INTERNAL_API_KEY=<64-hex-from: openssl rand -hex 32>
+JANUA_WEBHOOK_SECRET=<64-hex-from: openssl rand -hex 32>
 ```
 
 ### Avala
@@ -113,8 +113,8 @@ JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa3
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
-JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+JANUA_INTERNAL_API_KEY=<64-hex-from: openssl rand -hex 32>
+JANUA_WEBHOOK_SECRET=<64-hex-from: openssl rand -hex 32>
 ```
 
 ### Forj
@@ -122,7 +122,7 @@ JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa3
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
+JANUA_INTERNAL_API_KEY=<64-hex-from: openssl rand -hex 32>
 ```
 
 ### madfam-site
@@ -130,7 +130,7 @@ JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e659
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
+JANUA_INTERNAL_API_KEY=<64-hex-from: openssl rand -hex 32>
 ```
 
 ## Step 4: Run Database Migrations
