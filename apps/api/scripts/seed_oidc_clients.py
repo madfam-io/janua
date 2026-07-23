@@ -138,6 +138,19 @@ OIDC_CLIENTS: list[dict[str, Any]] = [
         ],
     },
     {
+        "client_id": "fortuna-web",
+        "name": "fortuna-web",
+        "description": "Fortuna opportunity-intelligence web app — Sign in with Janua (OIDC/PKCE)",
+        # Must match the audience fortuna-api enforces on the Janua JWT, so the
+        # OIDC-minted access token carries aud=fortuna (session-API tokens carry
+        # the global janua.dev audience and are rejected by fortuna-api).
+        "audience": "fortuna",
+        "redirect_uris": [
+            "https://fortuna.tube/auth/callback",
+            "http://localhost:3000/auth/callback",
+        ],
+    },
+    {
         "client_id": "dashboard",
         "name": "dashboard",
         "description": "Janua user dashboard — Sign in with Janua (OIDC/PKCE)",
