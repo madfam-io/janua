@@ -111,6 +111,33 @@ available.
 
 ---
 
+## Role in the MADFAM monetization engine
+
+Beyond being the ecosystem's identity provider, Janua is where **a purchase becomes access**. Catalog, checkout,
+and payment are owned by other platforms; once a payment is confirmed, Janua is the component that grants the
+resulting entitlement — and from then on it is the authority every other product asks *"may this user do this?"*.
+
+That gives Janua two commercial jobs:
+
+- **Entitlement grant** — turning a confirmed purchase into a durable `(product, tier)` grant on the buyer's identity.
+- **Enforcement** — being the one place other products check before serving a paid capability, so entitlement logic
+  is not re-implemented per product.
+
+**API shape contributors should know:** an entitlement grant today resolves to a **single `(product, tier)` pair —
+one purchase grants one product**. Multi-product purchases and bundles are therefore not expressible against the
+current entitlement API. Supporting them is a change to this repository, not a configuration choice somewhere
+upstream.
+
+> **Boundary note.** This is a deliberately sanitized summary of the repository's *designed* role. It is not a
+> statement about the live state of any deployment. The canonical end-to-end description of the monetization
+> pipeline is private and lives in the `internal-devops` repository at `docs/monetization-engine.md`. Payment-side
+> routes and event names, credential and signing-secret names, deployment topology, and tax/invoicing
+> configuration belong there and must not be added to this repository.
+
+_Last Updated: 2026-07-26_
+
+---
+
 ## Why build this?
 
 **The problem:** Auth0 charges $2,000+/month for SSO. Clerk is beautiful but SaaS-only. Keycloak is powerful but has terrible developer experience.
