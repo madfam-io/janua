@@ -228,29 +228,38 @@ jobs:
       # retries once first, since the underlying fault is a transient response
       # the registry sometimes returns.
       - name: Run pnpm audit
+        # `shell:` is spelled out because the GitHub default is `bash -e`, and -e
+        # kills this script at the first capture — the failure it exists to
+        # classify. The first version of this step lost to exactly that: it died
+        # on line 4 and emitted none of its own diagnostics, so it looked
+        # identical to the bug it was fixing.
+        shell: bash --noprofile --norc {0}
         run: |
           set -uo pipefail
-          run_audit() { pnpm audit --audit-level=critical 2>&1; }
 
-          out="$(run_audit)"; code=$?
-          if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -q 'is not valid JSON'; then
+          # Output goes to a FILE, not a variable. pnpm's crash output contains a
+          # NUL byte; `$(...)` drops it with a "ignored null byte in input"
+          # warning and can mangle what is left, so the crash signature must be
+          # matched on bytes as written.
+          run_audit() { pnpm audit --audit-level=critical >audit.log 2>&1; }
+          crashed() { grep -qa 'is not valid JSON' audit.log; }
+
+          run_audit; code=$?
+          if [ "$code" -ne 0 ] && crashed; then
             echo "::notice::pnpm audit crashed parsing the registry response; retrying once."
             sleep 10
-            out="$(run_audit)"; code=$?
+            run_audit; code=$?
           fi
 
-          printf '%s\n' "$out"
+          cat audit.log
 
           if [ "$code" -eq 0 ]; then
             echo "Audit ran and found no advisories at or above 'critical'."
             exit 0
           fi
 
-          if printf '%s' "$out" | grep -q 'is not valid JSON'; then
-            echo "::error title=Audit did not run::pnpm audit CRASHED and reported nothing. \
-          This is NOT a vulnerability finding -- do not go looking for one. The tool failed \
-          to parse the registry response (pnpm 10.25). Re-run the job; if it persists, audit \
-          with an independent scanner before assuming the tree is clean."
+          if crashed; then
+            echo "::error title=Audit did not run::pnpm audit CRASHED and reported nothing. This is NOT a vulnerability finding -- do not go looking for one. The tool failed to parse the registry response (pnpm 10.25). Re-run the job; if it persists, audit with an independent scanner before assuming the tree is clean."
             exit 1
           fi
 
