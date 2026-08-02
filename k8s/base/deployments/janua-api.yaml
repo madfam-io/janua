@@ -135,6 +135,14 @@ spec:
               value: info
             - name: BASE_URL
               value: https://auth.madfam.io
+            # Frontend pages (NOT the API host — auth.madfam.io serves no pages;
+            # reset/verify email links are built on this, see PR#473)
+            - name: FRONTEND_URL
+              value: https://app.janua.dev
+            # Product reset pages allowed to receive password-reset tokens via
+            # ForgotPasswordRequest.redirect_base (comma-separated allowlist)
+            - name: PASSWORD_RESET_REDIRECT_ORIGINS
+              value: https://app.dhan.am/reset-password
             # Email
             - name: EMAIL_PROVIDER
               value: resend
@@ -147,6 +155,27 @@ spec:
                 secretKeyRef:
                   name: janua-secrets
                   key: resend-api-key
+            # SMTP transport for the real mailer (email_service.py) — Resend's
+            # SMTP interface with the SAME api key as password. No new secret:
+            # this is what makes password-reset email physically send (PR#473;
+            # before that a placebo service logged and sent nothing).
+            - name: SMTP_HOST
+              value: smtp.resend.com
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_TLS
+              value: "true"
+            - name: SMTP_USERNAME
+              value: resend
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: resend-api-key
+            - name: FROM_EMAIL
+              value: noreply@janua.dev
+            - name: FROM_NAME
+              value: Janua
             # Custom domain for white-label OIDC issuer (auth.madfam.io instead of api.janua.dev)
             - name: JANUA_CUSTOM_DOMAIN
               value: auth.madfam.io
