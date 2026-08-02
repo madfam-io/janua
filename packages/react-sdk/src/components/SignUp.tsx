@@ -11,6 +11,12 @@ export interface SignUpProps {
   className?: string
   /** Redirect URL after successful sign-up */
   redirectTo?: string
+  /**
+   * @deprecated Use `redirectTo`. Accepted as an alias because consumers
+   * behind `next/dynamic` lose prop typing — a silently-dropped redirect
+   * stranded users on the register page after a successful sign-up.
+   */
+  redirectUrl?: string
   /** Require organization name during sign-up */
   requireOrganization?: boolean
   /** Require email verification after sign-up */
@@ -41,6 +47,7 @@ export function SignUp({
   onError,
   className,
   redirectTo,
+  redirectUrl: redirectUrlAlias,
   requireEmailVerification = false,
   signInUrl,
   socialProviders,
@@ -53,7 +60,7 @@ export function SignUp({
     <UISignUp
       januaClient={client}
       className={className}
-      redirectUrl={redirectTo}
+      redirectUrl={redirectTo ?? redirectUrlAlias}
       afterSignUp={onSuccess ? () => onSuccess() : undefined}
       onError={onError}
       requireEmailVerification={requireEmailVerification}
