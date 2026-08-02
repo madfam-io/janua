@@ -310,12 +310,11 @@ class TestPasswordReset:
             mock_render.return_value = "Rendered content"
 
             token = await service.send_password_reset_email(
-                email="test@example.com", user_name="John Doe"
+                email="test@example.com", reset_token="caller-token-abc", user_name="John Doe"
             )
 
-            # Verify token was generated
-            assert isinstance(token, str)
-            assert len(token) == 64
+            # The service must email the caller's stored token, never mint one
+            assert token == "caller-token-abc"
 
             # Verify Redis storage with 1-hour expiry
             mock_redis.setex.assert_called_once()
@@ -617,10 +616,10 @@ class TestEmailWorkflows:
 
             # Send password reset email
             token = await service.send_password_reset_email(
-                email="test@example.com", user_name="John Doe"
+                email="test@example.com", reset_token="caller-token-abc", user_name="John Doe"
             )
 
-            assert isinstance(token, str)
+            assert token == "caller-token-abc"
             mock_redis.setex.assert_called_once()
 
             # Verify Redis storage with correct expiry
