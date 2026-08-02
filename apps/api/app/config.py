@@ -36,6 +36,11 @@ class Settings(BaseSettings):
         default="development", pattern="^(development|staging|production|test)$"
     )
     BASE_URL: str = Field(default="https://janua.dev")
+    # Comma-separated allowlist of product reset pages that may receive a
+    # password-reset token via ForgotPasswordRequest.redirect_base, e.g.
+    # "https://app.dhan.am/reset-password". Values not on this list are
+    # ignored and the email falls back to FRONTEND_URL's reset page.
+    PASSWORD_RESET_REDIRECT_ORIGINS: str = Field(default="")
     API_BASE_URL: str = Field(
         default="https://api.janua.dev",
         description="Base URL for the API (used for SSO callbacks, OIDC discovery, etc.)",

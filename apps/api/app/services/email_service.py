@@ -136,13 +136,22 @@ class EmailService:
             logger.error("Token verification failed", error_type=type(e).__name__)
             raise Exception("Invalid or expired verification token")
 
-    async def send_password_reset_email(self, email: str, user_name: str = None) -> str:
-        """Send password reset email and return reset token"""
+    async def send_password_reset_email(
+        self,
+        email: str,
+        reset_token: str,
+        user_name: str = None,
+        redirect_base: str = None,
+    ) -> str:
+        """Send password reset email for an already-issued token.
 
-        # Generate reset token
-        reset_token = self._generate_verification_token()
+        The token MUST be the caller's (stored in password_resets — the only
+        store /password/reset validates against). This method previously
+        generated its own token here, so the emailed link could never match
+        the stored one.
+        """
 
-        # Store token in Redis with 1-hour expiry (audit 2026-04-23 M2: JSON).
+        # Mirror to Redis for observability (audit 2026-04-23 M2: JSON).
         if self.redis_client:
             token_key = f"password_reset:{reset_token}"
             token_data = {
@@ -154,8 +163,15 @@ class EmailService:
                 token_key, 60 * 60, json.dumps(token_data)
             )  # 1 hour
 
-        # Generate reset URL
-        reset_url = f"{settings.BASE_URL}/auth/reset-password?token={reset_token}"
+        # Generate reset URL. redirect_base is a caller-validated product page
+        # (see PASSWORD_RESET_REDIRECT_ORIGINS); the default is Janua's own
+        # frontend — NOT BASE_URL, which points at the API host in prod and
+        # serves no pages.
+        if redirect_base:
+            reset_url = f"{redirect_base}?token={reset_token}"
+        else:
+            frontend = settings.FRONTEND_URL or settings.BASE_URL
+            reset_url = f"{frontend}/auth/reset-password?token={reset_token}"
 
         # Prepare email content
         template_data = {
@@ -298,3 +314,27 @@ class EmailService:
 def get_email_service(redis_client: Optional[redis.Redis] = None) -> EmailService:
     """Get email service instance"""
     return EmailService(redis_client)
+
+
+async def send_password_reset_email_task(
+    email: str, reset_token: str, redirect_base: Optional[str] = None
+) -> None:
+    """Background-task entrypoint for the forgot-password flow.
+
+    Instantiates the real mailer per-call (BackgroundTasks gives no DI) and
+    never raises — a mail failure must not surface into the request path.
+    Without SMTP_HOST configured, _send_email already degrades to a logged
+    no-op; the warning below makes that state visible instead of silent.
+    """
+    try:
+        service = EmailService()
+        sent = await service.send_password_reset_email(
+            email, reset_token, redirect_base=redirect_base
+        )
+        if not sent:
+            logger.warning(
+                "Password reset email NOT sent (mailer unconfigured or send failed) — "
+                "the user will never receive the link"
+            )
+    except Exception:
+        logger.exception("Password reset email task failed")

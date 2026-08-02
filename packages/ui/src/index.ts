@@ -65,6 +65,8 @@ export {
   AuthDivider,
   PasswordInput,
   calculatePasswordStrength,
+  validatePasswordPolicy,
+  PASSWORD_SPECIAL_CHARS,
   // SSO & Passkey Components
   JanuaSSOLoginButton,
   SSOEmailDetector,
