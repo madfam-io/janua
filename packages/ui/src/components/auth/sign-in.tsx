@@ -17,8 +17,10 @@ export interface SignInProps {
   redirectUrl?: string
   /** URL to sign-up page */
   signUpUrl?: string
-  /** Callback after successful sign-in */
-  afterSignIn?: (user: any) => void
+  /** Callback after successful sign-in. Awaited: return a Promise (e.g. an
+   *  HttpOnly session-cookie bridge) to guarantee it completes before any
+   *  post-sign-in navigation. */
+  afterSignIn?: (user: any) => void | Promise<void>
   /** Callback on error */
   onError?: (error: Error) => void
   /** Theme customization */
@@ -155,7 +157,15 @@ export function SignIn({
           return
         }
 
-        afterSignIn?.(response.user)
+        // AWAIT afterSignIn: consumers use it to mirror the SDK's freshly
+        // persisted tokens into an HttpOnly session cookie (the admin's
+        // /api/auth/session bridge). If we don't await, a consumer that
+        // navigates on return races the un-awaited bridge — the edge
+        // middleware then sees no cookie and bounces the (authenticated)
+        // user back to /login with tokens stranded in localStorage. Awaiting
+        // also lets a bridge failure surface through onError instead of
+        // becoming a silent unhandled rejection.
+        await afterSignIn?.(response.user)
 
         if (redirectUrl) {
           window.location.href = redirectUrl
@@ -186,7 +196,9 @@ export function SignIn({
         }
 
         const data = await response.json()
-        afterSignIn?.(data.user)
+        // Awaited for the same reason as the SDK branch above: a consumer's
+        // cookie-bridge must finish before any post-sign-in navigation.
+        await afterSignIn?.(data.user)
 
         if (redirectUrl) {
           window.location.href = redirectUrl
