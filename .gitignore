@@ -104,3 +104,6 @@ packages/ui/.npmrc
 
 # WIP SDK scaffolds
 packages/sveltekit-sdk/
+
+# Local git worktrees (never part of the repo)
+.worktrees/
