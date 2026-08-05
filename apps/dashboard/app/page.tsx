@@ -16,6 +16,7 @@ import {
   Settings
 } from 'lucide-react'
 import { DashboardStats } from '@/components/dashboard/stats'
+import { getAuthToken, clearAuthCookie, USER_KEY } from '@/lib/auth-storage'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
 import { UsersDataTable } from '@/components/users/users-data-table'
 import { SessionList } from '@/components/sessions/session-list'
@@ -74,13 +75,13 @@ function DashboardContent() {
     // Check authentication and load user data
     const initializeDashboard = async () => {
       try {
-        const token = getCookie('janua_token')
+        const token = getAuthToken()
         if (!token) {
           window.location.href = '/login'
           return
         }
 
-        const storedUser = localStorage.getItem('janua_user')
+        const storedUser = localStorage.getItem(USER_KEY)
         if (storedUser) {
           setUser(JSON.parse(storedUser))
         }
@@ -97,23 +98,11 @@ function DashboardContent() {
 
   const handleLogout = () => {
     // Clear authentication (both local and cross-domain for SSO cleanup)
-    document.cookie = 'janua_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
-    document.cookie = 'janua_token=; path=/; domain=.janua.dev; expires=Thu, 01 Jan 1970 00:00:01 GMT'
-    localStorage.removeItem('janua_user')
+    clearAuthCookie()
+    localStorage.removeItem(USER_KEY)
     window.location.href = '/login'
   }
 
-  // Helper function to get cookie value
-  const getCookie = (name: string): string | null => {
-    if (typeof document === 'undefined') return null
-
-    const value = `; ${document.cookie}`
-    const parts = value.split(`; ${name}=`)
-    if (parts.length === 2) {
-      return parts.pop()?.split(';').shift() || null
-    }
-    return null
-  }
 
   if (isLoading) {
     return (
