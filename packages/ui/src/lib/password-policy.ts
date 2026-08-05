@@ -32,7 +32,13 @@ export function validatePasswordPolicy(password: string): PasswordPolicyResult {
   if (!/\d/.test(password)) {
     failures.push('At least one number')
   }
-  if (![...password].some((c) => PASSWORD_SPECIAL_CHARS.includes(c))) {
+  // Array.from, not [...password]: spreading a string requires
+  // --downlevelIteration under the consuming apps' TS target, and this module
+  // is compiled by each app (dashboard/admin/website), not prebuilt. The
+  // spread form type-checked only while the module was unreachable from the
+  // package entrypoint — it broke the dashboard build the moment the export
+  // was wired up correctly.
+  if (!Array.from(password).some((c) => PASSWORD_SPECIAL_CHARS.includes(c))) {
     failures.push(`At least one special character (${PASSWORD_SPECIAL_CHARS})`)
   }
 
