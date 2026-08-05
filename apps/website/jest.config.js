@@ -1,31 +1,20 @@
-module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'jsdom',
-  rootDir: '.',
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1',
-    '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
-  },
+// The previous config declared `preset: 'ts-jest'`, but ts-jest is not a
+// dependency of this app and pnpm's strict node_modules meant it could never
+// resolve -- so jest failed before collecting a single test.
+//
+// Runner choice: these tests use only globals (describe/it/expect), so they run
+// under jest like the sibling Next.js apps. packages/ui is on vitest because
+// its files import from 'vitest'.
+const createNextAppJestConfig = require('../../jest.next-app')
+
+module.exports = createNextAppJestConfig({
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  collectCoverageFrom: [
-    'app/**/*.{js,jsx,ts,tsx}',
-    'components/**/*.{js,jsx,ts,tsx}',
-    'lib/**/*.{js,jsx,ts,tsx}',
-    '!**/*.d.ts',
-    '!**/node_modules/**',
-    '!**/.next/**',
-    '!**/tests/e2e/**', // Exclude Playwright tests
-  ],
-  testMatch: [
-    '**/__tests__/**/*.[jt]s?(x)',
-    '**/?(*.)+(spec|test).[jt]s?(x)',
-  ],
   testPathIgnorePatterns: [
-    '<rootDir>/.next/',
     '<rootDir>/node_modules/',
-    '<rootDir>/tests/e2e/', // Ignore Playwright test directory
+    '<rootDir>/.next/',
+    // The Playwright specs live in tests-e2e/, NOT tests/e2e/ as the previous
+    // config assumed -- so jest's default testMatch would have collected them
+    // and failed on the `@playwright/test` imports.
+    '<rootDir>/tests-e2e/',
   ],
-  transform: {
-    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
-  },
-};
+})
