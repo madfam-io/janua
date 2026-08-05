@@ -68,6 +68,15 @@ class OAuthClientCreate(BaseModel):
             "Use when a consumer requires a fixed client_id across environments."
         ),
     )
+    allow_duplicate: bool = Field(
+        default=False,
+        description=(
+            "Deliberately create a second client sharing an existing ACTIVE client's "
+            "name. Defaults to False, so an accidental repeat create is rejected with "
+            "409 rather than silently minting another secret. Secret rotation does not "
+            "need this — use POST /oauth/clients/{client_id}/rotate."
+        ),
+    )
 
     @field_validator("client_id")
     @classmethod
