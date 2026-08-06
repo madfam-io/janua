@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { AUTH_COOKIE } from '@/lib/auth-keys'
 import type { NextRequest } from 'next/server'
 
 /**
@@ -45,7 +46,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Get token from cookie
-  const token = request.cookies.get('janua_access_token')?.value
+  const token = request.cookies.get(AUTH_COOKIE)?.value
   const hasValidToken = isValidTokenStructure(token)
 
   // If user is authenticated and trying to access login page, redirect to home
@@ -63,7 +64,7 @@ export function middleware(request: NextRequest) {
   if (!hasValidToken) {
     // Clear the invalid cookie
     const response = NextResponse.redirect(new URL('/login', request.url))
-    response.cookies.set('janua_access_token', '', {
+    response.cookies.set(AUTH_COOKIE, '', {
       path: '/',
       expires: new Date(0),
     })

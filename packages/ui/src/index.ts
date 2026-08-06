@@ -65,8 +65,6 @@ export {
   AuthDivider,
   PasswordInput,
   calculatePasswordStrength,
-  validatePasswordPolicy,
-  PASSWORD_SPECIAL_CHARS,
   // SSO & Passkey Components
   JanuaSSOLoginButton,
   SSOEmailDetector,
@@ -139,6 +137,13 @@ export * from './components/theme-toggle'
 
 // Utilities
 export * from './lib/utils'
+// Password policy lives in lib/, not in the auth component barrel. It was
+// re-exported from './components/auth' when it landed, which type-checks in
+// isolation but fails the app builds: Turbopack resolves the barrel and finds
+// no such export. That broke EVERY frontend image (website, admin, dashboard)
+// from 2026-08-02 until this fix, which is why the session-cookie bridge fix
+// (#476) never reached production.
+export * from './lib/password-policy'
 
 // Compliance components
 export * from './components/compliance'
