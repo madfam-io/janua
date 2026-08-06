@@ -107,3 +107,4 @@ packages/sveltekit-sdk/
 
 # Local git worktrees (never part of the repo)
 .worktrees/
+.claude/
