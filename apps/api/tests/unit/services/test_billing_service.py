@@ -42,9 +42,9 @@ class TestPricingTiers:
         assert PRICING_TIERS["community"]["price_usd"] == 0
 
     def test_pro_tier_pricing(self):
-        """Test pro tier pricing."""
-        assert PRICING_TIERS["pro"]["price_mxn"] == 1380
-        assert PRICING_TIERS["pro"]["price_usd"] == 69
+        """Test pro tier pricing (ratified: $29 / MX$499)."""
+        assert PRICING_TIERS["pro"]["price_mxn"] == 499
+        assert PRICING_TIERS["pro"]["price_usd"] == 29
 
     def test_scale_tier_pricing(self):
         """Test scale tier pricing."""

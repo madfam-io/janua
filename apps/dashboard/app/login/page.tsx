@@ -1,5 +1,14 @@
 'use client'
 
+import {
+  ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+  TOKEN_EXPIRES_AT_KEY,
+  USER_KEY,
+  setAuthCookie,
+  clearAuthCookie,
+} from '@/lib/auth-storage'
+
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@janua/ui'
@@ -8,13 +17,6 @@ import { Shield, Loader2, AlertCircle } from 'lucide-react'
 import { januaClient } from '@/lib/janua-client'
 
 // Storage keys - must match auth.tsx
-const STORAGE_KEYS = {
-  ACCESS_TOKEN: 'janua_access_token',
-  REFRESH_TOKEN: 'janua_refresh_token',
-  TOKEN_EXPIRES_AT: 'janua_token_expires_at',
-  USER: 'janua_user',
-  COOKIE: 'janua_access_token',
-} as const
 
 /**
  * Clears all authentication state - called on login page load
@@ -23,13 +25,12 @@ const STORAGE_KEYS = {
 function clearAuthStateOnLoad(reason: string | null): void {
   if (!reason) return
 
-  localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
-  localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
-  localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES_AT)
-  localStorage.removeItem(STORAGE_KEYS.USER)
+  localStorage.removeItem(ACCESS_TOKEN_KEY)
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
+  localStorage.removeItem(TOKEN_EXPIRES_AT_KEY)
+  localStorage.removeItem(USER_KEY)
 
-  document.cookie = `${STORAGE_KEYS.COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT`
-  document.cookie = `${STORAGE_KEYS.COOKIE}=; path=/; domain=.janua.dev; expires=Thu, 01 Jan 1970 00:00:01 GMT`
+  clearAuthCookie()
 }
 
 function isSafeRedirectPath(path: string): boolean {
@@ -61,13 +62,12 @@ function LoginForm() {
 
   const handleAfterSignIn = (user: any) => {
     // Sync cookie for middleware compatibility
-    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN)
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY)
     if (token) {
-      const cookieDomain = window.location.hostname.includes('janua.dev') ? '; domain=.janua.dev' : ''
-      document.cookie = `${STORAGE_KEYS.COOKIE}=${token}; path=/${cookieDomain}; secure; samesite=lax`
+      setAuthCookie(token)
     }
     if (user) {
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
+      localStorage.setItem(USER_KEY, JSON.stringify(user))
     }
     router.push(redirectTo)
   }

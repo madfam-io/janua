@@ -470,7 +470,12 @@ async def forgot_password(request: ForgotPasswordRequest, redis=Depends(get_redi
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many password reset requests"
         )
 
-    # Send password reset email (regardless of user existence for security)
+    # KNOWN-BROKEN LEGACY (documented 2026-08-02, auth truth wave): this call
+    # has ALWAYS raised TypeError — `to_email`/`reset_url` were never valid
+    # kwargs on any signature — so the except below fires every time and no
+    # email is sent; the hardcoded temp-reset-token could never validate
+    # anyway. The canonical flow is /api/v1/auth/password/forgot. Left
+    # behavior-identical pending removal of this router.
     email_service = get_email_service(redis)
     try:
         reset_url = f"{settings.BASE_URL}/auth/reset-password?token=temp-reset-token"

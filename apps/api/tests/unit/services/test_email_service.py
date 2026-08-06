@@ -280,6 +280,26 @@ class TestSendVerificationEmail:
 
         assert "Failed to send verification email" in str(exc_info.value)
 
+    async def test_send_verification_url_points_to_dashboard_app(self, service):
+        """Verification link must target FRONTEND_URL (app.janua.dev, which
+        serves /auth/verify-email) — not BASE_URL (janua.dev, the marketing
+        site with no such route, which 404s)."""
+        with patch("app.services.email_service.settings") as mock_settings:
+            mock_settings.FRONTEND_URL = "https://app.janua.dev"
+            mock_settings.BASE_URL = "https://janua.dev"
+            mock_settings.SUPPORT_EMAIL = None
+
+            with patch.object(service, "_send_email", return_value=True):
+                with patch.object(
+                    service, "_render_template", return_value="content"
+                ) as mock_render:
+                    token = await service.send_verification_email(email="test@example.com")
+
+        rendered_data = mock_render.call_args_list[0].args[1]
+        assert rendered_data["verification_url"] == (
+            f"https://app.janua.dev/auth/verify-email?token={token}"
+        )
+
 
 class TestVerifyEmailToken:
     """Test email token verification."""
@@ -347,25 +367,29 @@ class TestSendPasswordResetEmail:
         return EmailService(redis_client=mock_redis)
 
     async def test_send_reset_returns_token(self, service):
-        """Test password reset email returns token."""
+        """The service emails and returns the CALLER's stored token — it must
+        never mint its own (the emailed link has to match password_resets)."""
         with patch.object(service, "_send_email", return_value=True):
             with patch.object(service, "_render_template", return_value="content"):
                 token = await service.send_password_reset_email(
                     email="test@example.com",
+                    reset_token="caller-token-abc",
                     user_name="Test User",
                 )
 
-        assert isinstance(token, str)
-        assert len(token) == 64
+        assert token == "caller-token-abc"
 
     async def test_send_reset_stores_token_in_redis(self, service, mock_redis):
-        """Test password reset stores token with 1-hour expiry."""
+        """Test password reset mirrors the caller's token with 1-hour expiry."""
         with patch.object(service, "_send_email", return_value=True):
             with patch.object(service, "_render_template", return_value="content"):
-                await service.send_password_reset_email(email="test@example.com")
+                await service.send_password_reset_email(
+                    email="test@example.com", reset_token="caller-token-abc"
+                )
 
         mock_redis.setex.assert_called_once()
         call_args = mock_redis.setex.call_args
+        assert call_args[0][0] == "password_reset:caller-token-abc"
         assert call_args[0][1] == 60 * 60  # 1 hour
 
     async def test_send_reset_raises_on_failure(self, service):
@@ -373,7 +397,9 @@ class TestSendPasswordResetEmail:
         with patch.object(service, "_send_email", return_value=False):
             with patch.object(service, "_render_template", return_value="content"):
                 with pytest.raises(Exception) as exc_info:
-                    await service.send_password_reset_email(email="test@example.com")
+                    await service.send_password_reset_email(
+                        email="test@example.com", reset_token="caller-token-abc"
+                    )
 
         assert "Failed to send password reset email" in str(exc_info.value)
 
@@ -508,6 +534,10 @@ class TestEmailTemplateData:
         with patch.object(service, "_send_email", return_value=True):
             with patch.object(service, "_render_template") as mock_render:
                 mock_render.return_value = "content"
-                await service.send_password_reset_email(email="test@example.com")
+                await service.send_password_reset_email(
+                    email="test@example.com", reset_token="caller-token-abc"
+                )
 
         assert mock_render.called
+        template_data = mock_render.call_args[0][1]
+        assert "caller-token-abc" in template_data["reset_url"]
