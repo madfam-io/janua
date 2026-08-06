@@ -12,7 +12,7 @@ Thank you for joining the Janua beta program! This guide will help you integrate
 
 ### What You Get
 - ✅ Complete authentication system (email, OAuth, MFA, passkeys)
-- ✅ Production-ready React components
+- ✅ Pre-built, accessible React components
 - ✅ TypeScript SDK with full type safety
 - ✅ Interactive API documentation
 - ✅ Actionable error messages

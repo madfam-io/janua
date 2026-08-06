@@ -55,6 +55,12 @@ logout_router = APIRouter(tags=["OAuth Provider"])
 # CSRF token TTL (10 minutes)
 CSRF_TOKEN_TTL = 600
 
+# Lifetime of client_credentials (service) access tokens. Machine tokens are
+# deliberately short-lived: services re-request tokens instead of refreshing,
+# so this must match the `expires_in` advertised in the token response rather
+# than inheriting the (much longer) human-session access-token TTL.
+SERVICE_TOKEN_TTL_SECONDS = 3600
+
 
 def _audiences_from_claims(claims: dict) -> list[str]:
     """Extract audience values embedded in a JWT (string or array claim)."""
@@ -1449,6 +1455,9 @@ async def _handle_client_credentials_grant(
     client_audience = client.audience or settings.JWT_AUDIENCE
     additional_claims = await _get_client_credentials_claims(client, scope, db)
     additional_claims["aud"] = client_audience
+    # Override the default (human-session) access-token TTL so the token's
+    # actual `exp` matches the `expires_in` we advertise below.
+    additional_claims["exp"] = datetime.utcnow() + timedelta(seconds=SERVICE_TOKEN_TTL_SECONDS)
 
     access_token, _, _ = jwt_manager.create_access_token(
         user_id=f"service-account:{client.client_id}",
@@ -1462,7 +1471,7 @@ async def _handle_client_credentials_grant(
     return TokenResponse(
         access_token=access_token,
         token_type="Bearer",
-        expires_in=3600,
+        expires_in=SERVICE_TOKEN_TTL_SECONDS,
         refresh_token=None,
         id_token=None,
         scope=scope,

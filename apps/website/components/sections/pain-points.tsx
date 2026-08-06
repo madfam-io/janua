@@ -38,7 +38,7 @@ const pains = [
     pain_detail:
       'You don\'t want your identity layer behind a usage-based meter on someone else\'s database.',
     answer:
-      'Self-host under AGPL-3.0. User table stays in your Postgres. Free up to 2,000 MAU, $69 Pro, $299 Scale, custom Enterprise on the managed plan.',
+      'Self-host under AGPL-3.0. User table stays in your Postgres. Free up to 2,000 MAU, $29 Managed (Pro), $149 Business, custom Enterprise on the managed plan.',
   },
 ]
 

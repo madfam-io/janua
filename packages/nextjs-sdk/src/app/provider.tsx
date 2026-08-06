@@ -125,6 +125,12 @@ export function JanuaProvider({
     async (opts: { source: 'init' | 'poll' | 'manual' | 'visibility' }) => {
       const ctrl = retryRef.current;
       if (!ctrl.canAttempt() && opts.source !== 'manual') {
+        // A scheduled retry can fire a hair before nextRetryAt (the event
+        // loop's cached time snapshot lags the wall clock under load).
+        // Re-arm the timer instead of silently dropping the retry chain.
+        if (opts.source === 'poll' && !ctrl.isCircuitBroken()) {
+          scheduleRetryAfterFailure();
+        }
         return;
       }
 

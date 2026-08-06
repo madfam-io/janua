@@ -56,11 +56,17 @@ jobs:
               - 'apps/admin/**'
               - 'packages/ui/**'
               - 'packages/typescript-sdk/**'
+              - 'packages/react-sdk/**'
+              - 'packages/feature-flags/**'
               - 'Dockerfile.admin'
               - 'pnpm-lock.yaml'
             dashboard:
               - 'apps/dashboard/**'
               - 'packages/ui/**'
+              - 'packages/typescript-sdk/**'
+              - 'packages/nextjs-sdk/**'
+              - 'packages/react-sdk/**'
+              - 'packages/feature-flags/**'
               - 'Dockerfile.dashboard'
               - 'pnpm-lock.yaml'
             docs:

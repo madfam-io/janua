@@ -198,10 +198,13 @@ describe('SignUp', () => {
       await user.click(termsCheckbox)
       await user.click(submitButton)
 
-      // API returns weak password error
+      // Blocked client-side by the exact server policy (12+ chars, upper,
+      // lower, digit, special) with the unmet rules listed — no round-trip.
       await waitFor(() => {
-        expect(screen.getByText(/password too weak/i)).toBeInTheDocument()
+        expect(screen.getByText(/does not meet the requirements/i)).toBeInTheDocument()
+        expect(screen.getByText(/at least 12 characters/i)).toBeInTheDocument()
       })
+      expect(global.fetch).not.toHaveBeenCalled()
     })
   })
 
@@ -295,8 +298,8 @@ describe('SignUp', () => {
         const callArgs = (global.fetch as any).mock.calls[0]
         const body = JSON.parse(callArgs[1].body)
         expect(body).toEqual(expect.objectContaining({
-          firstName: 'John',
-          lastName: 'Doe',
+          first_name: 'John',
+          last_name: 'Doe',
           email: 'john@example.com',
           password: 'VeryStrongPassword123!',
         }))

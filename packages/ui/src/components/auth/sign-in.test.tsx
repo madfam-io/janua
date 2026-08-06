@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { SignIn } from './sign-in'
@@ -185,6 +185,55 @@ describe('SignIn', () => {
       })
 
       expect(mockAfterSignIn).toHaveBeenCalledWith(mockUser)
+    })
+
+    it('awaits an async afterSignIn before navigating (session-bridge contract)', async () => {
+      // Regression: the admin's afterSignIn mirrors SDK tokens into an HttpOnly
+      // session cookie via a server bridge. If SignIn does not await it, a
+      // consumer navigation races the un-awaited bridge and the edge middleware
+      // bounces the authenticated user back to /login. This pins that the async
+      // callback fully resolves BEFORE the redirect fires.
+      const user = userEvent.setup()
+      const events: string[] = []
+      let resolveBridge: () => void = () => {}
+      const bridge = new Promise<void>((r) => {
+        resolveBridge = r
+      })
+      const asyncAfterSignIn = vi.fn(async () => {
+        await bridge
+        events.push('bridge-done')
+      })
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ user: { id: '1', email: 'test@example.com' } }),
+      })
+
+      const hrefSpy = vi.fn()
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          ...window.location,
+          set href(v: string) {
+            events.push(`redirect:${v}`)
+            hrefSpy(v)
+          },
+        },
+      })
+
+      render(<SignIn afterSignIn={asyncAfterSignIn} redirectUrl="/dashboard" />)
+      await user.type(screen.getByRole('textbox', { name: /email/i }), 'test@example.com')
+      await user.type(screen.getByLabelText('Password'), 'password123')
+      await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+      await waitFor(() => expect(asyncAfterSignIn).toHaveBeenCalled())
+      // The redirect must NOT have fired while the bridge is still pending.
+      expect(hrefSpy).not.toHaveBeenCalled()
+
+      resolveBridge()
+      await waitFor(() => expect(hrefSpy).toHaveBeenCalledWith('/dashboard'))
+      // Ordering proof: the bridge resolved before the redirect.
+      expect(events).toEqual(['bridge-done', 'redirect:/dashboard'])
     })
 
     it('should include remember me in submission when checked', async () => {
@@ -395,10 +444,141 @@ describe('SignIn', () => {
       expect(screen.getByText(/email me a sign-in link/i)).toBeInTheDocument()
     })
 
-    it('should render Enterprise SSO button when enableJanuaSSO is true', () => {
-      render(<SignIn enableJanuaSSO={true} />)
+    it('should render Enterprise SSO button when enableJanuaSSO is true and januaClientId is provided', () => {
+      render(<SignIn enableJanuaSSO={true} januaClientId="app-client-id" />)
 
       expect(screen.getByRole('button', { name: /enterprise sso/i })).toBeInTheDocument()
+    })
+
+    // FAIL-LOUD: enableJanuaSSO without a client id must NOT render the button
+    // (it would otherwise hit the invalid social path). It logs an error instead.
+    it('should NOT render Enterprise SSO button when januaClientId is missing, and logs an error', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<SignIn enableJanuaSSO={true} />)
+
+      expect(screen.queryByRole('button', { name: /enterprise sso/i })).not.toBeInTheDocument()
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('januaClientId is missing')
+      )
+
+      errorSpy.mockRestore()
+    })
+
+    it('should route the Enterprise SSO button through initiateJanuaSSO (OIDC), not initiateOAuth', async () => {
+      const user = userEvent.setup()
+      const initiateJanuaSSO = vi.fn().mockResolvedValue(undefined)
+      const initiateOAuth = vi.fn()
+      const januaClient = { auth: { initiateJanuaSSO, initiateOAuth } }
+
+      delete (window as any).location
+      window.location = { href: '', origin: 'http://localhost:3000' } as any
+
+      render(
+        <SignIn
+          enableJanuaSSO={true}
+          januaClientId="app-client-id"
+          januaRedirectUri="http://localhost:3000/auth/callback"
+          januaClient={januaClient}
+          socialProviders={{}}
+        />
+      )
+
+      await user.click(screen.getByRole('button', { name: /enterprise sso/i }))
+
+      expect(initiateJanuaSSO).toHaveBeenCalledWith({
+        clientId: 'app-client-id',
+        redirectUri: 'http://localhost:3000/auth/callback',
+      })
+      expect(initiateOAuth).not.toHaveBeenCalled()
+    })
+  })
+
+  // Zero per-app code: an app that sets NEXT_PUBLIC_JANUA_CLIENT_ID gets a
+  // working "Sign in with Janua" button with no prop. Explicit prop overrides
+  // the env var; fail-loud still applies when both are absent.
+  describe('Janua SSO env-var defaults', () => {
+    const ENV_CLIENT = 'NEXT_PUBLIC_JANUA_CLIENT_ID'
+    const ENV_REDIRECT = 'NEXT_PUBLIC_JANUA_REDIRECT_URI'
+    let savedClient: string | undefined
+    let savedRedirect: string | undefined
+
+    beforeEach(() => {
+      savedClient = process.env[ENV_CLIENT]
+      savedRedirect = process.env[ENV_REDIRECT]
+      delete process.env[ENV_CLIENT]
+      delete process.env[ENV_REDIRECT]
+    })
+
+    afterEach(() => {
+      if (savedClient === undefined) delete process.env[ENV_CLIENT]
+      else process.env[ENV_CLIENT] = savedClient
+      if (savedRedirect === undefined) delete process.env[ENV_REDIRECT]
+      else process.env[ENV_REDIRECT] = savedRedirect
+    })
+
+    it('renders the Janua button from NEXT_PUBLIC_JANUA_CLIENT_ID when the prop is absent', () => {
+      process.env[ENV_CLIENT] = 'env-client-id'
+
+      render(<SignIn enableJanuaSSO={true} socialProviders={{}} />)
+
+      expect(screen.getByRole('button', { name: /enterprise sso/i })).toBeInTheDocument()
+    })
+
+    it('lets an explicit januaClientId prop override the env var', async () => {
+      const user = userEvent.setup()
+      const initiateJanuaSSO = vi.fn().mockResolvedValue(undefined)
+      const januaClient = { auth: { initiateJanuaSSO, initiateOAuth: vi.fn() } }
+      process.env[ENV_CLIENT] = 'env-client-id'
+
+      delete (window as any).location
+      window.location = { href: '', origin: 'http://localhost:3000' } as any
+
+      render(
+        <SignIn
+          enableJanuaSSO={true}
+          januaClientId="prop-client-id"
+          januaClient={januaClient}
+          socialProviders={{}}
+        />
+      )
+
+      await user.click(screen.getByRole('button', { name: /enterprise sso/i }))
+
+      expect(initiateJanuaSSO).toHaveBeenCalledWith(
+        expect.objectContaining({ clientId: 'prop-client-id' })
+      )
+    })
+
+    it('uses NEXT_PUBLIC_JANUA_REDIRECT_URI as the default redirect URI', async () => {
+      const user = userEvent.setup()
+      const initiateJanuaSSO = vi.fn().mockResolvedValue(undefined)
+      const januaClient = { auth: { initiateJanuaSSO, initiateOAuth: vi.fn() } }
+      process.env[ENV_CLIENT] = 'env-client-id'
+      process.env[ENV_REDIRECT] = 'https://env.example.com/auth/callback'
+
+      delete (window as any).location
+      window.location = { href: '', origin: 'http://localhost:3000' } as any
+
+      render(<SignIn enableJanuaSSO={true} januaClient={januaClient} socialProviders={{}} />)
+
+      await user.click(screen.getByRole('button', { name: /enterprise sso/i }))
+
+      expect(initiateJanuaSSO).toHaveBeenCalledWith({
+        clientId: 'env-client-id',
+        redirectUri: 'https://env.example.com/auth/callback',
+      })
+    })
+
+    it('fails loud (no button + error) when both the prop and the env var are absent', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<SignIn enableJanuaSSO={true} socialProviders={{}} />)
+
+      expect(screen.queryByRole('button', { name: /enterprise sso/i })).not.toBeInTheDocument()
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('januaClientId is missing'))
+
+      errorSpy.mockRestore()
     })
   })
 
@@ -440,7 +620,7 @@ describe('SignIn', () => {
     })
 
     it('should hide email/password form when showEmailPassword is false', () => {
-      render(<SignIn showEmailPassword={false} enableJanuaSSO={true} />)
+      render(<SignIn showEmailPassword={false} enableJanuaSSO={true} januaClientId="app-client-id" />)
 
       expect(screen.queryByRole('textbox', { name: /email/i })).not.toBeInTheDocument()
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
@@ -449,7 +629,7 @@ describe('SignIn', () => {
     })
 
     it('should still render legal links when email/password is hidden', () => {
-      render(<SignIn showEmailPassword={false} enableJanuaSSO={true} />)
+      render(<SignIn showEmailPassword={false} enableJanuaSSO={true} januaClientId="app-client-id" />)
 
       expect(screen.getByRole('link', { name: /terms of service/i })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /privacy policy/i })).toBeInTheDocument()
@@ -461,13 +641,16 @@ describe('SignIn', () => {
       expect(screen.queryByText(/or continue with email/i)).not.toBeInTheDocument()
     })
 
-    // Regression: admin.janua.dev fidelity audit AJ-5 (2026-05-02). Mirrors the
-    // exact prop set used by apps/admin/app/login/page.tsx so a future regression
-    // in <SignIn> would fail this test before reaching production.
-    it('should hide email/password with the admin.janua.dev prop combo', () => {
+    // Regression: guards the SSO-only rendering path (showEmailPassword=false +
+    // enableJanuaSSO). NOTE: admin.janua.dev itself migrated to email/password
+    // (SSO_CRITICAL_PATH Fix 8, PR #445) and no longer uses enableJanuaSSO; this
+    // test now covers other ecosystem apps that render the Janua button. A
+    // registered januaClientId is required for the button to render (fail-loud).
+    it('should hide email/password with an SSO-only prop combo', () => {
       render(
         <SignIn
           enableJanuaSSO={true}
+          januaClientId="app-client-id"
           showEmailPassword={false}
           showRememberMe={false}
           socialProviders={{}}

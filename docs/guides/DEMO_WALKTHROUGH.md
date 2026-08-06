@@ -424,7 +424,7 @@ python3 -m pytest tests/integration/test_auth_flows.py -v
 ✅ **Comprehensive API** with interactive documentation
 ✅ **Advanced features** (MFA, Passkeys, SSO) all working
 ✅ **Performance optimizations** delivering <100ms responses
-✅ **Production-ready code** with full test coverage
+✅ **Working code** backed by the unit/integration test suite
 
 ### Ready for Production
 
@@ -449,10 +449,10 @@ python3 -m pytest tests/integration/test_auth_flows.py -v
 ```
 
 ### 2. Marketing Launch
-- Landing site is production-ready
-- All claims validated with working code
+- Landing site ready for private-alpha traffic
+- Claims must be checked against the [GA claim matrix](../enterprise/GA_CLAIM_MATRIX.md) before publishing
 - Documentation comprehensive
-- Performance metrics proven
+- Performance metrics measured locally (hosted evidence pending)
 
 ### 3. Beta User Onboarding
 - Quickstart guide is 5 minutes
@@ -493,7 +493,7 @@ Before publishing, verify:
 ---
 
 **Demo Version**: 1.0.0
-**Platform Status**: ✅ Production Ready
-**Confidence Level**: 🚀 Ready to Launch
+**Platform Status**: Private alpha — see the [GA claim matrix](../enterprise/GA_CLAIM_MATRIX.md)
+**Confidence Level**: 🚀 Ready for design partners
 
 **Stop Services**: `Ctrl+C` in the terminal running `start-local-demo.sh`

@@ -139,7 +139,7 @@ export default function DemoHubPage() {
         </p>
         <div className="flex justify-center gap-4">
           <Link
-            href="https://app.janua.dev/signup"
+            href="https://app.janua.dev/auth/signup"
             className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
           >
             Start Building Free

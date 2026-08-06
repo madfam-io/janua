@@ -21,12 +21,13 @@ import structlog
 from app.config import settings
 from app.core.redis import ResilientRedisClient, get_redis
 from app.core.url_security import validate_redirect_url
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
 from app.dependencies import get_current_user
 from app.services.account_lockout_service import AccountLockoutService
 from app.services.auth_service import AuthService
 from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.email import EmailService
+from app.services.email_service import send_password_reset_email_task
 from app.services.webhooks import WebhookEventType, trigger_user_webhook
 
 from ...models import ActivityLog, EmailVerification, MagicLink, PasswordReset, User, UserStatus
@@ -81,6 +82,12 @@ class RefreshTokenRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+    # Optional product-surface page that will consume the token, e.g.
+    # "https://app.dhan.am/reset-password". Only honored when its value is in
+    # settings.PASSWORD_RESET_REDIRECT_ORIGINS — otherwise the default
+    # FRONTEND_URL page is used. Lets each product's reset email land on that
+    # product's own UI instead of Janua's.
+    redirect_base: Optional[str] = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -239,21 +246,29 @@ async def sign_up(
     await log_activity(db, str(user.id), "signup", {"method": "email"}, request)
     await log_audit_event(db, str(user.id), "signup", {"method": "email"}, request)
 
-    # Dispatch user.created webhook for CRM integration
+    # Dispatch user.created webhook for CRM integration.
+    # ISOLATED session, deliberately: the webhook path inserts an event-log
+    # row, and a failure there (prod 2026-08-02: legacy_webhook_events table
+    # missing) used to poison THIS request's session — the except below
+    # swallowed the first error, but the doomed pending INSERT detonated at
+    # the next db.commit(), turning every valid signup into a 503. With a
+    # dedicated session, webhook logging cannot touch the signup transaction.
     try:
-        await trigger_user_webhook(
-            db,
-            WebhookEventType.USER_CREATED,
-            {
-                "id": str(user.id),
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "username": user.username,
-                "created_at": user.created_at.isoformat() if user.created_at else None,
-            },
-            user_id=str(user.id),
-        )
+        async with AsyncSessionLocal() as webhook_db:
+            await trigger_user_webhook(
+                webhook_db,
+                WebhookEventType.USER_CREATED,
+                {
+                    "id": str(user.id),
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "username": user.username,
+                    "created_at": user.created_at.isoformat() if user.created_at else None,
+                },
+                user_id=str(user.id),
+            )
+            await webhook_db.commit()
     except Exception:
         pass  # Webhook failure must not block signup
 
@@ -1089,6 +1104,19 @@ async def login_form(
     return response
 
 
+# Alias for /signup (the TypeScript SDK and @janua/ui components post to /register)
+@router.post("/register", response_model=SignInResponse)
+@limiter.limit("3/minute")  # Same strict rate limiting as /signup
+async def register(
+    request: Request,
+    signup_data: SignUpRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Create a new user account (alias for /signup)"""
+    return await sign_up(request, signup_data, background_tasks, db)
+
+
 # Alias for /signin (tests expect /login)
 @router.post("/login", response_model=SignInResponse)
 @limiter.limit("5/minute")
@@ -1218,8 +1246,28 @@ async def forgot_password(
         db.add(reset)
         await db.commit()
 
-        # Send email in background
-        background_tasks.add_task(EmailService.send_password_reset_email, user.email, reset_token)
+        # Only a pre-registered product page may receive the token.
+        redirect_base = None
+        if forgot_data.redirect_base:
+            allowed = {
+                origin.strip()
+                for origin in (settings.PASSWORD_RESET_REDIRECT_ORIGINS or "").split(",")
+                if origin.strip()
+            }
+            if forgot_data.redirect_base in allowed:
+                redirect_base = forgot_data.redirect_base
+
+        # Send email in background via the REAL mailer, with THE token that
+        # /password/reset validates. The previous dispatch pointed at a
+        # placebo EmailService (app.services.email logs and returns True —
+        # nothing was ever sent) and even misnamed its method
+        # (send_password_reset_email vs the placebo's send_password_reset),
+        # while the SMTP-capable service generated a DIFFERENT token for the
+        # URL than the one stored in password_resets. Recovery could never
+        # complete by construction.
+        background_tasks.add_task(
+            send_password_reset_email_task, user.email, reset_token, redirect_base
+        )
 
     return {"message": "If the email exists, a password reset link has been sent"}
 

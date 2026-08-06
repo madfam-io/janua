@@ -11,8 +11,19 @@ describe('PricingSection', () => {
     render(<PricingSection />)
     expect(screen.getByText('Community')).toBeInTheDocument()
     expect(screen.getByText('Pro')).toBeInTheDocument()
-    expect(screen.getByText('Scale')).toBeInTheDocument()
+    expect(screen.getByText('Business')).toBeInTheDocument()
     expect(screen.getByText('Enterprise')).toBeInTheDocument()
+  })
+
+  it('should show the ratified Managed (Pro) $29 price', () => {
+    render(<PricingSection />)
+    expect(screen.getAllByText('$29').length).toBeGreaterThan(0)
+  })
+
+  it('should not show the retired $69 / $299 prices', () => {
+    render(<PricingSection />)
+    expect(screen.queryByText('$69')).not.toBeInTheDocument()
+    expect(screen.queryByText('$299')).not.toBeInTheDocument()
   })
 
   it('should show annual/monthly toggle', () => {

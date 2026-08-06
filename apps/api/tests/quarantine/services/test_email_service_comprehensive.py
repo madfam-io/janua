@@ -310,12 +310,11 @@ class TestPasswordReset:
             mock_render.return_value = "Rendered content"
 
             token = await service.send_password_reset_email(
-                email="test@example.com", user_name="John Doe"
+                email="test@example.com", reset_token="caller-token-abc", user_name="John Doe"
             )
 
-            # Verify token was generated
-            assert isinstance(token, str)
-            assert len(token) == 64
+            # The service must email the caller's stored token, never mint one
+            assert token == "caller-token-abc"
 
             # Verify Redis storage with 1-hour expiry
             mock_redis.setex.assert_called_once()
@@ -340,10 +339,12 @@ class TestPasswordReset:
             mock_send.return_value = True
             mock_render.return_value = "Rendered content"
 
-            token = await service.send_password_reset_email("test@example.com")
+            # Token is now issued by the caller (stored in password_resets) —
+            # the service must email THAT token, never mint its own.
+            token = await service.send_password_reset_email("test@example.com", "caller-token-123")
 
-            # Should use email prefix as user name
-            assert isinstance(token, str)
+            # Should return the caller's token unchanged
+            assert token == "caller-token-123"
             mock_render.assert_called()
             render_call_args = mock_render.call_args[0][1]  # template_data
             assert render_call_args["user_name"] == "test"  # email prefix
@@ -360,7 +361,7 @@ class TestPasswordReset:
             mock_render.return_value = "Rendered content"
 
             with pytest.raises(Exception, match="Failed to send password reset email"):
-                await service.send_password_reset_email("test@example.com")
+                await service.send_password_reset_email("test@example.com", "caller-token-123")
 
 
 class TestWelcomeEmail:
@@ -615,10 +616,10 @@ class TestEmailWorkflows:
 
             # Send password reset email
             token = await service.send_password_reset_email(
-                email="test@example.com", user_name="John Doe"
+                email="test@example.com", reset_token="caller-token-abc", user_name="John Doe"
             )
 
-            assert isinstance(token, str)
+            assert token == "caller-token-abc"
             mock_redis.setex.assert_called_once()
 
             # Verify Redis storage with correct expiry

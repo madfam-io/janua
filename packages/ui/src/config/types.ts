@@ -45,6 +45,14 @@ export interface JanuaAuthConfig {
     }
     /** Enable "Sign in with Janua" for MADFAM ecosystem */
     enableJanuaSSO?: boolean
+    /**
+     * Registered Janua OIDC `client_id` for this app. REQUIRED when
+     * `enableJanuaSSO` is true — the button uses Janua's OIDC provider flow.
+     * Per-app value (ties into SSO_CRITICAL_PATH Fix 1 client registration).
+     */
+    januaClientId?: string
+    /** Redirect URI for the Janua OIDC flow (defaults to `${origin}/auth/callback`). */
+    januaRedirectUri?: string
   }
   flows: {
     signIn: {

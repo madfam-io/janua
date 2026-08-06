@@ -243,7 +243,9 @@ Expected output: ✅ All validation checks passed!
 
 ## 📞 Support
 
-The compliance infrastructure is production-ready and includes:
+The compliance tooling in this repo includes (see the
+[GA claim matrix](GA_CLAIM_MATRIX.md) — compliance exports remain roadmap
+until export/delete evidence is filed):
 
 - **Error handling**: Comprehensive try/catch blocks
 - **Logging**: Structured logging throughout

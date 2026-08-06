@@ -5,6 +5,13 @@
 **Protocol**: SCIM 2.0 (RFC 7644)  
 **Applies to**: Enterprise Plan
 
+> [!NOTE]
+> **Claim status: Roadmap.** Per the
+> [GA claim matrix](../enterprise/GA_CLAIM_MATRIX.md), SCIM provisioning must
+> not be sold as available until create/update/deactivate synthetics and
+> monitoring are in place. This guide documents the in-repo implementation for
+> design partners and self-hosters evaluating it at their own risk.
+
 ## Table of Contents
 
 1. [Overview](#overview)

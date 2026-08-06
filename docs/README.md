@@ -21,16 +21,21 @@ Complete documentation for the Janua self-hosted authentication platform.
 - **[Flutter SDK](guides/flutter-sdk-complete-guide.md)** - Flutter mobile integration
 - **[SSO Integration](guides/SSO_INTEGRATION_GUIDE.md)** - Single Sign-On setup
 - **[Machine-to-Machine Auth](guides/machine-to-machine-authentication-guide.md)** - Service-account OAuth clients for automated ecosystem runs
+- **[Service Tokens](service-tokens.md)** - Decision record and integration contract for `client_credentials` service clients (token issuance, JWKS/introspection verification)
 - **[MFA Guide](guides/mfa-2fa-implementation-guide.md)** - Multi-factor authentication
 - **[Compliance Features](guides/COMPLIANCE_FEATURES_GUIDE.md)** - GDPR, SOC2, compliance
 
 ### Enterprise Features
-- **[Enterprise Overview](enterprise/ENTERPRISE_FEATURES.md)** - Enterprise capabilities
+
+Claim statuses below come from the [GA Claim Matrix](enterprise/GA_CLAIM_MATRIX.md) —
+the source of truth for what may be sold as available.
+
 - **[GA Claim Matrix](enterprise/GA_CLAIM_MATRIX.md)** - Current supported/beta/roadmap claim control
-- **[SSO Guide](enterprise/sso-integration-guide.md)** - Enterprise SSO setup
-- **[RBAC Setup](enterprise/enterprise-rbac-setup-guide.md)** - Role-based access control
-- **[SCIM Provisioning](guides/SCIM_PROVISIONING_GUIDE.md)** - User provisioning
-- **[Audit & Compliance](enterprise/audit-compliance-guide.md)** - Enterprise compliance
+- **[Enterprise Overview](enterprise/ENTERPRISE_FEATURES.md)** - Enterprise capabilities
+- **[SSO Guide](enterprise/sso-integration-guide.md)** - Enterprise SAML SSO setup *(roadmap/beta — implementation exists, not commercially GA)*
+- **[RBAC Setup](enterprise/enterprise-rbac-setup-guide.md)** - Role-based access control *(beta)*
+- **[SCIM Provisioning](guides/SCIM_PROVISIONING_GUIDE.md)** - User provisioning *(roadmap — not sellable yet)*
+- **[Audit & Compliance](enterprise/audit-compliance-guide.md)** - Enterprise compliance *(audit logs beta; compliance exports roadmap)*
 
 ### Migration & Integration
 - **[Cloud to Self-Hosted](migration/cloud-to-self-hosted.md)** - Migration guide

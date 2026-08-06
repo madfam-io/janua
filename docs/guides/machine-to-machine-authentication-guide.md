@@ -5,6 +5,10 @@ operations. Use this pattern for automated probes, Selva platform agents, and
 Codex-assisted verification runs. Do not share human superadmin passwords with
 automation.
 
+For the RFC 0024 §P4 consolidation service clients (Zavlo→Karafiel `cfdi:issue`,
+RouteCraft→Dhanam `billing:events`) and resource-server verification recipes
+(JWKS + introspection), see [docs/service-tokens.md](../service-tokens.md).
+
 ## Recommended identity
 
 Create one Janua OAuth client per operational capability. For ecosystem-wide

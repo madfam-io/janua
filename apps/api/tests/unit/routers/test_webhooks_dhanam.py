@@ -33,6 +33,14 @@ class TestParseProductPlan:
             ("karafiel_essentials", ("karafiel", "essentials")),
             ("forgesight_madfam", ("forgesight", "madfam")),
             ("newservice_pro", ("newservice", "pro")),
+            # Hyphenated catalog slugs — before the hyphen fix these fell
+            # through to ("dhanam", None), which cancelled the buyer's dhanam
+            # tier instead of granting the purchased product.
+            ("pravara-mes_starter", ("pravara-mes", "starter")),
+            ("pravara-mes_growth", ("pravara-mes", "growth")),
+            ("pravara-mes_enterprise", ("pravara-mes", "enterprise")),
+            ("nuit-one_artist_pro", ("nuit-one", "artist_pro")),
+            ("nuit-one_label", ("nuit-one", "label")),
         ],
     )
     def test_product_prefixed_plans(self, plan_id: str, expected: tuple):
@@ -74,6 +82,7 @@ class TestParseProductPlan:
             ("dhanam_free", "dhanam"),
             ("karafiel_free", "karafiel"),
             ("newservice_community", "newservice"),
+            ("pravara-mes_free", "pravara-mes"),
         ],
     )
     def test_cancel_tier_product_prefixed(self, plan_id: str, expected_product: str):
@@ -105,6 +114,8 @@ class TestParseProductPlan:
             ("enclii_essentials_annual", ("enclii", "essentials")),
             ("pro_yearly", ("dhanam", "pro")),
             ("sovereign_monthly", ("enclii", "pro")),
+            ("nuit-one_artist_pro_monthly", ("nuit-one", "artist_pro")),
+            ("pravara-mes_starter_yearly", ("pravara-mes", "starter")),
         ],
     )
     def test_billing_suffix_stripped(self, plan_id: str, expected: tuple):
@@ -132,6 +143,11 @@ class TestParseProductPlan:
     def test_numeric_prefix_rejected(self):
         """Product names starting with digits are rejected."""
         assert parse_product_plan("123_pro") == ("dhanam", None)
+
+    @pytest.mark.parametrize("plan_id", ["-nuit_pro", "nuit-_pro", "nuit--one_pro"])
+    def test_malformed_hyphen_slugs_rejected(self, plan_id: str):
+        """Leading/trailing/doubled hyphens are not valid product slugs."""
+        assert parse_product_plan(plan_id) == ("dhanam", None)
 
     def test_unknown_tier_for_any_product(self):
         """Any product with unknown tier returns (product, tier) as-is."""

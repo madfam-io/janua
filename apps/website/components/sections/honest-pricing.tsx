@@ -18,14 +18,14 @@ interface PricingTier {
   honestNote?: string
 }
 
-// Pricing aligned with the canonical billing service tiers
-// (apps/api/app/services/billing_service.py PRICING_TIERS) and the
-// /pricing page (apps/website/components/sections/pricing.tsx).
+// Pricing aligned with the ratified enclii+janua packaging decision
+// (internal-devops decisions/2026-07-11-enclii-janua-packaging-ratification.md)
+// and the /pricing page (apps/website/components/sections/pricing.tsx).
 //
-// Community: Free, 2,000 MAU
-// Pro: $69/mo, 10,000 MAU
-// Scale: $299/mo, 50,000 MAU
-// Enterprise: Custom, Unlimited
+// Community (Open Source): Free, self-host, 2,000 MAU on managed
+// Pro (Managed):           $29/mo flat per project, up to 10,000 MAU (fair use)
+// Business (SSO):          $149/mo — design-partner / contract, NOT self-serve
+// Enterprise:              Custom, Unlimited
 const pricingTiers: PricingTier[] = [
   {
     name: 'Community',
@@ -51,9 +51,9 @@ const pricingTiers: PricingTier[] = [
   },
   {
     name: 'Pro',
-    price: '$69',
-    description: 'For growing startups and teams',
-    mau: '10,000 MAU',
+    price: '$29',
+    description: 'Managed hosting for growing startups and teams',
+    mau: 'Up to 10,000 MAU (flat, fair use)',
     badge: 'Most Popular',
     features: [
       'Everything in Community',
@@ -74,10 +74,11 @@ const pricingTiers: PricingTier[] = [
     honestNote: 'Scales with you as you find product-market fit'
   },
   {
-    name: 'Scale',
-    price: '$299',
-    description: 'For scale-ups with compliance needs',
-    mau: '50,000 MAU',
+    name: 'Business',
+    price: '$149',
+    description: 'SSO/SAML for compliance-driven teams',
+    mau: 'Higher volume',
+    badge: 'Design partner',
     features: [
       'Everything in Pro',
       'SSO/SAML',
@@ -93,7 +94,7 @@ const pricingTiers: PricingTier[] = [
       'No custom contracts',
       'No dedicated support'
     ],
-    honestNote: 'Enterprise-class security without enterprise pricing'
+    honestNote: 'Early access via our design-partner program — talk to us'
   },
   {
     name: 'Enterprise',
@@ -102,7 +103,7 @@ const pricingTiers: PricingTier[] = [
     mau: 'Unlimited',
     badge: 'Full Support',
     features: [
-      'Everything in Scale',
+      'Everything in Business',
       'SCIM provisioning',
       'Custom contracts & SLAs',
       'Dedicated support',
@@ -126,7 +127,7 @@ interface ComparisonRow {
   feature: string
   community: boolean | string
   pro: boolean | string
-  scale: boolean | string
+  business: boolean | string
   enterprise: boolean | string
 }
 
@@ -135,49 +136,49 @@ const detailedComparison: ComparisonRow[] = [
     feature: 'Monthly Active Users',
     community: '2,000',
     pro: '10,000',
-    scale: '50,000',
+    business: '50,000',
     enterprise: 'Unlimited'
   },
   {
     feature: 'Passkeys (WebAuthn)',
     community: true,
     pro: true,
-    scale: true,
+    business: true,
     enterprise: true
   },
   {
     feature: 'MFA/TOTP',
     community: false,
     pro: true,
-    scale: true,
+    business: true,
     enterprise: true
   },
   {
     feature: 'OAuth Providers',
     community: 'Email/password only',
     pro: 'Social (OAuth)',
-    scale: 'All',
+    business: 'All',
     enterprise: 'All + Custom'
   },
   {
     feature: 'Edge Response Time',
     community: '<30ms*',
     pro: '<30ms*',
-    scale: '<30ms*',
+    business: '<30ms*',
     enterprise: '<30ms*'
   },
   {
     feature: 'Support',
     community: 'Community',
     pro: 'Email',
-    scale: 'Priority',
+    business: 'Priority',
     enterprise: 'Dedicated'
   },
   {
     feature: 'SLA',
     community: false,
     pro: false,
-    scale: false,
+    business: false,
     // SLA is only offered at the Enterprise tier and is negotiated per
     // contract. No public uptime percentage until SRE on-call + SLO
     // definitions are in place.
@@ -187,14 +188,14 @@ const detailedComparison: ComparisonRow[] = [
     feature: 'SAML SSO',
     community: false,
     pro: false,
-    scale: true,
+    business: true,
     enterprise: true
   },
   {
     feature: 'Audit Log Retention',
     community: false,
     pro: '30 days',
-    scale: '90 days',
+    business: '90 days',
     enterprise: 'Unlimited'
   }
 ]
@@ -205,19 +206,27 @@ export function HonestPricing() {
 
   const yearlyDiscount = 0.2 // 20% off
 
-  const getPrice = (price: string) => {
+  // Business (SSO) is a design-partner / contract tier — not self-serve — so
+  // it is shown with its flat monthly price but no self-serve yearly discount.
+  const isContactTier = (tier: PricingTier) =>
+    tier.name === 'Business' || tier.price === 'Custom'
+
+  const getPrice = (tier: PricingTier) => {
+    const { price } = tier
     if (price === 'Free' || price === 'Custom') return price
     const numPrice = parseInt(price.replace('$', ''))
-    if (billingCycle === 'yearly') {
+    if (billingCycle === 'yearly' && !isContactTier(tier)) {
       const yearlyPrice = Math.round(numPrice * (1 - yearlyDiscount))
       return `$${yearlyPrice}`
     }
     return price
   }
 
-  const getPriceLabel = (price: string) => {
+  const getPriceLabel = (tier: PricingTier) => {
+    const { price } = tier
     if (price === 'Free') return ''
     if (price === 'Custom') return 'Contact us'
+    if (tier.name === 'Business') return '/mo · contact sales'
     return billingCycle === 'monthly' ? '/month' : '/month (billed annually)'
   }
 
@@ -304,10 +313,10 @@ export function HonestPricing() {
               <div className="mb-6">
                 <div className="flex items-baseline gap-1">
                   <span className="text-3xl font-bold text-slate-900 dark:text-white">
-                    {getPrice(tier.price)}
+                    {getPrice(tier)}
                   </span>
                   <span className="text-sm text-slate-600 dark:text-slate-400">
-                    {getPriceLabel(tier.price)}
+                    {getPriceLabel(tier)}
                   </span>
                 </div>
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mt-2">
@@ -354,8 +363,20 @@ export function HonestPricing() {
                 className="w-full"
                 asChild
               >
-                <Link href={tier.price === 'Custom' ? '/contact' : '/signup'}>
-                  {tier.price === 'Custom' ? 'Contact Sales' : 'Get Started'}
+                <Link
+                  href={
+                    isContactTier(tier)
+                      ? '/contact'
+                      : `https://app.janua.dev/auth/signup${
+                          tier.name === 'Pro' ? '?plan=pro' : ''
+                        }`
+                  }
+                >
+                  {tier.price === 'Custom'
+                    ? 'Contact Sales'
+                    : tier.name === 'Business'
+                      ? 'Contact us'
+                      : 'Get Started'}
                 </Link>
               </Button>
             </motion.div>
@@ -392,7 +413,7 @@ export function HonestPricing() {
                     Pro
                   </th>
                   <th className="text-center p-4 font-semibold text-slate-900 dark:text-white">
-                    Scale
+                    Business
                   </th>
                   <th className="text-center p-4 font-semibold text-slate-900 dark:text-white">
                     Enterprise
@@ -435,15 +456,15 @@ export function HonestPricing() {
                       )}
                     </td>
                     <td className="p-4 text-center">
-                      {typeof row.scale === 'boolean' ? (
-                        row.scale ? (
+                      {typeof row.business === 'boolean' ? (
+                        row.business ? (
                           <Check className="w-4 h-4 text-green-600 mx-auto" />
                         ) : (
                           <X className="w-4 h-4 text-slate-400 mx-auto" />
                         )
                       ) : (
                         <span className="text-sm text-slate-600 dark:text-slate-400">
-                          {row.scale}
+                          {row.business}
                         </span>
                       )}
                     </td>
@@ -491,11 +512,12 @@ export function HonestPricing() {
 
             <div>
               <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-2">
-                What happens if I exceed my MAU limit?
+                What happens if I exceed the 10,000 MAU fair-use cap?
               </h4>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                We'll notify you at 80% usage and help you upgrade. We never cut off authentication - your
-                users won't be affected. Overages are billed at standard rates with no penalties.
+                Pro is flat per project, not per-MAU metered. If you consistently run past the
+                fair-use cap we&apos;ll reach out to move you to Business or a custom plan. We never cut off
+                authentication - your users won&apos;t be affected.
               </p>
             </div>
 

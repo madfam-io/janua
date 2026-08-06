@@ -154,8 +154,7 @@ export default function LoginPage() {
           afterSignIn={handleAfterSignIn}
           onError={handleError}
           socialProviders={{}}
-          enableJanuaSSO={true}
-          showEmailPassword={false}
+          showEmailPassword={true}
           showRememberMe={false}
           headerText="Sign in"
           headerDescription="Platform operator access only"
