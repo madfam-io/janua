@@ -33,9 +33,13 @@ from app.services.entitlements_service import (
 logger = structlog.get_logger()
 router = APIRouter(prefix="/webhooks/dhanam", tags=["webhooks"])
 
-# Open product validation: any lowercase alphanumeric name is a valid product.
-# No hardcoded product list — new ecosystem services are accepted automatically.
-PRODUCT_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
+# Open product validation: lowercase alphanumeric names, with interior hyphens
+# allowed because catalog product slugs carry them (`nuit-one`, `pravara-mes` —
+# see dhanam catalog.yaml). No hardcoded product list — new ecosystem services
+# are accepted automatically. Before hyphens were accepted, a paid
+# `pravara-mes_*` / `nuit-one_*` plan fell through to ("dhanam", None), which
+# not only granted nothing but REMOVED the buyer's existing dhanam tier.
+PRODUCT_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 VALID_TIERS = {"essentials", "pro", "madfam"}
 
 # Legacy plan names -> (product, tier) for backwards compatibility
@@ -64,6 +68,7 @@ def parse_product_plan(plan_id: str) -> tuple[str, str | None]:
     Examples:
         "tezca_pro" -> ("tezca", "pro")
         "enclii_essentials" -> ("enclii", "essentials")
+        "pravara-mes_starter" -> ("pravara-mes", "starter")  # hyphenated product
         "pro" -> ("dhanam", "pro")
         "sovereign" -> ("enclii", "pro")  # legacy
         "free" -> ("dhanam", None)  # cancel tier

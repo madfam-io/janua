@@ -187,6 +187,55 @@ describe('SignIn', () => {
       expect(mockAfterSignIn).toHaveBeenCalledWith(mockUser)
     })
 
+    it('awaits an async afterSignIn before navigating (session-bridge contract)', async () => {
+      // Regression: the admin's afterSignIn mirrors SDK tokens into an HttpOnly
+      // session cookie via a server bridge. If SignIn does not await it, a
+      // consumer navigation races the un-awaited bridge and the edge middleware
+      // bounces the authenticated user back to /login. This pins that the async
+      // callback fully resolves BEFORE the redirect fires.
+      const user = userEvent.setup()
+      const events: string[] = []
+      let resolveBridge: () => void = () => {}
+      const bridge = new Promise<void>((r) => {
+        resolveBridge = r
+      })
+      const asyncAfterSignIn = vi.fn(async () => {
+        await bridge
+        events.push('bridge-done')
+      })
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ user: { id: '1', email: 'test@example.com' } }),
+      })
+
+      const hrefSpy = vi.fn()
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          ...window.location,
+          set href(v: string) {
+            events.push(`redirect:${v}`)
+            hrefSpy(v)
+          },
+        },
+      })
+
+      render(<SignIn afterSignIn={asyncAfterSignIn} redirectUrl="/dashboard" />)
+      await user.type(screen.getByRole('textbox', { name: /email/i }), 'test@example.com')
+      await user.type(screen.getByLabelText('Password'), 'password123')
+      await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+      await waitFor(() => expect(asyncAfterSignIn).toHaveBeenCalled())
+      // The redirect must NOT have fired while the bridge is still pending.
+      expect(hrefSpy).not.toHaveBeenCalled()
+
+      resolveBridge()
+      await waitFor(() => expect(hrefSpy).toHaveBeenCalledWith('/dashboard'))
+      // Ordering proof: the bridge resolved before the redirect.
+      expect(events).toEqual(['bridge-done', 'redirect:/dashboard'])
+    })
+
     it('should include remember me in submission when checked', async () => {
       const user = userEvent.setup()
       global.fetch = vi.fn().mockResolvedValue({

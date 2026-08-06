@@ -522,6 +522,80 @@ describe('JanuaClient', () => {
 
       // Verify listeners are removed (this is implementation dependent)
     });
+
+    // Regression tests for the admin login handoff bug: SdkEventMap documents
+    // alias event names ('signIn'/'signOut'/'tokenRefreshed'/'authError') but
+    // the client historically emitted only canonical names, so consumers
+    // subscribed to the aliases never saw a successful sign-in and treated
+    // the user as signed out.
+    describe('backward-compatibility event aliases', () => {
+      it('should notify alias listeners when the canonical event is emitted', () => {
+        const canonical = jest.fn();
+        const alias = jest.fn();
+        const payload = { user: userFixtures.verified as any };
+
+        client.on('auth:signedIn', canonical);
+        client.on('signIn', alias);
+
+        client.emit('auth:signedIn', payload);
+
+        expect(canonical).toHaveBeenCalledTimes(1);
+        expect(canonical).toHaveBeenCalledWith(payload);
+        expect(alias).toHaveBeenCalledTimes(1);
+        expect(alias).toHaveBeenCalledWith(payload);
+      });
+
+      it('should alias auth:signedOut -> signOut and token:refreshed -> tokenRefreshed', () => {
+        const signOutAlias = jest.fn();
+        const tokenAlias = jest.fn();
+
+        client.on('signOut', signOutAlias);
+        client.on('tokenRefreshed', tokenAlias);
+
+        const tokens = {
+          access_token: 'access',
+          refresh_token: 'refresh',
+          expires_in: 900,
+          token_type: 'bearer' as const
+        };
+        client.emit('auth:signedOut', {});
+        client.emit('token:refreshed', { tokens });
+
+        expect(signOutAlias).toHaveBeenCalledTimes(1);
+        expect(signOutAlias).toHaveBeenCalledWith({});
+        expect(tokenAlias).toHaveBeenCalledTimes(1);
+        expect(tokenAlias).toHaveBeenCalledWith({ tokens });
+      });
+
+      it('should not fan events out to unrelated names', () => {
+        const signInAlias = jest.fn();
+        client.on('signIn', signInAlias);
+
+        client.emit('auth:signedOut', {});
+        client.emit('token:expired', {});
+
+        expect(signInAlias).not.toHaveBeenCalled();
+      });
+
+      it('should forward the real user from the auth module to signedIn listeners', () => {
+        // The Auth module invokes its onSignIn callback with the actual user
+        // returned by the API. The client must forward that user to event
+        // listeners instead of replacing it with an empty object.
+        const canonical = jest.fn();
+        const alias = jest.fn();
+        client.on('auth:signedIn', canonical);
+        client.on('signIn', alias);
+
+        const AuthMock = require('../auth').Auth as jest.Mock;
+        const lastCall = AuthMock.mock.calls[AuthMock.mock.calls.length - 1];
+        const onSignIn = lastCall[2] as (data?: { user: any }) => void;
+
+        onSignIn({ user: userFixtures.verified });
+
+        expect(canonical).toHaveBeenCalledWith({ user: userFixtures.verified });
+        expect(alias).toHaveBeenCalledWith({ user: userFixtures.verified });
+      });
+    });
   });
 
   describe('auto token refresh', () => {

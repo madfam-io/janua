@@ -1,4 +1,13 @@
-const { defaults } = require('jest-config');
+// NOTE: previously `const { defaults } = require('jest-config')` — jest-config
+// is never a direct dependency anywhere in this monorepo (only `jest`, whose
+// bundled jest-config isn't hoisted for a plain require() from a root-level
+// preset file), so every package extending this preset failed at load time
+// with MODULE_NOT_FOUND before running a single test. Jest's own default
+// moduleFileExtensions is a stable, documented list — inlined here instead of
+// adding a phantom top-level dependency just to read one constant.
+const JEST_DEFAULT_MODULE_FILE_EXTENSIONS = [
+  'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'json', 'node',
+];
 
 module.exports = {
   preset: 'ts-jest',
@@ -79,7 +88,7 @@ module.exports = {
   bail: false,
   
   // Module file extensions
-  moduleFileExtensions: [...defaults.moduleFileExtensions, 'ts', 'tsx'],
+  moduleFileExtensions: [...JEST_DEFAULT_MODULE_FILE_EXTENSIONS, 'ts', 'tsx'],
   
   // Resolver
   resolver: undefined,
