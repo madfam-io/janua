@@ -65,8 +65,18 @@ class Settings(BaseSettings):
         default="postgresql://postgres:postgres@localhost:5432/janua",
         description="PostgreSQL connection URL",
     )
-    DATABASE_POOL_SIZE: int = Field(default=20)
-    DATABASE_MAX_OVERFLOW: int = Field(default=10)
+    # Connection budget vs the SHARED postgres.data.svc: max_connections=100
+    # for the ENTIRE cluster (3 reserved for superuser), ~90 in use at steady
+    # state, and 3,057 "remaining connection slots are reserved" FATALs logged
+    # in the 48h before the 2026-07-22 exhaustion incident. Budget for
+    # janua-api: 2 replicas x (pool 5 + overflow 5) = 20 absolute max against
+    # a measured steady state of ~5-7 total. Janua is the SSO backbone for
+    # every platform — it must never be the tenant that exhausts the shared
+    # database, because auth outages cascade to all of them. Raise per-env via
+    # these env vars, not by editing code. (Same budgeting pattern as
+    # fortuna/infra/k8s/production/api-deployment.yaml.)
+    DATABASE_POOL_SIZE: int = Field(default=5)
+    DATABASE_MAX_OVERFLOW: int = Field(default=5)
     DATABASE_POOL_TIMEOUT: int = Field(default=30)
     AUTO_MIGRATE: bool = Field(default=False)
 
