@@ -412,9 +412,12 @@ describe('UserProfile', () => {
 
     it('should show loading state during account deletion', async () => {
       const user = userEvent.setup()
-      mockOnDeleteAccount.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
-      )
+      // Deliberately never resolves. This previously used a 100ms timer, which
+      // made the assertions below a race: under full-suite parallel load the
+      // timer fired before they ran, isDeleting flipped back to false, and the
+      // test failed while passing in isolation. The component behaviour under
+      // test is "pending deletion", so the promise should simply stay pending.
+      mockOnDeleteAccount.mockImplementation(() => new Promise(() => {}))
 
       render(
         <UserProfile

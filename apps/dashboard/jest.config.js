@@ -1,25 +1,14 @@
-module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'jsdom',
-  rootDir: '.',
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1',
-    '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
-  },
+// The previous config declared `preset: 'ts-jest'`, but ts-jest is not a
+// dependency of this app and pnpm's strict node_modules meant it could never
+// resolve -- so jest failed before collecting a single test. There was also no
+// `test` script, so nothing invoked it either way.
+//
+// Runner choice: these tests are written for jest (jest.mock, jest.fn,
+// jest.MockedFunction). packages/ui is on vitest because its files import from
+// 'vitest'. Neither set can adopt the other's runner without rewriting the test
+// files, so the split is deliberate.
+const createNextAppJestConfig = require('../../jest.next-app')
+
+module.exports = createNextAppJestConfig({
   setupFilesAfterEnv: ['<rootDir>/../../tests/setup.js'],
-  collectCoverageFrom: [
-    'app/**/*.{js,jsx,ts,tsx}',
-    'components/**/*.{js,jsx,ts,tsx}',
-    'lib/**/*.{js,jsx,ts,tsx}',
-    '!**/*.d.ts',
-    '!**/node_modules/**',
-    '!**/.next/**',
-  ],
-  testMatch: [
-    '**/__tests__/**/*.[jt]s?(x)',
-    '**/?(*.)+(spec|test).[jt]s?(x)',
-  ],
-  transform: {
-    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
-  },
-};
+})

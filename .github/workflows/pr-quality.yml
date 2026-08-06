@@ -60,9 +60,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `continue-on-error: true` was removed deliberately. This step is the only
+      # place `pnpm test:unit` runs, and with it set the job stayed green no
+      # matter what the tests did -- which is how 50 frontend test files came to
+      # be unrunnable without anyone noticing. test:unit now also runs
+      # scripts/check-test-scripts.mjs, so a workspace that grows test files
+      # without a way to run them fails here too.
       - name: Run frontend tests
         run: pnpm test:unit
-        continue-on-error: true
 
       - name: Build SDK packages
         run: pnpm build:packages
