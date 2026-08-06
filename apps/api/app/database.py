@@ -63,15 +63,22 @@ if hasattr(settings, "DATABASE_URL") and settings.DATABASE_URL:
     # Create sync engine for migrations and some operations. Explicitly small:
     # without pool_size, SQLAlchemy's QueuePool default (5+10) adds 15 more
     # legal claims per process on top of the async pool's budget, for an
-    # engine that idles at 0-1 connections.
-    sync_engine = create_engine(
-        database_url,
-        echo=settings.DEBUG if hasattr(settings, "DEBUG") else False,
-        pool_pre_ping=True,
-        pool_size=2,
-        max_overflow=3,
-        pool_timeout=settings.DATABASE_POOL_TIMEOUT,
-    )
+    # engine that idles at 0-1 connections. Pool args are QueuePool-only, so
+    # they get the same sqlite guard as the async engine above — SQLite tests
+    # run on StaticPool, which rejects them at import time.
+    sync_engine_kwargs = {
+        "echo": settings.DEBUG if hasattr(settings, "DEBUG") else False,
+        "pool_pre_ping": True,
+    }
+    if "sqlite" not in database_url:
+        sync_engine_kwargs.update(
+            {
+                "pool_size": 2,
+                "max_overflow": 3,
+                "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
+            }
+        )
+    sync_engine = create_engine(database_url, **sync_engine_kwargs)
 else:
     # Require explicit DATABASE_URL configuration
     DATABASE_URL = os.getenv("DATABASE_URL")
