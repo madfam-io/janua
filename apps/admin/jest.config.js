@@ -1,24 +1,9 @@
-module.exports = {
-  testEnvironment: 'jsdom',
-  rootDir: '.',
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1',
-    '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
-  },
+// Runner choice: these tests are written for jest (jest.mock, jest.fn).
+// packages/ui is on vitest because its files import from 'vitest'. Neither set
+// can adopt the other's runner without rewriting the test files, so the split
+// is deliberate.
+const createNextAppJestConfig = require('../../jest.next-app')
+
+module.exports = createNextAppJestConfig({
   setupFilesAfterEnv: ['<rootDir>/../../tests/setup.js'],
-  collectCoverageFrom: [
-    'app/**/*.{js,jsx,ts,tsx}',
-    'components/**/*.{js,jsx,ts,tsx}',
-    'lib/**/*.{js,jsx,ts,tsx}',
-    '!**/*.d.ts',
-    '!**/node_modules/**',
-    '!**/.next/**',
-  ],
-  testMatch: [
-    '**/__tests__/**/*.[jt]s?(x)',
-    '**/?(*.)+(spec|test).[jt]s?(x)',
-  ],
-  transform: {
-    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
-  },
-};
+})

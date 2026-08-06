@@ -179,9 +179,30 @@ class OAuthClientService:
         return result.scalar_one_or_none()
 
     async def get_client_by_name(self, name: str) -> Optional[OAuthClient]:
-        """Get an OAuth2 client by its unique application name."""
+        """Get the OLDEST OAuth2 client with this application name.
+
+        The docstring used to call the name "unique". It is not: nothing in the
+        schema enforces it, and production currently holds 13 clients named
+        "Voxa" (created 2026-06-07/08, byte-identical redirect_uris and scopes
+        — a retry loop against the non-idempotent ``POST /oauth/clients``).
+
+        That matters because this used ``scalar_one_or_none()``, which raises
+        ``MultipleResultsFound`` on more than one row. ``/oauth/clients/register``
+        calls this as its name-matching fallback, so a re-registration of any
+        duplicated name raised a 500 — the duplicates broke the very
+        idempotency path that exists to prevent duplicates.
+
+        Ordering by ``created_at`` and taking the first makes the lookup total
+        and deterministic: the original client wins, and ``/register`` converges
+        onto it instead of failing. Deduplication of the existing rows is a
+        separate operator decision; this only stops the data from breaking the
+        code that reads it.
+        """
         result = await self.db.execute(
-            select(OAuthClient).where(OAuthClient.name == name)
+            select(OAuthClient)
+            .where(OAuthClient.name == name)
+            .order_by(OAuthClient.created_at)
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

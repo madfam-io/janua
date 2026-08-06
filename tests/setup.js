@@ -24,6 +24,28 @@ jest.mock("next/router", () => ({
   },
 }));
 
+// Mock Next.js App Router navigation.
+//
+// This file previously mocked only "next/router" (the Pages Router). Every app
+// here is on the App Router, so components calling useRouter()/useSearchParams()
+// from "next/navigation" threw "invariant expected app router to be mounted"
+// the moment they rendered.
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    refresh: jest.fn(),
+    prefetch: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+  }),
+  usePathname: jest.fn(() => "/"),
+  useSearchParams: jest.fn(() => new URLSearchParams()),
+  useParams: jest.fn(() => ({})),
+  redirect: jest.fn(),
+  notFound: jest.fn(),
+}));
+
 // Mock Next.js Link component
 jest.mock("next/link", () => {
   return ({ children, href }) => {
