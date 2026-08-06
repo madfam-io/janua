@@ -98,6 +98,19 @@ spec:
                 secretKeyRef:
                   name: janua-secrets
                   key: dhanam-webhook-secret
+            # Dhanam customer-federation checkout relay (#453). The relay
+            # fails closed (503 "Billing is not configured") unless BOTH
+            # DHANAM_FEDERATION_URL and FEDERATION_API_TOKEN resolve
+            # (_federation_configured in checkout_dhanam.py), so the optional
+            # token ref is crash-safe in envs the operator hasn't provisioned.
+            - name: DHANAM_FEDERATION_URL
+              value: 'https://api.dhan.am'
+            - name: FEDERATION_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: federation-api-token
+                  optional: true
             - name: JANUA_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -122,6 +135,14 @@ spec:
               value: info
             - name: BASE_URL
               value: https://auth.madfam.io
+            # Frontend pages (NOT the API host — auth.madfam.io serves no pages;
+            # reset/verify email links are built on this, see PR#473)
+            - name: FRONTEND_URL
+              value: https://app.janua.dev
+            # Product reset pages allowed to receive password-reset tokens via
+            # ForgotPasswordRequest.redirect_base (comma-separated allowlist)
+            - name: PASSWORD_RESET_REDIRECT_ORIGINS
+              value: https://app.dhan.am/reset-password
             # Email
             - name: EMAIL_PROVIDER
               value: resend
@@ -134,13 +155,34 @@ spec:
                 secretKeyRef:
                   name: janua-secrets
                   key: resend-api-key
+            # SMTP transport for the real mailer (email_service.py) — Resend's
+            # SMTP interface with the SAME api key as password. No new secret:
+            # this is what makes password-reset email physically send (PR#473;
+            # before that a placebo service logged and sent nothing).
+            - name: SMTP_HOST
+              value: smtp.resend.com
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_TLS
+              value: "true"
+            - name: SMTP_USERNAME
+              value: resend
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: resend-api-key
+            - name: FROM_EMAIL
+              value: noreply@janua.dev
+            - name: FROM_NAME
+              value: Janua
             # Custom domain for white-label OIDC issuer (auth.madfam.io instead of api.janua.dev)
             - name: JANUA_CUSTOM_DOMAIN
               value: auth.madfam.io
             # CORS - All allowed frontend origins
             - name: CORS_ORIGINS
               # Non-core app origins auto-derived from OAuth client redirect_uris via DynamicCORSMiddleware
-              value: "https://admin.janua.dev,https://app.janua.dev,https://api.enclii.dev,https://app.enclii.dev,https://admin.enclii.dev,https://auth.madfam.io,https://tezca.mx,https://admin.tezca.mx,https://www.tezca.mx,https://madfam.io,https://www.madfam.io,https://dhanam.madfam.io,https://forgesight.madfam.io,https://forgesight.quest,https://www.forgesight.quest,https://app.forgesight.quest,https://admin.forgesight.quest,https://pravara.madfam.io,https://dhan.am,https://app.dhan.am,https://rondel.io,https://fortuna.tube,https://selva.town,https://ceq.lol"
+              value: "https://admin.janua.dev,https://app.janua.dev,https://api.enclii.dev,https://app.enclii.dev,https://admin.enclii.dev,https://auth.madfam.io,https://tezca.mx,https://admin.tezca.mx,https://www.tezca.mx,https://madfam.io,https://www.madfam.io,https://dhanam.madfam.io,https://forgesight.madfam.io,https://forgesight.quest,https://www.forgesight.quest,https://app.forgesight.quest,https://admin.forgesight.quest,https://pravara.madfam.io,https://dhan.am,https://app.dhan.am,https://rondel.io,https://fortuna.tube,https://selva.town,https://ceq.lol,https://crm.madfam.io,https://staging-crm.madfam.io"
             # Cookie domain for cross-subdomain SSO (*.madfam.io for auth.madfam.io)
             - name: COOKIE_DOMAIN
               value: ".madfam.io"

@@ -29,8 +29,10 @@ PRICING_TIERS = {
         "features": ["basic_auth", "email_support", "standard_integrations"],
     },
     "pro": {
-        "price_mxn": 1380,  # ~$69 USD at 20 MXN/USD
-        "price_usd": 69,
+        # Ratified packaging (internal-devops decisions/2026-07-11): janua
+        # Managed (Pro) = $29/mo (MX$499 gross), flat per-org.
+        "price_mxn": 499,
+        "price_usd": 29,
         "mau_limit": 10000,
         "features": ["everything_community", "advanced_rbac", "custom_domains", "webhooks", "sso"],
     },

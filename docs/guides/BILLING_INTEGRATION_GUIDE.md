@@ -1,7 +1,7 @@
 # Janua Billing Integration Guide
 
 **Last Updated**: November 2025  
-**Status**: Production Ready  
+**Status**: Implemented — in production use for MADFAM ecosystem billing (see the [GA claim matrix](../enterprise/GA_CLAIM_MATRIX.md) for externally supported claims)  
 **Version**: 1.0
 
 ## Overview
@@ -37,9 +37,9 @@ Janua uses a provider abstraction layer that allows seamless switching between p
 
 | Provider | Status | Best For | Currencies |
 |----------|--------|----------|------------|
-| **Stripe** | ✅ Production Ready | Global payments, US/EU/LATAM | 45+ currencies |
-| **Conekta** | ✅ Production Ready | Mexico (OXXO, SPEI, Cards) | MXN |
-| **Polar.sh** | ✅ Production Ready | Merchant of Record, SaaS, Global Tax | Global |
+| **Stripe** | ✅ Implemented | Global payments, US/EU/LATAM | 45+ currencies |
+| **Conekta** | ✅ Implemented | Mexico (OXXO, SPEI, Cards) | MXN |
+| **Polar.sh** | ✅ Implemented | Merchant of Record, SaaS, Global Tax | Global |
 
 > **📖 For detailed Polar.sh integration, see [POLAR_INTEGRATION_GUIDE.md](./POLAR_INTEGRATION_GUIDE.md)**
 

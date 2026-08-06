@@ -135,7 +135,7 @@ const rows: Row[] = [
   },
   {
     feature: 'Paid entry tier (per month)',
-    janua: '$69 / 10k MAU',
+    janua: '$29 / 10k MAU',
     auth0: '$240+',
     clerk: '$25 + per-MAU',
     keycloak: 'Self-operate',
@@ -256,7 +256,7 @@ export function AccurateComparison() {
             </h3>
             <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
               <li>You keep the user table. Self-host on Postgres you operate.</li>
-              <li>One bill at $69/$299, not per-MAU metered SaaS pricing.</li>
+              <li>One flat bill at $29/$149, not per-MAU metered SaaS pricing.</li>
               <li>SCIM v2 + audit retention without an enterprise upsell.</li>
               <li>9 client SDKs in the same monorepo as the API.</li>
             </ul>

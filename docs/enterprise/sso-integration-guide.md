@@ -1,8 +1,15 @@
 # Enterprise SSO Integration Guide
 
+> [!NOTE]
+> **Claim status: Roadmap/Beta.** Per the
+> [GA claim matrix](GA_CLAIM_MATRIX.md), enterprise SAML SSO may only be
+> offered to selected customers once a customer-specific IdP integration proof
+> and support runbook exist. The implementation documented here ships in the
+> repo today for design partners and self-hosters.
+
 ## Overview
 
-Janua provides comprehensive Single Sign-On (SSO) support for enterprise organizations, enabling seamless integration with existing identity providers while maintaining security and compliance requirements.
+Janua provides Single Sign-On (SSO) support for enterprise organizations, enabling integration with existing identity providers while maintaining security and compliance requirements.
 
 ## Supported Protocols
 

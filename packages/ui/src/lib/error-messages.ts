@@ -244,9 +244,20 @@ export const AUTH_ERRORS = {
  * Parse API error response and return actionable error
  */
 export function parseApiError(error: any, context?: ErrorContext): ActionableError {
-  // Extract error information
-  const status = context?.status || error?.response?.status || error?.status
-  const message = context?.message || error?.message || error?.response?.data?.message
+  // Extract error information. JanuaError (typescript-sdk) carries the HTTP
+  // status as `statusCode`, not `status` — missing it here made EVERY SDK
+  // error (400 password policy, 503 server bug, …) fall through to
+  // NETWORK_ERROR and display as "Unable to connect to the authentication
+  // server", swallowing the server's actionable detail. FastAPI puts the
+  // human-readable reason in `detail`.
+  const status =
+    context?.status || error?.response?.status || error?.status || error?.statusCode
+  const message =
+    context?.message ||
+    error?.response?.data?.detail ||
+    error?.response?.data?.message ||
+    error?.detail ||
+    error?.message
 
   // Map HTTP status codes to error types
   if (status === 401) {
@@ -290,6 +301,17 @@ export function parseApiError(error: any, context?: ErrorContext): ActionableErr
     if (message?.toLowerCase().includes('code')) {
       return AUTH_ERRORS.INVALID_MFA_CODE
     }
+    // Validation errors that match no known pattern: show the server's own
+    // words. "Password must be at least 12 characters long" is actionable;
+    // a generic (or worse, network) message is not.
+    if (message) {
+      return {
+        title: 'Please check your details',
+        message,
+        actions: ['Fix the issue above and try again'],
+        technical: error?.message,
+      }
+    }
   }
 
   if (status === 429) {
@@ -308,10 +330,15 @@ export function parseApiError(error: any, context?: ErrorContext): ActionableErr
     return AUTH_ERRORS.SERVER_ERROR
   }
 
-  // Network errors
-  if (error?.message?.toLowerCase().includes('network') ||
+  // Network errors — ONLY when there is genuinely no HTTP response. A bare
+  // `!status` here previously converted every unrecognized error into
+  // "Unable to connect", which is a lie whenever the server DID answer.
+  if (
+    !status &&
+    (error?.message?.toLowerCase().includes('network') ||
       error?.message?.toLowerCase().includes('fetch') ||
-      !status) {
+      error instanceof TypeError)
+  ) {
     return AUTH_ERRORS.NETWORK_ERROR
   }
 

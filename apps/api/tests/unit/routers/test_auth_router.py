@@ -450,6 +450,7 @@ class TestRouterConfiguration:
         # Check for core auth routes (routes include /auth prefix)
         required_routes = [
             "/auth/signup",
+            "/auth/register",
             "/auth/signin",
             "/auth/login",
             "/auth/logout",

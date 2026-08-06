@@ -86,16 +86,19 @@ export function ComparisonSection() {
           supabase: '50,000'
         },
         {
-          // Pro = $69/mo per PRICING_TIERS (apps/api). Includes 10,000 MAU.
-          metric: 'Pro Tier Price',
-          janua: '$69/mo',
+          // Managed (Pro) = $29/mo per the ratified packaging decision
+          // (internal-devops decisions/2026-07-11). Flat per project, up to
+          // 10,000 MAU under fair use.
+          metric: 'Paid Entry Price',
+          janua: '$29/mo',
           clerk: '$99/mo',
           auth0: '$240/mo',
           supabase: '$25/mo'
         },
         {
+          // Janua Pro is flat per-org, NOT per-MAU metered (ratified model).
           metric: 'Overage Cost/1k MAU',
-          janua: '$10',
+          janua: 'Flat, no meter',
           clerk: '$20',
           auth0: '$28',
           supabase: '$0.00325'

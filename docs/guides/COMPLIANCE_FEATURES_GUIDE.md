@@ -4,6 +4,13 @@
 **Last Updated**: November 16, 2025  
 **Compliance Standards**: GDPR, CCPA, SOC 2
 
+> [!NOTE]
+> **Claim status:** These features support compliance *workflows*; they are
+> not certifications. Per the
+> [GA claim matrix](../enterprise/GA_CLAIM_MATRIX.md), compliance exports are
+> **roadmap** until export/delete evidence exists, and SOC 2 Type II is a
+> future compliance program, not a current certification.
+
 ## Table of Contents
 
 1. [Overview](#overview)

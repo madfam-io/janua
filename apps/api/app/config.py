@@ -36,6 +36,11 @@ class Settings(BaseSettings):
         default="development", pattern="^(development|staging|production|test)$"
     )
     BASE_URL: str = Field(default="https://janua.dev")
+    # Comma-separated allowlist of product reset pages that may receive a
+    # password-reset token via ForgotPasswordRequest.redirect_base, e.g.
+    # "https://app.dhan.am/reset-password". Values not on this list are
+    # ignored and the email falls back to FRONTEND_URL's reset page.
+    PASSWORD_RESET_REDIRECT_ORIGINS: str = Field(default="")
     API_BASE_URL: str = Field(
         default="https://api.janua.dev",
         description="Base URL for the API (used for SSO callbacks, OIDC discovery, etc.)",
@@ -49,15 +54,29 @@ class Settings(BaseSettings):
     )
     DOMAIN: str = Field(default="localhost")
     UPLOAD_DIR: str = Field(default="/tmp/uploads")
-    FRONTEND_URL: Optional[str] = Field(default="http://localhost:3000")
+    # Dashboard app URL (app.janua.dev), used for verification/invitation/security
+    # links. Matches the fallback already used in app/services/email/notifications.py
+    # — a localhost default here would break those links in any deployment that
+    # forgets to set FRONTEND_URL explicitly.
+    FRONTEND_URL: Optional[str] = Field(default="https://app.janua.dev")
 
     # Database
     DATABASE_URL: str = Field(
         default="postgresql://postgres:postgres@localhost:5432/janua",
         description="PostgreSQL connection URL",
     )
-    DATABASE_POOL_SIZE: int = Field(default=20)
-    DATABASE_MAX_OVERFLOW: int = Field(default=10)
+    # Connection budget vs the SHARED postgres.data.svc: max_connections=100
+    # for the ENTIRE cluster (3 reserved for superuser), ~90 in use at steady
+    # state, and 3,057 "remaining connection slots are reserved" FATALs logged
+    # in the 48h before the 2026-07-22 exhaustion incident. Budget for
+    # janua-api: 2 replicas x (pool 5 + overflow 5) = 20 absolute max against
+    # a measured steady state of ~5-7 total. Janua is the SSO backbone for
+    # every platform — it must never be the tenant that exhausts the shared
+    # database, because auth outages cascade to all of them. Raise per-env via
+    # these env vars, not by editing code. (Same budgeting pattern as
+    # fortuna/infra/k8s/production/api-deployment.yaml.)
+    DATABASE_POOL_SIZE: int = Field(default=5)
+    DATABASE_MAX_OVERFLOW: int = Field(default=5)
     DATABASE_POOL_TIMEOUT: int = Field(default=30)
     AUTO_MIGRATE: bool = Field(default=False)
 
@@ -220,6 +239,21 @@ class Settings(BaseSettings):
     DHANAM_URL: Optional[str] = Field(
         default=None,
         description="Dhanam billing service URL for checkout redirects. Set via DHANAM_URL env var.",
+    )
+    DHANAM_FEDERATION_URL: Optional[str] = Field(
+        default=None,
+        description=(
+            "Dhanam federation API origin (e.g. https://api.dhan.am) used by the checkout "
+            "relay (/v1/customers/resolve + /v1/customers/{id}/checkout). "
+            "Set via DHANAM_FEDERATION_URL env var."
+        ),
+    )
+    FEDERATION_API_TOKEN: Optional[str] = Field(
+        default=None,
+        description=(
+            "Shared bearer token for Dhanam customer-federation calls "
+            "(ecosystem-standard name, same as the RouteCraft/Avala consumers)."
+        ),
     )
 
     # Email aliases for easier access
@@ -649,6 +683,7 @@ class Settings(BaseSettings):
             "OAUTH_DISCORD_CLIENT_SECRET", "OAUTH_TWITTER_CLIENT_SECRET",
             "OAUTH_LINKEDIN_CLIENT_SECRET", "OAUTH_SLACK_CLIENT_SECRET",
             "CONEKTA_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET", "DHANAM_WEBHOOK_SECRET",
+            "FEDERATION_API_TOKEN",
             "CLOUDFLARE_TURNSTILE_SECRET", "CLOUDFLARE_R2_SECRET_KEY", "R2_SECRET_ACCESS_KEY",
             "MONITORING_API_KEY", "SMTP_PASSWORD",
         ]

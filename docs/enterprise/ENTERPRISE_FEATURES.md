@@ -1,5 +1,12 @@
 # Janua Enterprise Features Documentation
 
+> [!NOTE]
+> **Claim status:** This document describes the enterprise capabilities
+> implemented in this repository. Commercial availability is governed by the
+> [GA claim matrix](GA_CLAIM_MATRIX.md): RBAC and audit logging are **beta**
+> (hosted proof pending), and SCIM 2.0 provisioning is **roadmap** — it must
+> not be sold as available until synthetics and monitoring exist.
+
 ## Overview
 
 Janua's enterprise features provide comprehensive multi-tenant architecture, advanced security, compliance, and integration capabilities designed for large-scale deployments.

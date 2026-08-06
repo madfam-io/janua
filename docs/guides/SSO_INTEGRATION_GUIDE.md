@@ -4,6 +4,12 @@
 **Last Updated**: November 16, 2025  
 **Applies to**: Enterprise Plan
 
+> [!NOTE]
+> **Claim status: Roadmap/Beta.** Per the
+> [GA claim matrix](../enterprise/GA_CLAIM_MATRIX.md), enterprise SAML SSO is
+> not commercially GA — it may be offered to selected customers only after a
+> customer-specific IdP proof and support runbook exist.
+
 ## Table of Contents
 
 1. [Overview](#overview)

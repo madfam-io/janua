@@ -30,19 +30,19 @@ replicas:
 
 # Staging image digests — CI overwrites on each main-branch push.
 images:
-- digest: sha256:2d7ad389c8b4524157f86fa9f11bda904f5c3a4a04b0917110d078acb0ae8ead
+- digest: sha256:481bf706822a001daf4ad326921c1f81e66ca042047979ddda139971427c23a9
   name: ghcr.io/madfam-org/janua-admin
   newName: ghcr.io/madfam-org/janua-admin
-- digest: sha256:faa2fa2ef203d6c291795108c204ff1f5e4845b130c252b4d5a8651d040a52c9
+- digest: sha256:6b2124d792110aaa4e06daf2d0757c101ab69a3d0b8e62aa189253bd9f337d6f
   name: ghcr.io/madfam-org/janua-api
   newName: ghcr.io/madfam-org/janua-api
-- digest: sha256:7ab6f1c7c604b8f987dbd5c8d9d955fe0b1039c89e2922f5afdab74daa98294a
+- digest: sha256:b53702395b41b71ab937f14151048e0b849fa53a84c0141d5994790422dce3ab
   name: ghcr.io/madfam-org/janua-dashboard
   newName: ghcr.io/madfam-org/janua-dashboard
 - digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
   name: ghcr.io/madfam-org/janua-docs
   newName: ghcr.io/madfam-org/janua-docs
-- digest: sha256:506404e72f4553461bee651cc508e50e24b881b2993511d52f583e5b24dde85f
+- digest: sha256:32fc2cdea2aaed2d2188176a3bfa7a3e1c94e77c937dc1666fa436be4f92dfc9
   name: ghcr.io/madfam-org/janua-website
   newName: ghcr.io/madfam-org/janua-website
 

@@ -157,9 +157,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth()
 
-    const handleSignIn = ({ user: userData }: { user: User }) => {
-      setUser(userData)
-      setMiddlewareCookies(userData)
+    const handleSignIn = ({ user: userData }: { user?: User }) => {
+      if (userData?.email) {
+        setUser(userData)
+        setMiddlewareCookies(userData)
+      } else {
+        // Defensive hydration: if an emitter ever loses the user payload,
+        // fetch it from /auth/me instead of stranding a signed-in SDK
+        // behind unauthenticated React state (the /login bounce bug).
+        refreshUser()
+      }
     }
     const handleSignOut = () => {
       setUser(null)
@@ -167,14 +174,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const handleTokenRefresh = () => refreshUser()
 
-    januaClient.on('signIn', handleSignIn)
-    januaClient.on('signOut', handleSignOut)
-    januaClient.on('tokenRefreshed', handleTokenRefresh)
+    // Subscribe to the CANONICAL SDK event names. The SDK emits
+    // 'auth:signedIn' / 'auth:signedOut' / 'token:refreshed'; the previous
+    // subscriptions ('signIn'/'signOut'/'tokenRefreshed') were alias names
+    // that were never emitted, so the provider never learned about a
+    // successful sign-in and bounced authenticated users back to /login.
+    januaClient.on('auth:signedIn', handleSignIn)
+    januaClient.on('auth:signedOut', handleSignOut)
+    januaClient.on('token:refreshed', handleTokenRefresh)
 
     return () => {
-      januaClient.off('signIn', handleSignIn)
-      januaClient.off('signOut', handleSignOut)
-      januaClient.off('tokenRefreshed', handleTokenRefresh)
+      januaClient.off('auth:signedIn', handleSignIn)
+      januaClient.off('auth:signedOut', handleSignOut)
+      januaClient.off('token:refreshed', handleTokenRefresh)
     }
   }, [refreshUser])
 

@@ -88,7 +88,10 @@ export class JanuaClient extends EventEmitter<SdkEventMap> {
     this.auth = new Auth(
       this._httpClient,
       this.tokenManager,
-      () => this.emit('auth:signedIn', { user: {} as any }),
+      // Forward the REAL user payload from the auth module. Discarding it
+      // (the old `() => emit(..., { user: {} })`) left event consumers with
+      // an empty user object and no way to know who signed in.
+      (data) => this.emit('auth:signedIn', { user: (data?.user ?? {}) as User }),
       () => this.emit('auth:signedOut', {}),
       this.config.baseURL
     );
@@ -489,6 +492,36 @@ export class JanuaClient extends EventEmitter<SdkEventMap> {
   }
 
   // Event Methods (inherited from EventEmitter but with typed interface)
+
+  /**
+   * Canonical event name -> documented backward-compatibility alias.
+   *
+   * SdkEventMap declares BOTH spellings as part of the public contract, but
+   * historically only the canonical names were ever emitted. Consumers
+   * subscribed to the documented aliases (e.g. the admin console's
+   * AuthProvider listening on 'signIn') therefore never received events and
+   * concluded the user was signed out — see the admin login bounce bug.
+   */
+  private static readonly EVENT_ALIASES: Partial<Record<SdkEventType, SdkEventType>> = {
+    'auth:signedIn': 'signIn',
+    'auth:signedOut': 'signOut',
+    'token:refreshed': 'tokenRefreshed',
+    'auth:error': 'authError'
+  };
+
+  /**
+   * Emit an event under its canonical name AND its documented
+   * backward-compatibility alias, so listeners on either spelling fire.
+   */
+  override emit<T extends SdkEventType>(event: T, data: SdkEventMap[T]): void {
+    super.emit(event, data);
+    const alias = JanuaClient.EVENT_ALIASES[event];
+    if (alias) {
+      // Alias payloads are structurally identical to their canonical
+      // counterparts (see SdkEventMap), so the cast is safe.
+      super.emit(alias, data as never);
+    }
+  }
 
   /**
    * Add event listener

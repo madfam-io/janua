@@ -16,12 +16,12 @@
 
 
 > **The Auth0 alternative you can run on your own infrastructure.**
-> *95%+ feature parity. Zero per-user pricing. Complete control.*
+> *Zero per-user pricing. Complete control. Currently in private alpha.*
 
 [![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)](https://fastapi.tiangolo.com)
-[![Production Ready](https://img.shields.io/badge/status-production%20ready-brightgreen)](https://janua.dev)
+[![Status](https://img.shields.io/badge/status-private%20alpha-orange)](docs/enterprise/GA_CLAIM_MATRIX.md)
 [![Coverage](https://codecov.io/gh/madfam-org/janua/branch/main/graph/badge.svg)](https://codecov.io/gh/madfam-org/janua)
 
 **Website:** [janua.dev](https://janua.dev) | **Docs:** [docs.janua.dev](https://docs.janua.dev) | **Demo:** [demo.janua.dev](https://demo.janua.dev)
@@ -29,6 +29,12 @@
 ---
 
 ## Production Status
+
+Janua runs in production today as the identity provider for the MADFAM
+ecosystem — our own infrastructure, dogfooded daily. External availability is
+**private alpha for design partners**. The
+[GA claim matrix](docs/enterprise/GA_CLAIM_MATRIX.md) is the source of truth
+for what is supported, beta, or roadmap; this README follows it.
 
 | Service | Domain | Status |
 |---------|--------|--------|
@@ -55,32 +61,45 @@
 
 A self-hosted authentication platform built with FastAPI and modern web technologies. Think Auth0 or Clerk, but you run it on your own infrastructure and the source code is yours.
 
-**✅ Production-Ready Features:**
+Every capability below is labeled against our
+[GA claim matrix](docs/enterprise/GA_CLAIM_MATRIX.md): "running today" means
+it powers MADFAM production SSO right now; "hardening" means the code is
+implemented and in daily use, but we are still filing the hosted proof
+(synthetics, E2E journeys, runbooks) we require before calling it generally
+available.
 
-**Authentication Methods:**
-- ✅ Email/password authentication with secure hashing
-- ✅ OAuth 2.0 Social Login (Google, GitHub, Microsoft, Apple, Discord, Twitter, LinkedIn, Slack)
-- ✅ SAML 2.0 SSO for enterprise IdPs
-- ✅ OIDC Provider with full OpenID Connect compliance
-- ✅ Magic Links (passwordless email authentication)
+**✅ Running in production today** (Janua is the SSO for the MADFAM ecosystem):
 
-**Multi-Factor Authentication:**
-- ✅ TOTP (Authenticator apps - Google, Authy, 1Password)
-- ✅ WebAuthn/Passkeys (FIDO2) - Biometric & hardware keys
-- ✅ Backup Codes (10 recovery codes in XXXX-XXXX format)
+- Self-hosted OAuth2/OIDC identity provider (authorization code + PKCE)
+- OpenID Connect discovery (`/.well-known/openid-configuration`) and published JWKS
+- RS256-signed JWTs — verify tokens anywhere against our public keys
+- Email/password authentication with secure hashing
+- OAuth 2.0 social login (Google, GitHub, Microsoft, Apple, Discord, Twitter, LinkedIn, Slack)
+- Magic links (passwordless email authentication)
+- Hosted health endpoints for operations
 
-**Enterprise Features:**
-- ✅ Multi-tenancy with organization hierarchy
-- ✅ RBAC with granular permissions
-- ✅ SCIM 2.0 user provisioning
-- ✅ Webhooks for event notifications
-- ✅ JIT (Just-In-Time) provisioning
+**🔧 Implemented, hardening in progress** (in daily use; GA evidence being filed):
 
-**Developer Experience:**
-- ✅ 202 REST API endpoints
-- ✅ SDKs: React, Vue, Next.js, Python, Go, Flutter, React Native
-- ✅ RS256 JWT with automatic key rotation
-- ✅ OpenAPI documentation at `/docs`
+- Multi-factor authentication: TOTP, WebAuthn/passkeys (FIDO2), backup codes
+- Multi-tenancy with organization hierarchy
+- RBAC with granular permissions (treat as beta until tenant-isolation proof is current)
+- Audit logging (treat as beta until retention/export proof lands)
+- Admin org/user/app operations
+- Client-credentials token exchange, session refresh/logout journey evidence
+- Webhooks and JIT (Just-In-Time) provisioning
+
+**🛠️ Developer experience:**
+
+- Extensive REST API with generated OpenAPI reference at `/docs`
+- SDKs: React, Vue, Next.js, TypeScript, Python, Go, Flutter, React Native
+- Auth0 migration tooling (beta — dry-run first; see below)
+
+**🗺️ Roadmap — not GA today** (details in [Roadmap](#roadmap)):
+
+- SAML 2.0 SSO — implementation exists in the tree; commercial support is roadmap/beta until per-customer proof exists
+- SCIM 2.0 user provisioning
+- Compliance exports, SOC 2 Type II program, HIPAA/BAA
+- Uptime SLAs and enterprise support contracts
 
 **What we're improving:**
 - ⚠️ Documentation completeness (ongoing)
@@ -89,8 +108,33 @@ A self-hosted authentication platform built with FastAPI and modern web technolo
 
 **Not available (by design):**
 - ❌ Managed SaaS hosting (self-host only - that's the point)
-- ❌ Enterprise support contracts (community-driven)
-- ❌ SOC 2 compliance reports (open source audit instead)
+
+---
+
+## Role in the MADFAM monetization engine
+
+Beyond being the ecosystem's identity provider, Janua is where **a purchase becomes access**. Catalog, checkout,
+and payment are owned by other platforms; once a payment is confirmed, Janua is the component that grants the
+resulting entitlement — and from then on it is the authority every other product asks *"may this user do this?"*.
+
+That gives Janua two commercial jobs:
+
+- **Entitlement grant** — turning a confirmed purchase into a durable `(product, tier)` grant on the buyer's identity.
+- **Enforcement** — being the one place other products check before serving a paid capability, so entitlement logic
+  is not re-implemented per product.
+
+**API shape contributors should know:** an entitlement grant today resolves to a **single `(product, tier)` pair —
+one purchase grants one product**. Multi-product purchases and bundles are therefore not expressible against the
+current entitlement API. Supporting them is a change to this repository, not a configuration choice somewhere
+upstream.
+
+> **Boundary note.** This is a deliberately sanitized summary of the repository's *designed* role. It is not a
+> statement about the live state of any deployment. The canonical end-to-end description of the monetization
+> pipeline is private and lives in the `internal-devops` repository at `docs/monetization-engine.md`. Payment-side
+> routes and event names, credential and signing-secret names, deployment topology, and tax/invoicing
+> configuration belong there and must not be added to this repository.
+
+_Last Updated: 2026-07-26_
 
 ---
 
@@ -108,9 +152,13 @@ So we built this. All features are free and open source. AGPL v3 licensed.
 
 **We built a migration tool to help you escape Auth0's pricing.**
 
+**Status: Beta.** Per our [GA claim matrix](docs/enterprise/GA_CLAIM_MATRIX.md),
+migration assistance is offered after an import/export **dry-run** for your
+scope, with rollback and integrity evidence — we don't commit dates before that.
+
 If you're paying **$2,000-5,000/month** for Auth0 (or more with SSO/SCIM), you can migrate to self-hosted Janua and run it for **~$170/month**.
 
-**Savings: $24,000-58,000/year.**
+**Estimated savings: $24,000-58,000/year**, depending on your Auth0 plan.
 
 ### Migration Tool Features
 
@@ -164,7 +212,7 @@ pnpm dev
 # Open http://localhost:3001 (website) or http://localhost:8000/docs (API)
 ```
 
-**That's it.** You now have working auth with SSO, MFA, and passkeys.
+**That's it.** You now have a working OAuth2/OIDC provider with MFA and passkeys.
 
 ---
 
@@ -215,11 +263,11 @@ pnpm typecheck
 ## What you get
 
 ### Backend (FastAPI + PostgreSQL)
-- **202 REST endpoints** for complete auth management
+- **Full REST API** for auth, user, org, and MFA management
 - **Async Python** with SQLAlchemy 2.x
 - **Redis caching** for sessions and rate limiting
-- **JWT tokens** with RS256 signing
-- **Audit logging** for security events
+- **JWT tokens** with RS256 signing and published JWKS
+- **Audit logging** for security events (beta)
 - **OpenAPI docs** at `/docs`
 
 ### Frontend SDKs
@@ -375,7 +423,7 @@ export const { GET, POST } = JanuaNextAuth({
 ┌─────────────────────────────────────────┐
 │      Janua API (FastAPI)               │
 │   • JWT authentication                  │
-│   • OAuth/SAML/WebAuthn                 │
+│   • OAuth/OIDC/WebAuthn                 │
 │   • User/org management                 │
 │   • Audit logging                       │
 └─────┬──────────────────────┬────────────┘
@@ -394,23 +442,31 @@ export const { GET, POST } = JanuaNextAuth({
 
 ## Is this production-ready?
 
-**Honest answer:** It depends.
+**Honest answer:** it runs our production, and we hold ourselves to a written
+standard — the [GA claim matrix](docs/enterprise/GA_CLAIM_MATRIX.md) — before
+claiming it can run yours.
 
-**What we know works:**
-- Core authentication flows (tested with 150+ unit tests)
-- SSO integrations (SAML/OIDC tested with Okta, Azure AD)
-- MFA implementations (TOTP, SMS, WebAuthn)
-- Multi-tenancy and RBAC
+**What runs in production today:**
+- Janua is the identity provider for the MADFAM ecosystem (Enclii, Dhanam, and more) — OIDC discovery, JWKS, and hosted health checks are exercised daily
+- Core authentication flows, covered by the unit/integration test suite
+- MFA implementations (TOTP, WebAuthn/passkeys, backup codes)
+
+**What we require before calling a capability GA:**
+- Hosted synthetic or E2E journey evidence (login, session refresh/logout, admin operations)
+- Tenant-isolation and role test matrices for RBAC
+- Retention/export proof for audit logs
+- A support runbook and named ownership
 
 **What we don't know yet:**
 - How it performs at 100K+ users (we haven't run it there)
 - Every edge case in every browser (help us test!)
-- Long-term upgrade paths (we're <1 year old)
+- Long-term upgrade paths (the project is young)
 
 **Our recommendation:**
 - ✅ Use it if you want to self-host and can debug issues
 - ✅ Use it if you're okay filing bugs when you find them
-- ⚠️ Don't use it if you need guaranteed uptime SLAs
+- ✅ Talk to us about the design-partner program if you need SAML/SCIM/compliance on a committed timeline
+- ⚠️ Don't use it if you need guaranteed uptime SLAs today
 - ⚠️ Don't use it if you can't troubleshoot Docker/PostgreSQL
 
 ---
@@ -442,7 +498,14 @@ We need help. This is a big project and we're a small team.
 - Making setup easier (one-command installs)
 - Improving documentation
 - Fixing bugs as they're reported
-- Testing the Auth0 migration tool with real users
+- Testing the Auth0 migration tool with real users (beta)
+
+**Enterprise track** — gated by the [GA claim matrix](docs/enterprise/GA_CLAIM_MATRIX.md); each item ships when its hosted proof is filed:
+- SAML 2.0 SSO commercial support (implementation exists; needs per-customer IdP proof and a support runbook)
+- SCIM 2.0 provisioning (needs create/update/deactivate synthetics)
+- Compliance exports (needs export/delete evidence and a retention policy)
+- SOC 2 Type II program; HIPAA/BAA legal review
+- Published uptime SLA (needs 30-day evidence and a support schedule)
 
 **What we're NOT doing:**
 - Building a managed SaaS version (yet)
@@ -465,10 +528,10 @@ We'll build what the community needs. Tell us what you need.
 
 **vs. Auth0/Okta:**
 - ✅ You own the infrastructure
-- ✅ No per-user pricing ($24K-58K/year savings)
-- ✅ Migration tool included (export users from Auth0)
+- ✅ No per-user pricing (est. $24K-58K/year savings)
+- ✅ Migration tool included (beta — export users from Auth0)
 - ❌ No managed service (you run it)
-- ❌ No compliance reports (yet)
+- ❌ No compliance reports (SOC 2 is on the roadmap, not a current certification)
 
 **vs. Clerk:**
 - ✅ Self-hostable
