@@ -29,7 +29,10 @@ config = context.config
 
 # Override sqlalchemy.url with our DATABASE_URL
 # Convert to async driver for async migrations
-database_url = settings.DATABASE_URL
+# Migrations keep a DIRECT postgres connection when the runtime routes
+# through pgbouncer (transaction pooling breaks DDL session semantics).
+# DIRECT_DATABASE_URL is optional; unset => DATABASE_URL (unchanged).
+database_url = getattr(settings, "DIRECT_DATABASE_URL", None) or settings.DATABASE_URL
 if database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
 config.set_main_option("sqlalchemy.url", database_url)

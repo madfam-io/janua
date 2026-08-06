@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     # database, because auth outages cascade to all of them. Raise per-env via
     # these env vars, not by editing code. (Same budgeting pattern as
     # fortuna/infra/k8s/production/api-deployment.yaml.)
+    # Optional: set when runtime DATABASE_URL routes through pgbouncer so
+    # alembic (manual in-pod runs; AUTO_MIGRATE) keeps a direct connection.
+    DIRECT_DATABASE_URL: Optional[str] = Field(default=None)
     DATABASE_POOL_SIZE: int = Field(default=5)
     DATABASE_MAX_OVERFLOW: int = Field(default=5)
     DATABASE_POOL_TIMEOUT: int = Field(default=30)
