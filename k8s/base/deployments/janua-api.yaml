@@ -63,6 +63,16 @@ spec:
                 secretKeyRef:
                   name: janua-secrets
                   key: database-url
+            # Direct 5432 URL for alembic when DATABASE_URL routes through
+            # pgbouncer (adoption ruling, move 3). optional: true — absent
+            # until the flip writes the key, and the app treats unset as
+            # "use DATABASE_URL".
+            - name: DIRECT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: direct-database-url
+                  optional: true
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:

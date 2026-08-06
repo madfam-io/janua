@@ -73,7 +73,10 @@ class DatabaseManager:
                 # Disable SSL for asyncpg connections when DATABASE_SSL_MODE is 'disable'
                 ssl_mode = getattr(settings, "DATABASE_SSL_MODE", "disable")
                 if ssl_mode == "disable" and "asyncpg" in database_url:
-                    engine_kwargs["connect_args"] = {"ssl": False}
+                    # statement_cache_size=0 for pgbouncer transaction pooling
+                    # (same rationale as app/database.py — the two engine
+                    # paths must not diverge on pooler compatibility).
+                    engine_kwargs["connect_args"] = {"ssl": False, "statement_cache_size": 0}
 
                 # Production-specific optimizations
                 if settings.ENVIRONMENT == "production":
