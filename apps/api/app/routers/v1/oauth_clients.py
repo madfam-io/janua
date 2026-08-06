@@ -250,6 +250,10 @@ async def create_oauth_client(
     This registers an application to use Janua as an OAuth2/OIDC provider.
     The client_secret is only returned once on creation - save it immediately.
 
+    **Duplicate-resistant**: a create whose ``name`` matches an existing ACTIVE
+    client is rejected with 409 and the existing ``client_id``. Pass
+    ``allow_duplicate: true`` to override deliberately.
+
     **Required permissions**: Authenticated user (org admin for org-scoped clients)
     """
     effective_organization_id = organization_id or data.organization_id
@@ -257,6 +261,35 @@ async def create_oauth_client(
         org_uuid = uuid.UUID(effective_organization_id) if effective_organization_id else None
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid organization_id format")
+
+    # Unlike /register, this path had no duplicate check at all, and it is the
+    # one the dashboard uses. On 2026-06-07/08 it produced 13 clients named
+    # "Voxa" with byte-identical redirect_uris and scopes — the active one 34
+    # seconds after the first — each with its own secret. Twelve were later
+    # deactivated rather than deleted.
+    #
+    # The dashboard made that easy to do: when its list request failed it
+    # rendered "No OAuth clients yet — create your first" (fixed separately),
+    # so the honest response to a broken screen was to press Create again.
+    #
+    # A name collision is rejected rather than silently reconciled because this
+    # is the human-facing path: the caller chose a name, and quietly returning
+    # someone else's client would be its own surprise. Secret rotation does NOT
+    # need a second client — POST /{client_id}/rotate rotates with a grace
+    # period — so refusing duplicates costs no legitimate flow.
+    if not data.allow_duplicate:
+        existing = await service.get_client_by_name(data.name)
+        if existing is not None and existing.is_active:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"An active OAuth client named {data.name!r} already exists "
+                    f"(client_id={existing.client_id}). To rotate its secret use "
+                    f"POST /api/v1/oauth/clients/{existing.client_id}/rotate. "
+                    f"To create a second client with this name anyway, resend "
+                    f"with allow_duplicate=true."
+                ),
+            )
 
     client, plain_secret = await service.create_client(
         data=data,

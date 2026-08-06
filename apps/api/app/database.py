@@ -44,7 +44,12 @@ if hasattr(settings, "DATABASE_URL") and settings.DATABASE_URL:
         )
         # Disable SSL for asyncpg if connecting to PostgreSQL without SSL
         if "asyncpg" in async_database_url:
-            engine_kwargs["connect_args"] = {"ssl": False}
+            # statement_cache_size=0: pgbouncer (transaction pooling)
+            # compatibility — unnamed prepared statements are per-transaction
+            # and pool-safe; named-cache entries break when consecutive
+            # transactions land on different server connections. One extra
+            # round-trip when connecting direct.
+            engine_kwargs["connect_args"] = {"ssl": False, "statement_cache_size": 0}
     else:
         # Use NullPool for SQLite to avoid connection sharing issues
         engine_kwargs["poolclass"] = NullPool
@@ -107,7 +112,7 @@ else:
         max_overflow=_max_overflow,
         pool_recycle=3600,  # Recycle connections after 1 hour
         pool_timeout=_pool_timeout,
-        connect_args={"ssl": False},  # Disable SSL for asyncpg
+        connect_args={"ssl": False, "statement_cache_size": 0},  # asyncpg: no SSL; unnamed statements for pgbouncer
     )
 
     sync_engine = create_engine(
