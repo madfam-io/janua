@@ -11,6 +11,12 @@ export interface SignInProps {
   className?: string
   /** Redirect URL after successful sign-in */
   redirectTo?: string
+  /**
+   * @deprecated Use `redirectTo`. Accepted as an alias because consumers
+   * behind `next/dynamic` lose prop typing — a silently-dropped redirect
+   * stranded users on the login page after a successful sign-in.
+   */
+  redirectUrl?: string
   /** Enable passkey sign-in */
   enablePasskeys?: boolean
   /** URL to sign-up page */
@@ -43,6 +49,7 @@ export function SignIn({
   onError,
   className,
   redirectTo,
+  redirectUrl: redirectUrlAlias,
   enablePasskeys = true,
   signUpUrl,
   socialProviders,
@@ -57,7 +64,7 @@ export function SignIn({
     <UISignIn
       januaClient={client}
       className={className}
-      redirectUrl={redirectTo}
+      redirectUrl={redirectTo ?? redirectUrlAlias}
       afterSignIn={onSuccess ? () => onSuccess() : undefined}
       onError={onError}
       enablePasskey={enablePasskeys}

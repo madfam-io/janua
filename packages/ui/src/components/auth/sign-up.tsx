@@ -9,6 +9,7 @@ import { AuthCard, type AuthCardLayout } from './auth-card'
 import { SocialButton, type SocialProvider } from './social-buttons'
 import { AuthDivider } from './divider'
 import { PasswordInput, calculatePasswordStrength } from './password-input'
+import { validatePasswordPolicy } from '../../lib/password-policy'
 
 export interface SignUpProps {
   /** Optional custom class name */
@@ -97,8 +98,15 @@ export function SignUp({
       return
     }
 
-    if (passwordStrength < 50) {
-      setError(formatErrorMessage(AUTH_ERRORS.WEAK_PASSWORD, true))
+    // Gate on the server's EXACT policy, not the heuristic meter — the meter
+    // accepted passwords the server rejects (e.g. 8 chars scoring 50+), and
+    // the user only learned after a 400 round-trip.
+    const policy = validatePasswordPolicy(password)
+    if (!policy.ok) {
+      setError(
+        'Password does not meet the requirements:\n' +
+          policy.failures.map((f) => `• ${f}`).join('\n')
+      )
       return
     }
 

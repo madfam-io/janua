@@ -58,8 +58,8 @@
     "zustand": "^5.0.12"
   },
   "peerDependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
     "@asamuzakjp/css-color": "^4.1.1",

@@ -39,11 +39,11 @@ Generate secure keys for production:
 ```bash
 # Generate INTERNAL_API_KEY (share across all services)
 openssl rand -hex 32
-# Example: 6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
+# Example: <GENERATED-openssl-rand-hex-32>
 
 # Generate JANUA_WEBHOOK_SECRET (for webhook signature verification)
 openssl rand -hex 32
-# Example: c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+# Example: <GENERATED-openssl-rand-hex-32>
 ```
 
 ## Step 2: Configure Janua (Central Hub)
@@ -58,10 +58,10 @@ EMAIL_PROVIDER=resend
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Internal API (service-to-service)
-INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
+INTERNAL_API_KEY=<GENERATED-openssl-rand-hex-32>
 
 # Webhook Secret (for billing webhooks to apps)
-JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+JANUA_WEBHOOK_SECRET=<GENERATED-openssl-rand-hex-32>
 ```
 
 ### Deploy Janua
@@ -79,6 +79,7 @@ curl -X GET https://api.janua.dev/api/v1/internal/email/health \
 ```
 
 Expected response:
+
 ```json
 {
   "status": "healthy",
@@ -95,8 +96,8 @@ Expected response:
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
-JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+JANUA_INTERNAL_API_KEY=<GENERATED-openssl-rand-hex-32>
+JANUA_WEBHOOK_SECRET=<GENERATED-openssl-rand-hex-32>
 ```
 
 ### Digifab-Quoting
@@ -104,8 +105,8 @@ JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa3
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
-JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+JANUA_INTERNAL_API_KEY=<GENERATED-openssl-rand-hex-32>
+JANUA_WEBHOOK_SECRET=<GENERATED-openssl-rand-hex-32>
 ```
 
 ### Avala
@@ -113,8 +114,8 @@ JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa3
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
-JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa39d988
+JANUA_INTERNAL_API_KEY=<GENERATED-openssl-rand-hex-32>
+JANUA_WEBHOOK_SECRET=<GENERATED-openssl-rand-hex-32>
 ```
 
 ### Forj
@@ -122,7 +123,7 @@ JANUA_WEBHOOK_SECRET=c5c75003c6bf10e0f8a5e02a90e4b9bbe74d1318ee3d1b1a3ab049d6fa3
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
+JANUA_INTERNAL_API_KEY=<GENERATED-openssl-rand-hex-32>
 ```
 
 ### madfam-site
@@ -130,7 +131,7 @@ JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e659
 ```env
 # .env
 JANUA_API_URL=https://api.janua.dev
-JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e65989901dd
+JANUA_INTERNAL_API_KEY=<GENERATED-openssl-rand-hex-32>
 ```
 
 ## Step 4: Run Database Migrations
@@ -138,6 +139,7 @@ JANUA_INTERNAL_API_KEY=6e33ae5c6f3032b0e1598d312372d2cfa5675bf510d16e49ce6d3e659
 Apply Prisma migrations to add Janua billing fields:
 
 ### Dhanam
+
 ```bash
 cd dhanam/apps/api
 npx prisma migrate deploy
@@ -146,12 +148,14 @@ npx prisma db push
 ```
 
 ### Digifab-Quoting
+
 ```bash
 cd digifab-quoting/apps/api
 npx prisma migrate deploy
 ```
 
 ### Avala
+
 ```bash
 cd avala/packages/db
 npx prisma migrate deploy
@@ -161,11 +165,11 @@ npx prisma migrate deploy
 
 Register these webhook URLs in Janua's webhook management:
 
-| App | Webhook URL | Events |
-|-----|-------------|--------|
-| Dhanam | `https://api.example.com/billing/webhook` | subscription.*, payment.* |
-| Digifab | `https://api.digifab.io/billing/webhook/janua` | subscription.*, payment.* |
-| Avala | `https://api.avala.mx/billing/webhook/janua` | subscription.*, payment.* |
+| App     | Webhook URL                                    | Events                    |
+| ------- | ---------------------------------------------- | ------------------------- |
+| Dhanam  | `https://api.example.com/billing/webhook`      | subscription._, payment._ |
+| Digifab | `https://api.digifab.io/billing/webhook/janua` | subscription._, payment._ |
+| Avala   | `https://api.avala.mx/billing/webhook/janua`   | subscription._, payment._ |
 
 ## Testing
 
@@ -209,16 +213,16 @@ curl -X POST https://api.janua.dev/api/v1/internal/email/send-template \
 const januaEmailService = this.moduleRef.get(JanuaEmailService);
 
 // Send welcome email
-await januaEmailService.sendWelcomeEmail('user@example.com', 'John Doe');
+await januaEmailService.sendWelcomeEmail("user@example.com", "John Doe");
 
 // Send custom template
 await januaEmailService.sendTemplateEmail({
-  to: 'user@example.com',
-  template: 'billing/payment-succeeded',
+  to: "user@example.com",
+  template: "billing/payment-succeeded",
   variables: {
-    amount: '29.99',
-    currency: 'USD',
-    invoice_number: 'INV-001',
+    amount: "29.99",
+    currency: "USD",
+    invoice_number: "INV-001",
   },
 });
 ```
@@ -246,18 +250,18 @@ curl -X POST https://api.example.com/billing/webhook \
 
 ## Available Templates
 
-| Template ID | Description | Required Variables |
-|-------------|-------------|-------------------|
-| `auth/welcome` | New user welcome | `user_name`, `app_name` |
-| `auth/password-reset` | Password reset | `reset_link`, `expires_in` |
-| `auth/email-verification` | Email verification | `verification_link`, `expires_in` |
-| `billing/invoice` | Invoice notification | `invoice_number`, `amount`, `currency`, `due_date` |
-| `billing/payment-succeeded` | Payment confirmation | `amount`, `currency` |
-| `billing/payment-failed` | Payment failure | `amount`, `currency`, `retry_date` |
-| `transactional/quote-ready` | Quote ready (Digifab) | `quote_number`, `total_amount` |
-| `transactional/certificate` | DC-3 certificate (Avala) | `certificate_name`, `recipient_name` |
-| `transactional/budget-alert` | Budget alert (Dhanam) | `budget_name`, `percentage`, `spent`, `limit` |
-| `invitation/team-invite` | Team invitation | `inviter_name`, `team_name`, `invite_url` |
+| Template ID                  | Description              | Required Variables                                 |
+| ---------------------------- | ------------------------ | -------------------------------------------------- |
+| `auth/welcome`               | New user welcome         | `user_name`, `app_name`                            |
+| `auth/password-reset`        | Password reset           | `reset_link`, `expires_in`                         |
+| `auth/email-verification`    | Email verification       | `verification_link`, `expires_in`                  |
+| `billing/invoice`            | Invoice notification     | `invoice_number`, `amount`, `currency`, `due_date` |
+| `billing/payment-succeeded`  | Payment confirmation     | `amount`, `currency`                               |
+| `billing/payment-failed`     | Payment failure          | `amount`, `currency`, `retry_date`                 |
+| `transactional/quote-ready`  | Quote ready (Digifab)    | `quote_number`, `total_amount`                     |
+| `transactional/certificate`  | DC-3 certificate (Avala) | `certificate_name`, `recipient_name`               |
+| `transactional/budget-alert` | Budget alert (Dhanam)    | `budget_name`, `percentage`, `spent`, `limit`      |
+| `invitation/team-invite`     | Team invitation          | `inviter_name`, `team_name`, `invite_url`          |
 
 ## Troubleshooting
 
@@ -283,6 +287,7 @@ curl -X POST https://api.example.com/billing/webhook \
 ## Monitoring
 
 Track email delivery via:
+
 - Resend dashboard for delivery metrics
 - Janua logs with `source_app` and `source_type` tags
 - Application-level logging of JanuaEmailService calls

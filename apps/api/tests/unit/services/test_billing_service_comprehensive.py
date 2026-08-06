@@ -41,10 +41,10 @@ class TestBillingServiceInitialization:
         assert community["mau_limit"] == 2000
         assert "basic_auth" in community["features"]
 
-        # Validate pro tier
+        # Validate pro tier (ratified: $29 / MX$499)
         pro = PRICING_TIERS["pro"]
-        assert pro["price_mxn"] == 1380
-        assert pro["price_usd"] == 69
+        assert pro["price_mxn"] == 499
+        assert pro["price_usd"] == 29
         assert pro["mau_limit"] == 10000
 
 
@@ -264,7 +264,7 @@ class TestPricingAndValidation:
         assert "scale" in pricing["tiers"]
         assert "enterprise" in pricing["tiers"]
         assert pricing["tiers"]["community"]["price"] == 0
-        assert pricing["tiers"]["pro"]["price"] == 1380
+        assert pricing["tiers"]["pro"]["price"] == 499
         assert pricing["tiers"]["scale"]["price"] == 5980
         assert pricing["currency"] == "MXN"
         assert pricing["provider"] == "conekta"
@@ -279,7 +279,7 @@ class TestPricingAndValidation:
         assert "scale" in pricing["tiers"]
         assert "enterprise" in pricing["tiers"]
         assert pricing["tiers"]["community"]["price"] == 0
-        assert pricing["tiers"]["pro"]["price"] == 69
+        assert pricing["tiers"]["pro"]["price"] == 29
         assert pricing["tiers"]["scale"]["price"] == 299
         assert pricing["currency"] == "USD"
         assert pricing["provider"] == "polar"
