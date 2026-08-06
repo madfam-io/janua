@@ -51,7 +51,7 @@ dependencies = [
     "httpx>=0.25.0",
     "pydantic>=2.0.0",
     "pyjwt>=2.8.0",
-    "cryptography>=41.0.0",
+    "cryptography>=50.0.0",  # PYSEC-2026-3552 floor
 ]
 
 [project.urls]
