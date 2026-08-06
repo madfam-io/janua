@@ -213,8 +213,58 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `pnpm audit` alone conflates two outcomes that need different responses:
+      # "a CRITICAL advisory exists" and "the audit could not run". Both exit
+      # non-zero, so the job reported a critical vulnerability while producing NO
+      # output at all -- pnpm 10.25 crashes parsing the registry's audit response
+      # ("Unexpected token ... is not valid JSON"), and the crash reads exactly
+      # like a finding. Verified 2026-07-26: `trivy fs --severity CRITICAL` on
+      # this tree reports 0, while this step failed on three consecutive runs and
+      # emitted nothing after ##[endgroup]. Someone would have gone looking for a
+      # vulnerability that does not exist.
+      #
+      # This keeps the gate FAILING in both cases -- a security check that cannot
+      # run must never read as green -- but makes the two distinguishable, and
+      # retries once first, since the underlying fault is a transient response
+      # the registry sometimes returns.
       - name: Run pnpm audit
-        run: pnpm audit --audit-level=critical
+        # `shell:` is spelled out because the GitHub default is `bash -e`, and -e
+        # kills this script at the first capture — the failure it exists to
+        # classify. The first version of this step lost to exactly that: it died
+        # on line 4 and emitted none of its own diagnostics, so it looked
+        # identical to the bug it was fixing.
+        shell: bash --noprofile --norc {0}
+        run: |
+          set -uo pipefail
+
+          # Output goes to a FILE, not a variable. pnpm's crash output contains a
+          # NUL byte; `$(...)` drops it with a "ignored null byte in input"
+          # warning and can mangle what is left, so the crash signature must be
+          # matched on bytes as written.
+          run_audit() { pnpm audit --audit-level=critical >audit.log 2>&1; }
+          crashed() { grep -qa 'is not valid JSON' audit.log; }
+
+          run_audit; code=$?
+          if [ "$code" -ne 0 ] && crashed; then
+            echo "::notice::pnpm audit crashed parsing the registry response; retrying once."
+            sleep 10
+            run_audit; code=$?
+          fi
+
+          cat audit.log
+
+          if [ "$code" -eq 0 ]; then
+            echo "Audit ran and found no advisories at or above 'critical'."
+            exit 0
+          fi
+
+          if crashed; then
+            echo "::error title=Audit did not run::pnpm audit CRASHED and reported nothing. This is NOT a vulnerability finding -- do not go looking for one. The tool failed to parse the registry response (pnpm 10.25). Re-run the job; if it persists, audit with an independent scanner before assuming the tree is clean."
+            exit 1
+          fi
+
+          echo "::error title=Critical advisory::pnpm audit reported an advisory at 'critical'. See the output above."
+          exit 1
 
   security-scanning:
     name: Security Scanning
