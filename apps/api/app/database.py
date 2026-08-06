@@ -28,12 +28,18 @@ if hasattr(settings, "DATABASE_URL") and settings.DATABASE_URL:
 
     # Add pooling parameters only for non-SQLite databases
     if "sqlite" not in async_database_url:
+        # Pool caps come from settings (env-overridable), never hardcoded here.
+        # The previous values — pool_size=50, max_overflow=100, "increased to
+        # handle concurrent requests" — let ONE process claim 150 connections
+        # on a shared server with max_connections=100. They also silently
+        # ignored the DATABASE_POOL_SIZE field that config.py already carried.
+        # Budget rationale lives on the fields in config.py.
         engine_kwargs.update(
             {
-                "pool_size": 50,  # Increased from 5 to handle concurrent requests
-                "max_overflow": 100,  # Increased from 10 for burst capacity
+                "pool_size": settings.DATABASE_POOL_SIZE,
+                "max_overflow": settings.DATABASE_MAX_OVERFLOW,
                 "pool_recycle": 3600,  # Recycle connections after 1 hour
-                "pool_timeout": 30,  # Wait up to 30 seconds for a connection
+                "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
             }
         )
         # Disable SSL for asyncpg if connecting to PostgreSQL without SSL
@@ -54,11 +60,17 @@ if hasattr(settings, "DATABASE_URL") and settings.DATABASE_URL:
 
     engine = create_async_engine(async_database_url, **engine_kwargs)
 
-    # Create sync engine for migrations and some operations
+    # Create sync engine for migrations and some operations. Explicitly small:
+    # without pool_size, SQLAlchemy's QueuePool default (5+10) adds 15 more
+    # legal claims per process on top of the async pool's budget, for an
+    # engine that idles at 0-1 connections.
     sync_engine = create_engine(
         database_url,
         echo=settings.DEBUG if hasattr(settings, "DEBUG") else False,
         pool_pre_ping=True,
+        pool_size=2,
+        max_overflow=3,
+        pool_timeout=settings.DATABASE_POOL_TIMEOUT,
     )
 else:
     # Require explicit DATABASE_URL configuration
@@ -73,14 +85,21 @@ else:
     # Convert to async URL
     async_database_url = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
+    # Same budget as the settings-driven branch above (rationale in
+    # config.py). This branch has no `settings`, so read the same env vars
+    # directly — the two paths must never disagree on the cap.
+    _pool_size = int(os.getenv("DATABASE_POOL_SIZE", "5"))
+    _max_overflow = int(os.getenv("DATABASE_MAX_OVERFLOW", "5"))
+    _pool_timeout = int(os.getenv("DATABASE_POOL_TIMEOUT", "30"))
+
     engine = create_async_engine(
         async_database_url,
         echo=True,
         pool_pre_ping=True,
-        pool_size=50,  # Handle concurrent requests
-        max_overflow=100,  # Burst capacity
+        pool_size=_pool_size,
+        max_overflow=_max_overflow,
         pool_recycle=3600,  # Recycle connections after 1 hour
-        pool_timeout=30,  # Wait up to 30 seconds for a connection
+        pool_timeout=_pool_timeout,
         connect_args={"ssl": False},  # Disable SSL for asyncpg
     )
 
@@ -88,10 +107,10 @@ else:
         DATABASE_URL,
         echo=True,
         pool_pre_ping=True,
-        pool_size=50,
-        max_overflow=100,
+        pool_size=2,
+        max_overflow=3,
         pool_recycle=3600,
-        pool_timeout=30,
+        pool_timeout=_pool_timeout,
     )
 
 # Create session factories
