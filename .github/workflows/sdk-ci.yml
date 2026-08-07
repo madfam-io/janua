@@ -115,7 +115,16 @@ jobs:
       - name: Run tests
         run: |
           cd packages/python-sdk
-          pytest tests/ -v || true
+          pytest tests/ -v
+
+      # Catches the class of breakage this job missed for months: the package
+      # importing only because pytest ran from the source tree. Import from a
+      # directory that contains no `janua/`, so the installed distribution is
+      # the only thing that can satisfy it.
+      - name: Verify installed package imports
+        run: |
+          cd "$RUNNER_TEMP"
+          python -c "import janua; print('janua', janua.__version__, 'imported from', janua.__file__)"
 
       - name: Verify dist/
         run: |
