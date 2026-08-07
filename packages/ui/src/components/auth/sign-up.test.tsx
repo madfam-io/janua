@@ -406,11 +406,12 @@ describe('SignUp', () => {
   describe('Loading State', () => {
     it('should show loading state during submission', async () => {
       const user = userEvent.setup()
+      // The test decides when the request completes. A 100ms timer here made the
+      // loading assertions a race: under load the timer fired before they ran,
+      // the button re-enabled, and the test failed while passing in isolation.
+      let resolveFetch: (response: unknown) => void = () => {}
       global.fetch = vi.fn().mockImplementation(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ ok: true, json: async () => ({}) }), 100)
-          )
+        () => new Promise((resolve) => { resolveFetch = resolve })
       )
 
       render(<SignUp requireEmailVerification={false} />)
@@ -429,8 +430,12 @@ describe('SignUp', () => {
       await user.click(termsCheckbox)
       await user.click(submitButton)
 
-      expect(submitButton).toHaveTextContent(/creating account/i)
+      await waitFor(() => {
+        expect(submitButton).toHaveTextContent(/creating account/i)
+      })
       expect(submitButton).toBeDisabled()
+
+      resolveFetch({ ok: true, json: async () => ({}) })
 
       await waitFor(() => {
         expect(submitButton).not.toBeDisabled()
@@ -439,12 +444,8 @@ describe('SignUp', () => {
 
     it('should disable all inputs during loading', async () => {
       const user = userEvent.setup()
-      global.fetch = vi.fn().mockImplementation(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ ok: true, json: async () => ({}) }), 100)
-          )
-      )
+      // Stays pending -- the assertion is about the in-flight state, not its end.
+      global.fetch = vi.fn().mockImplementation(() => new Promise(() => {}))
 
       render(<SignUp requireEmailVerification={false} />)
 
@@ -462,7 +463,9 @@ describe('SignUp', () => {
       await user.click(termsCheckbox)
       await user.click(submitButton)
 
-      expect(firstNameInput).toBeDisabled()
+      await waitFor(() => {
+        expect(firstNameInput).toBeDisabled()
+      })
       expect(lastNameInput).toBeDisabled()
       expect(emailInput).toBeDisabled()
       expect(passwordInput).toBeDisabled()

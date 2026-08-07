@@ -278,8 +278,9 @@ describe('DeviceManagement', () => {
 
     it('should show loading state during trust', async () => {
       const user = userEvent.setup()
+      let resolveTrust: () => void = () => {}
       mockOnTrustDevice.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveTrust = resolve })
       )
 
       render(
@@ -293,7 +294,9 @@ describe('DeviceManagement', () => {
       const trustButton = screen.getByRole('button', { name: /trust device/i })
       await user.click(trustButton)
 
-      expect(screen.getByText(/processing\.\.\./i)).toBeInTheDocument()
+      expect(await screen.findByText(/processing\.\.\./i)).toBeInTheDocument()
+
+      resolveTrust()
 
       await waitFor(() => {
         expect(screen.queryByText(/processing\.\.\./i)).not.toBeInTheDocument()
@@ -446,8 +449,9 @@ describe('DeviceManagement', () => {
     it('should show loading state during removal', async () => {
       const user = userEvent.setup()
       window.confirm = vi.fn(() => true)
+      let resolveRemove: () => void = () => {}
       mockOnRemoveDevice.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveRemove = resolve })
       )
 
       render(
@@ -461,7 +465,9 @@ describe('DeviceManagement', () => {
       const removeButtons = screen.getAllByRole('button', { name: /^remove$/i })
       await user.click(removeButtons[0])
 
-      expect(screen.getByText(/removing\.\.\./i)).toBeInTheDocument()
+      expect(await screen.findByText(/removing\.\.\./i)).toBeInTheDocument()
+
+      resolveRemove()
 
       await waitFor(() => {
         expect(screen.queryByText(/removing\.\.\./i)).not.toBeInTheDocument()

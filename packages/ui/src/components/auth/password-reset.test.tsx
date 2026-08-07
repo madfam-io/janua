@@ -70,8 +70,9 @@ describe('PasswordReset', () => {
 
     it('should show loading state during request', async () => {
       const user = userEvent.setup()
+      let resolveRequest: () => void = () => {}
       mockOnRequestReset.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveRequest = resolve })
       )
 
       render(<PasswordReset onRequestReset={mockOnRequestReset} />)
@@ -82,7 +83,9 @@ describe('PasswordReset', () => {
       await user.type(emailInput, 'test@example.com')
       await user.click(submitButton)
 
-      expect(screen.getByText(/sending\.\.\./i)).toBeInTheDocument()
+      expect(await screen.findByText(/sending\.\.\./i)).toBeInTheDocument()
+
+      resolveRequest()
 
       await waitFor(() => {
         expect(screen.queryByText(/sending\.\.\./i)).not.toBeInTheDocument()
@@ -297,8 +300,9 @@ describe('PasswordReset', () => {
 
     it('should show loading state during reset', async () => {
       const user = userEvent.setup()
+      let resolveReset: () => void = () => {}
       mockOnResetPassword.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveReset = resolve })
       )
 
       render(<PasswordReset step="reset" token="token" onResetPassword={mockOnResetPassword} />)
@@ -312,7 +316,9 @@ describe('PasswordReset', () => {
       const submitButton = screen.getByRole('button', { name: /reset password/i })
       await user.click(submitButton)
 
-      expect(screen.getByText(/resetting\.\.\./i)).toBeInTheDocument()
+      expect(await screen.findByText(/resetting\.\.\./i)).toBeInTheDocument()
+
+      resolveReset()
 
       await waitFor(() => {
         expect(screen.queryByText(/resetting\.\.\./i)).not.toBeInTheDocument()
