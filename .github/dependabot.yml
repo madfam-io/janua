@@ -20,6 +20,18 @@ updates:
     labels:
       - "dependencies"
       - "automated"
+    ignore:
+      # `@types/node` must track the Node MAJOR we actually run, not the newest
+      # version published. Dependabot cannot know that, so its "latest" is wrong
+      # here by construction: on 2026-08-07 `main` ran Node 20 in all 8 workflows
+      # while carrying @types/node ^25.3.0 — five majors of drift, with the types
+      # describing APIs that do not exist where the code executes. #433 then
+      # proposed 26.1.2, which would have widened it further, and was closed.
+      # #493 is the correct shape: move the runtime AND the types together.
+      # Minor/patch updates still flow; only the major is held so the pairing
+      # stays a deliberate decision instead of a weekly re-triage.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # Docker base images
   - package-ecosystem: "docker"
