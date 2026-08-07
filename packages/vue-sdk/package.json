@@ -50,7 +50,7 @@
     "vue": "^3.5.40"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
+    "@types/node": "^22.20.1",
     "@vue/test-utils": "^2.4.11",
     "@vue/compiler-sfc": "^3.5.40",
     "happy-dom": "^20.11.1",

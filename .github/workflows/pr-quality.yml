@@ -7,7 +7,7 @@ on:
     branches: [main, develop]
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: '22'
   PYTHON_VERSION: "3.11"
   # Required by .npmrc to resolve @janua/* packages from npm.madfam.io.
   # Without this, pnpm install falls back to the public registry and 404s

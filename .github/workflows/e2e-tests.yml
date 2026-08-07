@@ -10,7 +10,7 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   NPM_MADFAM_TOKEN: ${{ secrets.NPM_MADFAM_TOKEN }}
 
 jobs:
