@@ -285,8 +285,9 @@ describe('SessionManagement', () => {
 
     it('should show loading state during revoke', async () => {
       const user = userEvent.setup()
+      let resolveRevoke: () => void = () => {}
       mockOnRevokeSession.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveRevoke = resolve })
       )
 
       render(
@@ -300,7 +301,9 @@ describe('SessionManagement', () => {
       const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' })
       await user.click(revokeButtons[0])
 
-      expect(screen.getByText(/revoking\.\.\./i)).toBeInTheDocument()
+      expect(await screen.findByText(/revoking\.\.\./i)).toBeInTheDocument()
+
+      resolveRevoke()
 
       await waitFor(() => {
         expect(screen.queryByText(/revoking\.\.\./i)).not.toBeInTheDocument()
@@ -332,9 +335,8 @@ describe('SessionManagement', () => {
 
     it('should disable button during revoke', async () => {
       const user = userEvent.setup()
-      mockOnRevokeSession.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
-      )
+      // Stays pending -- the assertion is about the revoking state, not its end.
+      mockOnRevokeSession.mockImplementation(() => new Promise(() => {}))
 
       render(
         <SessionManagement
@@ -347,7 +349,9 @@ describe('SessionManagement', () => {
       const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' })
       await user.click(revokeButtons[0])
 
-      expect(revokeButtons[0]).toBeDisabled()
+      await waitFor(() => {
+        expect(revokeButtons[0]).toBeDisabled()
+      })
     })
   })
 
@@ -398,8 +402,9 @@ describe('SessionManagement', () => {
 
     it('should show loading state during revoke all', async () => {
       const user = userEvent.setup()
+      let resolveRevokeAll: () => void = () => {}
       mockOnRevokeAllOthers.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveRevokeAll = resolve })
       )
 
       render(
@@ -413,7 +418,9 @@ describe('SessionManagement', () => {
       const revokeAllButton = screen.getByRole('button', { name: /revoke all other sessions/i })
       await user.click(revokeAllButton)
 
-      expect(screen.getByText(/revoking\.\.\./i)).toBeInTheDocument()
+      expect(await screen.findByText(/revoking\.\.\./i)).toBeInTheDocument()
+
+      resolveRevokeAll()
 
       await waitFor(() => {
         expect(screen.queryByText(/revoking\.\.\./i)).not.toBeInTheDocument()

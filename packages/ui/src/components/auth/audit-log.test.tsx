@@ -350,8 +350,9 @@ describe('AuditLog', () => {
 
     it('should show loading state during export', async () => {
       const user = userEvent.setup()
+      let resolveExport: () => void = () => {}
       mockOnExport.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveExport = resolve })
       )
 
       render(<AuditLog events={mockEvents} showExport={true} onExport={mockOnExport} />)
@@ -359,7 +360,9 @@ describe('AuditLog', () => {
       const csvButton = screen.getByRole('button', { name: /export csv/i })
       await user.click(csvButton)
 
-      expect(screen.getAllByText(/exporting\.\.\./i)[0]).toBeInTheDocument()
+      expect((await screen.findAllByText(/exporting\.\.\./i))[0]).toBeInTheDocument()
+
+      resolveExport()
 
       await waitFor(() => {
         expect(screen.queryByText(/exporting\.\.\./i)).not.toBeInTheDocument()
@@ -431,8 +434,9 @@ describe('AuditLog', () => {
 
     it('should show loading state during load more', async () => {
       const user = userEvent.setup()
+      let resolveLoadMore: () => void = () => {}
       mockOnLoadMore.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveLoadMore = resolve })
       )
 
       render(<AuditLog events={mockEvents} hasMore={true} onLoadMore={mockOnLoadMore} />)
@@ -440,7 +444,9 @@ describe('AuditLog', () => {
       const loadMoreButton = screen.getByRole('button', { name: /load more/i })
       await user.click(loadMoreButton)
 
-      expect(screen.getByText(/loading\.\.\./i)).toBeInTheDocument()
+      expect(await screen.findByText(/loading\.\.\./i)).toBeInTheDocument()
+
+      resolveLoadMore()
 
       await waitFor(() => {
         expect(screen.queryByText(/loading\.\.\./i)).not.toBeInTheDocument()
