@@ -11,7 +11,7 @@ import hmac
 import json
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs, ParseResult
 
 import jwt
@@ -548,7 +548,10 @@ def validate_password_strength(
     require_lowercase: bool = True,
     require_numbers: bool = True,
     require_special: bool = False,
-) -> tuple[bool, list[str]]:
+    # typing.Tuple/List rather than the PEP 585 builtins: this project declares
+    # requires-python = ">=3.8" and tests on 3.8, where `tuple[...]` at
+    # module-import time raises "TypeError: 'type' object is not subscriptable".
+) -> Tuple[bool, List[str]]:
     """
     Validate password strength.
 
