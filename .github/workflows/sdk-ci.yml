@@ -203,11 +203,17 @@ jobs:
           go test -v -race -coverprofile=coverage.out ./...
 
       - name: Run linter
-        # v7+ of the action dropped golangci-lint v1 support; stay on v6
-        # until the linter itself is migrated to v2.
+        # The linter IS migrated to v2 now (.golangci.yml carries `version: "2"`,
+        # produced by `golangci-lint migrate`), so the action major and the linter
+        # major finally agree. They did not before: a Dependabot bump carried the
+        # action to v9 while this pin stayed at v1.62.2 and the comment still said
+        # "stay on v6", so every run died with
+        #   invalid version string 'v1.62.2', golangci-lint v1 is not supported
+        #   by golangci-lint-action >= v7
+        # Keep this version and the action major in step when either is bumped.
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.62.2
+          version: v2.12.2
           working-directory: packages/go-sdk
 
   flutter-sdk:
