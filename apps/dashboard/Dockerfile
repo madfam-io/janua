@@ -5,7 +5,7 @@
 # ============================================
 # STAGE 1: Dependencies (full workspace)
 # ============================================
-FROM node:18-alpine AS deps
+FROM node:22-alpine AS deps
 
 RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@9 --activate
@@ -22,7 +22,7 @@ RUN pnpm install --frozen-lockfile
 # ============================================
 # STAGE 2: Builder
 # ============================================
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /app
@@ -52,7 +52,7 @@ RUN ls -la .next/standalone/apps/dashboard/ || true
 # ============================================
 # STAGE 3: Runner
 # ============================================
-FROM node:18-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
