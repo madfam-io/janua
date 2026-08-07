@@ -169,7 +169,7 @@ jobs:
       - name: Run linter
         # v7+ of the action dropped golangci-lint v1 support; stay on v6
         # until the linter itself is migrated to v2.
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v1.62.2
           working-directory: packages/go-sdk
