@@ -1,6 +1,7 @@
 # Core dependencies
 httpx>=0.25.0
-pydantic>=2.0.0
+# [email] extra is required: janua.types uses pydantic.EmailStr.
+pydantic[email]>=2.0.0
 PyJWT>=2.8.0
 
 # Optional dependencies for specific features

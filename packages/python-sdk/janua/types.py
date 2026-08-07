@@ -7,7 +7,7 @@ the SDK, implemented using Pydantic for validation and serialization.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, HttpUrl, ConfigDict
@@ -119,6 +119,11 @@ class User(BaseResponse):
     mfa_enabled: bool = False
     passkeys_enabled: bool = False
     oauth_accounts: List["OAuthAccount"] = Field(default_factory=list)
+    # Flat list of linked provider names, as returned by the API alongside the
+    # richer oauth_accounts (see the `oauth_providers: List[str]` field on the
+    # server's user response in apps/api/app/routers/v1/admin.py, and the
+    # matching field in packages/typescript-sdk/src/admin.ts).
+    oauth_providers: List[str] = Field(default_factory=list)
 
 
 class UserUpdateRequest(BaseModel):
@@ -217,19 +222,27 @@ class MagicLinkRequest(BaseModel):
 # ====================
 
 class Session(BaseResponse):
-    """Session model."""
+    """Session model.
+
+    `token`, `updated_at` and `last_activity_at` are optional: the server's
+    SessionResponse (apps/api/app/routers/v1/sessions.py) has no `token` and no
+    `updated_at` at all — a session's tokens are carried in the sibling `tokens`
+    object of the sign-in response, not inside `session` — and the sign-in
+    payload omits `last_activity_at`. Requiring them made every real response
+    fail validation.
+    """
     id: UUID
     user_id: UUID
-    token: str
+    token: Optional[str] = None
     status: SessionStatus = SessionStatus.ACTIVE
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     device_info: Optional[Dict[str, Any]] = None
     location: Optional[Dict[str, Any]] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     expires_at: datetime
-    last_activity_at: datetime
+    last_activity_at: Optional[datetime] = None
 
 
 class SessionListResponse(PaginatedResponse):
@@ -547,6 +560,211 @@ class OAuthCallbackRequest(BaseModel):
     code: str
     state: Optional[str] = None
     code_verifier: Optional[str] = None
+
+
+# ====================
+# Client Configuration
+# ====================
+
+class JanuaConfig(BaseModel):
+    """Resolved client configuration.
+
+    Built once by :class:`janua.client.JanuaClient` and handed to every service
+    client. Mutable: ``JanuaClient.set_api_key`` / ``set_environment`` /
+    ``enable_debug`` / ``disable_debug`` assign to it after construction.
+    """
+    api_key: str = Field(..., description="API key used to authenticate requests")
+    base_url: str = Field(..., description="Base URL of the Janua API")
+    timeout: float = Field(30.0, description="Per-request timeout in seconds")
+    max_retries: int = Field(3, description="Maximum retry attempts per request")
+    environment: str = Field("production", description="Deployment environment")
+    debug: bool = Field(False, description="Emit verbose client-side diagnostics")
+
+
+# ====================
+# Generic List Response
+# ====================
+
+T = TypeVar("T")
+
+
+class ListResponse(BaseResponse, Generic[T]):
+    """Offset-paginated collection returned by the list endpoints.
+
+    Distinct from :class:`PaginatedResponse`, which is page-based and carries no
+    ``items``. The service clients construct this by subscripting at runtime,
+    e.g. ``ListResponse[Organization](items=..., total=..., limit=..., offset=...)``.
+    """
+    items: List[T] = Field(default_factory=list, description="Items in this page")
+    total: int = Field(..., description="Total number of items across all pages")
+    limit: int = Field(..., description="Maximum items requested")
+    offset: int = Field(..., description="Offset of the first item")
+
+
+# ====================
+# Additional User Models
+# ====================
+
+class UserRole(str, Enum):
+    """Platform-level user role.
+
+    Distinct from :class:`OrganizationRole`, which scopes a user within a single
+    organization. Serialized via ``.value`` into both query params and request
+    bodies.
+    """
+    USER = "user"
+    ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
+
+
+class UserProfile(BaseResponse):
+    """Extended profile fields for a user."""
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    website: Optional[str] = None
+    company: Optional[str] = None
+    job_title: Optional[str] = None
+
+
+class UserPreferences(BaseResponse):
+    """Per-user display and notification preferences."""
+    language: Optional[str] = None
+    timezone: Optional[str] = None
+    date_format: Optional[str] = None
+    time_format: Optional[str] = Field(None, description="12h or 24h")
+    email_notifications: Optional[bool] = None
+    sms_notifications: Optional[bool] = None
+    push_notifications: Optional[bool] = None
+
+
+# ====================
+# Additional Auth Models
+# ====================
+
+class EmailVerificationRequest(BaseModel):
+    """Request a verification email be (re)sent to an address."""
+    email: EmailStr
+
+
+# `AuthClient.request_password_reset` sends only an address, matching
+# ForgotPasswordRequest. Note this is NOT ResetPasswordRequest, whose required
+# token/new_password would reject an email-only payload.
+PasswordResetRequest = ForgotPasswordRequest
+
+
+# ====================
+# Additional Organization Models
+# ====================
+
+class OrganizationSettings(BaseResponse):
+    """Organization-wide policy settings."""
+    require_mfa: Optional[bool] = None
+    allowed_email_domains: Optional[List[str]] = None
+    session_duration: Optional[int] = Field(None, description="Session lifetime in seconds")
+    password_policy: Optional[Dict[str, Any]] = None
+
+
+OrganizationInvite = OrganizationInvitation
+
+
+# ====================
+# Additional MFA Models
+# ====================
+
+class MFAMethod(str, Enum):
+    """A second-factor method.
+
+    Constructed from raw server strings in ``MFAClient.list_methods`` and
+    serialized via ``.value`` when sent, so it must remain a ``str`` enum.
+    """
+    TOTP = "totp"
+    SMS = "sms"
+    BACKUP_CODES = "backup_codes"
+
+
+class MFAChallenge(BaseResponse):
+    """A pending second-factor challenge awaiting verification."""
+    id: str = Field(..., description="Challenge id, passed back to verify_challenge")
+    method: Optional[MFAMethod] = None
+    user_id: Optional[UUID] = None
+    expires_at: Optional[datetime] = None
+
+
+class TOTPSetup(BaseResponse):
+    """Enrollment material for a TOTP authenticator."""
+    secret: Optional[str] = Field(None, description="Shared secret in base32")
+    qr_code_url: Optional[str] = Field(None, description="Provisioning URI, renderable as a QR code")
+    backup_codes: Optional[List[str]] = None
+
+
+class SMSSetup(BaseResponse):
+    """Enrollment state for SMS-delivered codes."""
+    phone_number: Optional[str] = None
+    verified: bool = Field(False, description="Whether the number has been confirmed")
+
+
+class BackupCodes(BaseResponse):
+    """A set of single-use account recovery codes."""
+    codes: List[str] = Field(default_factory=list, description="The codes themselves")
+    remaining: Optional[int] = Field(None, description="Unused codes left")
+
+
+MFASettings = MFAStatusResponse
+
+
+# ====================
+# Additional Passkey Models
+# ====================
+
+Passkey = PasskeyResponse
+
+
+class PasskeyChallenge(BaseResponse):
+    """A WebAuthn challenge.
+
+    Serves both ceremonies — registration (creation options) and authentication
+    (request options) — so the raw option payload is kept permissive.
+    """
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra="allow")
+
+    id: str = Field(..., description="Challenge id, passed back to the complete_* call")
+    challenge: Optional[str] = None
+    options: Optional[Dict[str, Any]] = Field(None, description="Raw WebAuthn options")
+
+
+class PasskeyCredential(BaseResponse):
+    """A WebAuthn credential as returned by the authenticator."""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra="allow")
+
+    id: Optional[str] = None
+    raw_id: Optional[str] = None
+    type: Optional[str] = None
+    response: Optional[Dict[str, Any]] = None
+
+
+# ====================
+# Additional Session Models
+# ====================
+
+class SessionDevice(BaseResponse):
+    """The device a session is bound to."""
+    name: Optional[str] = None
+    trusted: Optional[bool] = None
+    device_type: Optional[str] = None
+    os: Optional[str] = None
+    browser: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
+
+
+class SessionActivity(BaseResponse):
+    """A single audit entry recorded against a session."""
+    id: Optional[UUID] = None
+    session_id: Optional[UUID] = None
+    action: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    location: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 # Update forward references

@@ -11,7 +11,7 @@ import hmac
 import json
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs, ParseResult
 
 import jwt
@@ -99,6 +99,11 @@ def parse_jwt_without_verification(token: str) -> Dict[str, Any]:
         return claims
     except PyJWTError as e:
         raise InvalidTokenError(f"Invalid token format: {str(e)}")
+
+
+#: Public name for :func:`parse_jwt_without_verification`, re-exported from the
+#: package root.
+decode_jwt_claims = parse_jwt_without_verification
 
 
 def is_token_expired(token: str, leeway: int = 0) -> bool:
@@ -222,6 +227,24 @@ def decode_base64url(data: str) -> bytes:
         data += "=" * padding
     
     return base64.urlsafe_b64decode(data)
+
+
+def generate_code_verifier(length: int = 32) -> str:
+    """
+    Generate a PKCE code verifier.
+
+    The counterpart to :func:`generate_code_challenge`. RFC 7636 requires the
+    verifier to be 43-128 unreserved characters; the default length of 32 random
+    bytes yields 43 characters.
+
+    Args:
+        length: Number of random bytes to draw
+
+    Returns:
+        Code verifier for PKCE flow
+    """
+    import secrets
+    return secrets.token_urlsafe(length)
 
 
 def generate_code_challenge(code_verifier: str) -> str:
@@ -356,8 +379,40 @@ def format_iso_datetime(dt: datetime) -> str:
     # Ensure timezone aware
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    
+
     return dt.isoformat()
+
+
+def build_query_params(params: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Normalize a dict of loosely-typed values into query-string parameters.
+
+    Drops ``None`` entries, lowercases booleans, joins sequences with commas and
+    ISO-formats datetimes. Restored from the pre-rebrand implementation, which
+    was dropped during the plinto -> janua utils rewrite while its callers in
+    :mod:`janua.admin` were left in place.
+
+    Args:
+        params: Raw parameter mapping
+
+    Returns:
+        Mapping of parameter name to string value, omitting None
+    """
+    query_params: Dict[str, str] = {}
+
+    for key, value in params.items():
+        if value is None:
+            continue
+        elif isinstance(value, bool):
+            query_params[key] = str(value).lower()
+        elif isinstance(value, (list, tuple)):
+            query_params[key] = ','.join(str(v) for v in value)
+        elif isinstance(value, datetime):
+            query_params[key] = format_iso_datetime(value)
+        else:
+            query_params[key] = str(value)
+
+    return query_params
 
 
 def get_expires_at(expires_in: int) -> datetime:
@@ -493,7 +548,10 @@ def validate_password_strength(
     require_lowercase: bool = True,
     require_numbers: bool = True,
     require_special: bool = False,
-) -> tuple[bool, list[str]]:
+    # typing.Tuple/List rather than the PEP 585 builtins: this project declares
+    # requires-python = ">=3.8" and tests on 3.8, where `tuple[...]` at
+    # module-import time raises "TypeError: 'type' object is not subscriptable".
+) -> Tuple[bool, List[str]]:
     """
     Validate password strength.
 
