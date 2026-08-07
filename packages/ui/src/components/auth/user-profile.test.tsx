@@ -149,8 +149,13 @@ describe('UserProfile', () => {
 
     it('should show loading state during profile save', async () => {
       const user = userEvent.setup()
+      // The test holds the promise open rather than racing a 100ms timer -- see
+      // the note on 'should show loading state during account deletion' below.
+      // Here the disappearance of the loading state is also asserted, so the
+      // promise has to be resolvable rather than merely pending forever.
+      let resolveUpdate: () => void = () => {}
       mockOnUpdateProfile.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveUpdate = resolve })
       )
 
       render(<UserProfile user={mockUser} onUpdateProfile={mockOnUpdateProfile} />)
@@ -158,8 +163,12 @@ describe('UserProfile', () => {
       const saveButton = screen.getByRole('button', { name: /save changes/i })
       await user.click(saveButton)
 
-      expect(saveButton).toHaveTextContent(/saving/i)
+      await waitFor(() => {
+        expect(saveButton).toHaveTextContent(/saving/i)
+      })
       expect(saveButton).toBeDisabled()
+
+      resolveUpdate()
 
       await waitFor(() => {
         expect(saveButton).not.toBeDisabled()
@@ -444,9 +453,8 @@ describe('UserProfile', () => {
   describe('Loading States', () => {
     it('should disable inputs during profile save', async () => {
       const user = userEvent.setup()
-      mockOnUpdateProfile.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
-      )
+      // Stays pending -- the assertion is about the saving state, not its end.
+      mockOnUpdateProfile.mockImplementation(() => new Promise(() => {}))
 
       render(<UserProfile user={mockUser} onUpdateProfile={mockOnUpdateProfile} />)
 
@@ -455,14 +463,15 @@ describe('UserProfile', () => {
 
       await user.click(saveButton)
 
-      expect(firstNameInput).toBeDisabled()
+      await waitFor(() => {
+        expect(firstNameInput).toBeDisabled()
+      })
     })
 
     it('should disable inputs during email update', async () => {
       const user = userEvent.setup()
-      mockOnUpdateEmail.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
-      )
+      // Stays pending -- the assertion is about the updating state, not its end.
+      mockOnUpdateEmail.mockImplementation(() => new Promise(() => {}))
 
       render(
         <UserProfile user={mockUser} onUpdateEmail={mockOnUpdateEmail} showSecurityTab={true} />
@@ -477,7 +486,9 @@ describe('UserProfile', () => {
       await user.type(emailInput, 'newemail@example.com')
       await user.click(updateButton)
 
-      expect(emailInput).toBeDisabled()
+      await waitFor(() => {
+        expect(emailInput).toBeDisabled()
+      })
     })
   })
 

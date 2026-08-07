@@ -10,6 +10,10 @@ from .types import (
     UserRole,
     ListResponse,
     JanuaConfig,
+    # `get_sessions` annotates List[Session] in its signature, which is
+    # evaluated at class-definition time. Session was only imported inside the
+    # function body, so the annotation raised NameError on import.
+    Session,
 )
 
 
