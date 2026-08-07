@@ -48,7 +48,11 @@ keywords = [
 ]
 dependencies = [
     "httpx>=0.25.0",
-    "pydantic>=2.0.0",
+    # The [email] extra is required, not optional: janua.types uses
+    # pydantic.EmailStr in 10 places, and pydantic defers the email-validator
+    # import to class-construction time. Without it, `import janua` dies with
+    # "email-validator is not installed" on a clean install.
+    "pydantic[email]>=2.0.0",
     "pyjwt>=2.8.0",
     "cryptography>=50.0.0",  # PYSEC-2026-3552 floor
 ]

@@ -198,8 +198,9 @@ describe('MFAChallenge', () => {
 
     it('should show loading state during verification', async () => {
       const user = userEvent.setup()
+      let resolveVerify: () => void = () => {}
       mockOnVerify.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise<void>((resolve) => { resolveVerify = resolve })
       )
 
       render(<MFAChallenge onVerify={mockOnVerify} />)
@@ -212,11 +213,10 @@ describe('MFAChallenge', () => {
       await user.type(screen.getByLabelText('Digit 5'), '5')
       await user.type(screen.getByLabelText('Digit 6'), '6')
 
-      const verifyButton = screen.getByRole('button', { name: /verifying/i })
+      const verifyButton = await screen.findByRole('button', { name: /verifying/i })
+      expect(verifyButton).toBeDisabled()
 
-      await waitFor(() => {
-        expect(verifyButton).toBeDisabled()
-      })
+      resolveVerify()
     })
 
     it('should show success state after verification', async () => {
@@ -413,9 +413,8 @@ describe('MFAChallenge', () => {
   describe('Loading States', () => {
     it('should disable digit inputs during verification', async () => {
       const user = userEvent.setup()
-      mockOnVerify.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
-      )
+      // Stays pending -- the assertion is about the verifying state, not its end.
+      mockOnVerify.mockImplementation(() => new Promise(() => {}))
 
       render(<MFAChallenge onVerify={mockOnVerify} />)
 
@@ -434,9 +433,8 @@ describe('MFAChallenge', () => {
 
     it('should show loading spinner during verification', async () => {
       const user = userEvent.setup()
-      mockOnVerify.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
-      )
+      // Stays pending -- the assertion is about the verifying state, not its end.
+      mockOnVerify.mockImplementation(() => new Promise(() => {}))
 
       render(<MFAChallenge onVerify={mockOnVerify} />)
 
