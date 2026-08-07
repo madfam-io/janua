@@ -71,6 +71,8 @@ export class MFAService extends EventEmitter {
   private challenges: Map<string, MFAChallenge> = new Map();
   private verificationHistory: Map<string, Date[]> = new Map();
   private trustedDevices: Map<string, Set<string>> = new Map();
+  /** Handle for the expired-challenge sweep, so destroy() can clear it. */
+  private cleanupTimer?: ReturnType<typeof setInterval>;
   private smsProvider?: SMSProvider;
   private hardwareProvider?: HardwareTokenProvider;
 
@@ -857,9 +859,9 @@ export class MFAService extends EventEmitter {
    * Cleanup expired challenges
    */
   private startCleanupTimer(): void {
-    setInterval(() => {
+    this.cleanupTimer = setInterval(() => {
       const now = new Date();
-      
+
       for (const [id, challenge] of this.challenges) {
         if (challenge.expires_at < now) {
           challenge.status = 'expired';
@@ -867,6 +869,36 @@ export class MFAService extends EventEmitter {
         }
       }
     }, 60000); // Every minute
+
+    // LOAD-BEARING. A background sweep must not, on its own, keep the Node
+    // process alive. Before this, the interval handle was never stored and the
+    // class had no cleanup method, so every `new MFAService()` leaked an
+    // interval that nothing could ever clear.
+    //
+    // Consequence measured 2026-08-07: `jest --detectOpenHandles` in
+    // packages/core reported three open Timeout handles, all this line, one per
+    // construction in mfa-service.test.ts. In worker mode Jest force-kills the
+    // worker and prints "A worker process has failed to exit gracefully"; run
+    // in-band it simply HANGS — reproduced locally past 600s. That hang is what
+    // has been holding janua#497 (Node 22 alignment) open.
+    //
+    // unref() does not stop the sweep: in a running server the HTTP listener
+    // keeps the event loop alive, so it still fires every minute. It only stops
+    // the timer from being the *reason* the loop stays alive.
+    this.cleanupTimer.unref?.();
+  }
+
+  /**
+   * Stop the background cleanup sweep.
+   *
+   * Callers that create short-lived instances (tests, scripts, one-shot jobs)
+   * should call this. Long-lived server instances need not, but it is safe.
+   */
+  destroy(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
   }
 
   /**
