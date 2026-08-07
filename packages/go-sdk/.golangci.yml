@@ -1,72 +1,76 @@
-# golangci-lint configuration for Janua Go SDK
-
+version: "2"
 run:
-  timeout: 5m
-  tests: true
   modules-download-mode: readonly
-
+  tests: true
 linters:
   enable:
-    - errcheck      # Check for unchecked errors
-    - gosimple      # Simplify code
-    - govet         # Vet examines Go source code
-    - ineffassign   # Detect ineffectual assignments
-    - staticcheck   # Advanced Go linter
-    - unused        # Check for unused code
-    - gofmt         # Check code formatting
-    - goimports     # Check import formatting
-    - misspell      # Find misspelled words
-    - revive        # Fast, configurable linter
-    - gosec         # Security issues
-    - gocritic      # Opinionated Go source code linter
-    - nolintlint    # Validate //nolint directives
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-  govet:
-    enable:
-      - shadow      # Report shadowed variables
-      # fieldalignment disabled - fixing requires struct reordering which is breaking
-
-  revive:
+    - gocritic
+    - gosec
+    - misspell
+    - nolintlint
+    - revive
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    gocritic:
+      enabled-checks:
+        - nestingReduce
+        - unnamedResult
+        - ruleguard
+    gosec:
+      excludes:
+        # Unhandled errors in tests.
+        - G104
+        # G704 (SSRF via taint analysis) is new in gosec under golangci-lint v2.
+        # It fires on `rc.client.Do(req)` in janua/retry.go — the retry wrapper of
+        # an HTTP SDK, whose whole purpose is issuing requests to a caller-supplied
+        # endpoint. Taint analysis cannot distinguish that from an attacker-controlled
+        # URL, so the same rule would flag every HTTP client library ever written.
+        # Scoped exclusion, not a blanket suppression: if this SDK ever builds a URL
+        # from data it did not receive from its own caller, revisit this.
+        - G704
+    govet:
+      enable:
+        - shadow
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+        - name: package-comments
+          severity: warning
+        - name: var-naming
+          severity: warning
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: exported
-        severity: warning
-      - name: package-comments
-        severity: warning
-      - name: var-naming
-        severity: warning
-
-  gosec:
-    excludes:
-      - G104  # Allow unhandled errors in tests
-
-  gocritic:
-    enabled-checks:
-      - nestingReduce
-      - unnamedResult
-      - ruleguard
-
+      - linters:
+          - errcheck
+          - gosec
+          - revive
+        path: _test\.go
+      - linters:
+          - gosec
+        text: weak cryptographic primitive
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    # Exclude some linters for test files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-        - revive
-
-    # Exclude specific issues
-    - text: "weak cryptographic primitive"
-      linters:
-        - gosec
-
   max-issues-per-linter: 0
   max-same-issues: 0
-
-output:
-  print-issued-lines: true
-  print-linter-name: true
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
