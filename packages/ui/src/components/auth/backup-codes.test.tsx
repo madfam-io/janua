@@ -407,8 +407,12 @@ describe('BackupCodes', () => {
     })
 
     it('should show loading state during regeneration', async () => {
+      // Deliberately stays pending: the assertion below is about the loading
+      // state existing, and a 100ms timer made that a race under load. Nothing
+      // here asserts the loading state clearing, so the promise never needs to
+      // settle.
       mockOnRegenerateCodes.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve([]), 100))
+        () => new Promise(() => {})
       )
 
       render(

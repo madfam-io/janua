@@ -1317,7 +1317,39 @@ export default function OAuthClientsPage() {
             )}
           </CardHeader>
           <CardContent>
-            {filteredClients.length === 0 && clients.length === 0 ? (
+            {/*
+              A FAILED LOAD IS NOT AN EMPTY LIST.
+
+              `clients` starts as [] and stays [] when fetchClients() throws, so
+              keying the empty state on length alone told an operator "No OAuth
+              clients yet — create your first" while the instance actually held
+              51 clients and the request had simply errored. That is not a
+              cosmetic wording bug: the offered next action is Create, so the
+              honest response to seeing it is to mint a duplicate of a client
+              that already exists. This registry already contains 13 clients
+              named "Voxa" and 3 named "tulana*".
+
+              Checking `error` first keeps "I could not read the list" distinct
+              from "I read the list and it was empty" — the same discrimination
+              the operator-console probes are built around.
+            */}
+            {error ? (
+              <div className="py-8 text-center">
+                <AlertCircle className="text-destructive mx-auto size-12" />
+                <h3 className="mt-4 text-lg font-medium">
+                  Could not load OAuth clients
+                </h3>
+                <p className="text-muted-foreground mx-auto mt-2 max-w-md">
+                  The list could not be read, so it is unknown whether any
+                  clients exist. Do not create a client from this screen — you
+                  may duplicate one that is already registered.
+                </p>
+                <Button variant="outline" className="mt-4" onClick={fetchClients}>
+                  <RefreshCw className="mr-2 size-4" />
+                  Retry
+                </Button>
+              </div>
+            ) : filteredClients.length === 0 && clients.length === 0 ? (
               <div className="py-8 text-center">
                 <Globe className="text-muted-foreground mx-auto size-12" />
                 <h3 className="mt-4 text-lg font-medium">No OAuth clients yet</h3>
