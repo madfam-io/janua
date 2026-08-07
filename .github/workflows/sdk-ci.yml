@@ -115,7 +115,34 @@ jobs:
       - name: Run tests
         run: |
           cd packages/python-sdk
-          pytest tests/ -v || true
+          pytest tests/ -v
+
+      # Catches the class of breakage this job missed for months: the package
+      # appearing importable only because of the source tree.
+      #
+      # This deliberately does NOT reuse the `pip install -e .[dev]` env above.
+      # An editable install resolves `janua` back to the checkout, so
+      # `janua.__file__` points at the source tree no matter how broken the
+      # packaging or the declared dependencies are. Only a non-editable install
+      # of the built wheel, in a venv that has nothing else in it, exercises
+      # what a real consumer gets — that is how the missing pydantic[email]
+      # extra was found, having been invisible from the source tree.
+      - name: Verify built wheel imports as a consumer would
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/consumer-venv"
+          "$RUNNER_TEMP/consumer-venv/bin/pip" install --quiet --upgrade pip
+          "$RUNNER_TEMP/consumer-venv/bin/pip" install --quiet packages/python-sdk/dist/*.whl
+          cd "$RUNNER_TEMP"   # contains no janua/, so the install is the only source
+          "$RUNNER_TEMP/consumer-venv/bin/python" -c "
+          import janua, pathlib
+          print('janua', janua.__version__, 'from', janua.__file__)
+          assert 'site-packages' in janua.__file__, 'resolved outside site-packages: ' + janua.__file__
+          from janua.types import JanuaConfig, ListResponse, MFAMethod, Organization
+          ListResponse[Organization](items=[], total=0, limit=10, offset=0)
+          janua.JanuaClient(api_key='sk_test_ci')
+          print('consumer import OK')
+          "
 
       - name: Verify dist/
         run: |
