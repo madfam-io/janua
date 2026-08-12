@@ -6,6 +6,7 @@ Cross-service identity for the RFC 0024 §P4 consolidations:
 |---|---|---|---|---|
 | Zavlo → Karafiel CFDI bridge (§P4.2) | `zavlo-cfdi-emitter` | `cfdi:issue` | `karafiel-api` | Karafiel API |
 | RouteCraft → Dhanam billing (§P4.3) | `routecraft-billing-relay` | `billing:events` | `dhanam-api` | Dhanam API |
+| Nauta → Karafiel legal drafts (D3.5) | `nauta-legal-drafts` | `legal:draft` | `karafiel-api` | Karafiel API |
 
 Both migration plans (`zavlo/docs/karafiel-cfdi-migration-plan.md`,
 `routecraft/docs/dhanam-payments-migration-plan.md`) are gated on this

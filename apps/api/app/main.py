@@ -683,6 +683,7 @@ def openid_configuration():
             # Service-to-service (client_credentials) scopes — see docs/service-tokens.md
             "cfdi:issue",
             "billing:events",
+            "legal:draft",
         ],
         "token_endpoint_auth_methods_supported": [
             "client_secret_basic",

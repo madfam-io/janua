@@ -39,6 +39,8 @@ INTROSPECT_URL = "/api/v1/oauth/introspect"
 # Placeholder credentials for tests only — never real secrets.
 ZAVLO_CLIENT_ID = "jnc_test_zavlo_cfdi_emitter"
 ZAVLO_SECRET = "jns_test_zavlo_secret_placeholder"
+NAUTA_CLIENT_ID = "jnc_test_nauta_legal_drafts"
+NAUTA_SECRET = "jns_test_nauta_secret_placeholder"
 ROUTECRAFT_CLIENT_ID = "jnc_test_routecraft_billing_relay"
 ROUTECRAFT_SECRET = "jns_test_routecraft_secret_placeholder"
 INTERACTIVE_CLIENT_ID = "jnc_test_interactive_only"
@@ -126,6 +128,17 @@ async def service_token_client():
         session.add(
             _service_client(
                 created_by=admin_id,
+                name="nauta-legal-drafts",
+                client_id=NAUTA_CLIENT_ID,
+                secret=NAUTA_SECRET,
+                audience="karafiel-api",
+                allowed_scopes=["legal:draft"],
+                grant_types=["client_credentials"],
+            )
+        )
+        session.add(
+            _service_client(
+                created_by=admin_id,
                 name="routecraft-billing-relay",
                 client_id=ROUTECRAFT_CLIENT_ID,
                 secret=ROUTECRAFT_SECRET,
@@ -206,6 +219,38 @@ class TestServiceTokenIssuance:
         assert "service_account" in claims["roles"]
         assert claims["scope"] == "cfdi:issue"
         assert claims["aud"] == "karafiel-api"
+
+    async def test_nauta_legal_drafts_client_receives_scoped_service_token(
+        self, service_token_client
+    ):
+        # The Nauta -> Karafiel legal-drafts edge (nauta plan doc, step D3.5):
+        # audience karafiel-api, scope legal:draft, machine-identity sub.
+        response = await _request_token(
+            service_token_client,
+            client_id=NAUTA_CLIENT_ID,
+            client_secret=NAUTA_SECRET,
+            scope="legal:draft",
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["scope"] == "legal:draft"
+        claims = jwt_manager.verify_token(
+            body["access_token"], token_type="access", audience="karafiel-api"
+        )
+        assert claims is not None
+        assert claims["sub"] == f"service-account:{NAUTA_CLIENT_ID}"
+        assert claims["actor_type"] == "service_account"
+        assert claims["scope"] == "legal:draft"
+
+    def test_seed_list_pins_the_nauta_legal_drafts_contract(self):
+        from scripts.seed_service_clients import SERVICE_CLIENTS
+
+        entry = next(c for c in SERVICE_CLIENTS if c["name"] == "nauta-legal-drafts")
+        assert entry["audience"] == "karafiel-api"
+        assert entry["allowed_scopes"] == ["legal:draft"]
+        assert entry["grant_types"] == ["client_credentials"]
+        assert entry["is_confidential"] is True
+        assert entry["redirect_uris"] == []
 
     async def test_routecraft_client_defaults_to_full_allowlist(self, service_token_client):
         """Omitting scope grants the client's (single-scope) allowlist."""
