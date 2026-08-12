@@ -64,6 +64,20 @@ SERVICE_CLIENTS: list[dict[str, Any]] = [
         "is_confidential": True,
     },
     {
+        "name": "nauta-legal-drafts",
+        "description": (
+            "Nauta → Karafiel legal document generation service client "
+            "(nauta docs/LEGAL_OPS_INTEGRATION_PLAN_2026-08-12.md, step "
+            "D3.5). Creates and compiles service-agreement drafts and reads "
+            "generated-document metadata; nothing else."
+        ),
+        "audience": "karafiel-api",
+        "redirect_uris": [],
+        "allowed_scopes": ["legal:draft"],
+        "grant_types": ["client_credentials"],
+        "is_confidential": True,
+    },
+    {
         "name": "routecraft-billing-relay",
         "description": (
             "RouteCraft → Dhanam billing delegation service client "
