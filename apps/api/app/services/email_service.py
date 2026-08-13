@@ -13,6 +13,7 @@ from email.utils import formataddr
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import httpx
 import redis.asyncio as redis
 import structlog
 from jinja2 import Environment, FileSystemLoader
@@ -73,6 +74,7 @@ class EmailService:
         template_data = {
             "user_name": user_name or email.split("@")[0],
             "verification_url": verification_url,
+            "verification_link": verification_url,
             "base_url": settings.BASE_URL,
             "company_name": "Janua",
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
@@ -179,6 +181,7 @@ class EmailService:
         template_data = {
             "user_name": user_name or email.split("@")[0],
             "reset_url": reset_url,
+            "reset_link": reset_url,
             "base_url": settings.BASE_URL,
             "company_name": "Janua",
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
@@ -207,6 +210,7 @@ class EmailService:
         template_data = {
             "user_name": user_name or email.split("@")[0],
             "dashboard_url": f"{settings.BASE_URL}/dashboard",
+            "dashboard_link": f"{settings.BASE_URL}/dashboard",
             "base_url": settings.BASE_URL,
             "company_name": "Janua",
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
@@ -238,10 +242,22 @@ class EmailService:
         return token_hash[:64]  # 64-char hex string
 
     def _render_template(self, template_name: str, data: Dict[str, Any]) -> str:
-        """Render email template with data"""
+        """Render email template with data.
+
+        Injects the context every template inherits from base.html. Jinja
+        renders an undefined variable as empty string, so a missing value here
+        does not fail loudly — it silently ships a mail with a blank footer or,
+        worse, a blank button href. Callers supply the `*_link` names the
+        templates actually reference.
+        """
         try:
             template = self.jinja_env.get_template(template_name)
-            return template.render(**data)
+            context = {
+                "current_year": datetime.utcnow().year,
+                "subject": data.get("subject", "Janua"),
+                **data,
+            }
+            return template.render(**context)
         except Exception as e:
             logger.error(
                 "Template rendering failed", template=template_name, error_type=type(e).__name__
@@ -249,34 +265,112 @@ class EmailService:
             # Fallback to simple text
             if "verification" in template_name:
                 return f"Please verify your email by clicking: {data.get('verification_url', '')}"
+            elif "magic_link" in template_name:
+                return f"Sign in to Janua by clicking: {data.get('magic_url', '')}"
             elif "password_reset" in template_name:
                 return f"Reset your password by clicking: {data.get('reset_url', '')}"
             elif "welcome" in template_name:
                 return f"Welcome to Janua, {data.get('user_name', 'there')}!"
             return "Email content unavailable"
 
+    async def send_magic_link_email(
+        self, email: str, magic_token: str, redirect_url: Optional[str] = None
+    ) -> bool:
+        """Send a passwordless sign-in link.
+
+        The link points at Janua's own GET callback rather than at the product
+        page: a clicked link is a GET, and only Janua can trade the one-time
+        magic token for a session. The callback then forwards to redirect_url
+        (already allowlist-validated when the link was requested).
+        """
+        callback = f"{settings.API_BASE_URL or settings.BASE_URL}/api/v1/auth/magic-link/callback"
+        magic_url = f"{callback}?token={magic_token}"
+
+        template_data = {
+            "user_name": email.split("@")[0],
+            "magic_url": magic_url,
+            "magic_link": magic_url,
+            "base_url": settings.BASE_URL,
+            "company_name": "Janua",
+            "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
+        }
+
+        subject = "Your Janua sign-in link"
+        html_content = self._render_template("magic_link.html", template_data)
+        text_content = self._render_template("magic_link.txt", template_data)
+
+        sent = await self._send_email(
+            to_email=email, subject=subject, html_content=html_content, text_content=text_content
+        )
+        if sent:
+            logger.info("Magic link email sent", email=_redact_email(email))
+        else:
+            logger.error("Failed to send magic link email", email=_redact_email(email))
+        return sent
+
+    async def _send_via_resend(
+        self, to_email: str, subject: str, html_content: str, text_content: str = None
+    ) -> bool:
+        """Send through Resend's HTTPS API.
+
+        This exists because SMTP is not reachable from this cluster at all:
+        the namespace runs default-deny egress and permits 443 only, so every
+        SMTP attempt died with ConnectionRefusedError on 587 AND 465 (verified
+        from the pod, 2026-08-13). EMAIL_PROVIDER has said "resend" and
+        RESEND_API_KEY has been present the whole time — only the transport
+        disagreed. Nothing this service ever sent left the cluster.
+        """
+        payload: Dict[str, Any] = {
+            "from": formataddr((settings.FROM_NAME or "Janua", settings.FROM_EMAIL)),
+            "to": [to_email],
+            "subject": subject,
+        }
+        if html_content:
+            payload["html"] = html_content
+        if text_content:
+            payload["text"] = text_content
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                json=payload,
+            )
+
+        if response.status_code >= 400:
+            # Body may name a misconfiguration (unverified domain, bad key);
+            # it carries no recipient content, so it is safe to log.
+            logger.error(
+                "Resend rejected the message",
+                to=_redact_email(to_email),
+                status_code=response.status_code,
+                detail=response.text[:300],
+            )
+            return False
+        return True
+
     async def _send_email(
         self, to_email: str, subject: str, html_content: str, text_content: str = None
     ) -> bool:
-        """Send email via SMTP or email service"""
-
-        # For alpha launch, we'll use a simple implementation
-        # In production, integrate with SendGrid, Resend, or similar
+        """Send an email via the configured provider."""
 
         try:
+            if settings.EMAIL_PROVIDER == "resend" and settings.RESEND_API_KEY:
+                return await self._send_via_resend(
+                    to_email, subject, html_content, text_content
+                )
+
             # Check if email configuration is available
             if not hasattr(settings, "SMTP_HOST") or not settings.SMTP_HOST:
-                # For alpha: Log email metadata instead of full details
-                logger.info(
-                    "EMAIL [Alpha Mode]: email sent",
+                # No transport at all. This used to return True, which made an
+                # undeliverable email indistinguishable from a sent one for
+                # every caller — return False so callers can say so honestly.
+                logger.error(
+                    "No email transport configured — message NOT sent",
                     to=_redact_email(to_email),
-                    subject_length=len(subject),
+                    provider=settings.EMAIL_PROVIDER,
                 )
-                logger.debug(
-                    "Email content preview available (length=%d chars)",
-                    len(text_content or html_content),
-                )
-                return True
+                return False
 
             # Create message
             msg = MIMEMultipart("alternative")
@@ -340,3 +434,63 @@ async def send_password_reset_email_task(
             )
     except Exception:
         logger.exception("Password reset email task failed")
+
+
+async def send_magic_link_email_task(
+    email: str, magic_token: str, redirect_url: Optional[str] = None
+) -> None:
+    """Background-task entrypoint for the magic-link flow.
+
+    Routers must schedule THIS, not `EmailService.send_magic_link_email`:
+    these are instance methods, so scheduling the unbound attribute binds the
+    first argument to `self` and the call dies on the first attribute access.
+    That is exactly how the magic-link route failed — it referenced a method
+    that did not exist at all, raising AttributeError before any mail was
+    attempted, which is why no client could ever sign in passwordlessly.
+    """
+    try:
+        service = EmailService()
+        sent = await service.send_magic_link_email(email, magic_token, redirect_url)
+        if not sent:
+            logger.warning(
+                "Magic link email NOT sent — the recipient will never receive a sign-in link",
+                email=_redact_email(email),
+            )
+    except Exception:
+        logger.exception("Magic link email task failed")
+
+
+async def send_verification_email_task(
+    email: str, verification_token: str, user_name: Optional[str] = None
+) -> None:
+    """Background-task entrypoint for email verification.
+
+    Takes the CALLER's token deliberately. `EmailService.send_verification_email`
+    mints its own token into Redis, but `/auth/verify-email` validates against
+    the `email_verifications` table — so the token that got mailed and the token
+    that could be verified were never the same value.
+    """
+    try:
+        service = EmailService()
+        verification_url = (
+            f"{settings.FRONTEND_URL}/auth/verify-email?token={verification_token}"
+        )
+        template_data = {
+            "user_name": user_name or email.split("@")[0],
+            "verification_url": verification_url,
+            "base_url": settings.BASE_URL,
+            "company_name": "Janua",
+            "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
+        }
+        sent = await service._send_email(
+            to_email=email,
+            subject="Verify your Janua email address",
+            html_content=service._render_template("verification.html", template_data),
+            text_content=service._render_template("verification.txt", template_data),
+        )
+        if not sent:
+            logger.warning(
+                "Verification email NOT sent", email=_redact_email(email)
+            )
+    except Exception:
+        logger.exception("Verification email task failed")

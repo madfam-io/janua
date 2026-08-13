@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="color: #1f2937; margin: 0 0 20px 0;">Sign in to Janua</h2>
+
+<p style="margin: 0 0 20px 0;">
+    Hi {{ user_name }},
+</p>
+
+<p style="margin: 0 0 20px 0;">
+    Use the button below to sign in. No password needed — the link signs you in directly.
+</p>
+
+<div style="text-align: center;">
+    <a href="{{ magic_link }}" class="button">Sign in</a>
+</div>
+
+<p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px;">
+    This link works once and expires in 15 minutes.
+</p>
+
+<div class="warning">
+    <strong>⚠️ Security Notice</strong><br>
+    If you didn't ask to sign in, you can ignore this email — the link is tied to your
+    address and does nothing until it is opened. Never forward it: anyone holding the
+    link can sign in as you until it expires.
+</div>
+
+<p style="margin: 20px 0 0 0; color: #6b7280; font-size: 12px;">
+    If the button doesn't work, copy this address into your browser:<br>
+    {{ magic_link }}
+</p>
+{% endblock %}

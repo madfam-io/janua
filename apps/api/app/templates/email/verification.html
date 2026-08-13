@@ -1,4 +1,4 @@
-{% extends "email/base.html" %}
+{% extends "base.html" %}
 
 {% block content %}
 <h2 style="color: #1f2937; margin: 0 0 20px 0;">Verify Your Email Address</h2>
@@ -11,6 +11,7 @@
     Welcome to Janua! Please verify your email address to complete your account setup and gain access to all features.
 </p>
 
+{% if verification_code %}
 <div class="code-box">
     <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">
         Your verification code:
@@ -20,6 +21,7 @@
         This code expires in 15 minutes
     </p>
 </div>
+{% endif %}
 
 <p style="margin: 0 0 20px 0; text-align: center;">
     Or click the button below to verify your email:
