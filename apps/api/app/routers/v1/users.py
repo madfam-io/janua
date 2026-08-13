@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -58,6 +58,14 @@ class UserResponse(BaseModel):
     updated_at: datetime
     last_sign_in_at: Optional[datetime]
     user_metadata: dict
+
+    @field_validator("email_verified", "phone_verified", mode="before")
+    @classmethod
+    def _null_bool_is_false(cls, v):
+        # Nullable-without-backfill boolean columns surface None for old rows
+        # (the bootstrap admin 500'd /users/me on 2026-08-13). Semantically a
+        # NULL here is "never verified": False, never an error.
+        return False if v is None else v
 
 
 class UsersListResponse(BaseModel):
