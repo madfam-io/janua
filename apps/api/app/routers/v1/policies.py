@@ -1,15 +1,23 @@
 """
 Policy management and evaluation API endpoints.
+
+Route declaration order is load-bearing here. FastAPI/Starlette match routes in
+declaration order and return the FIRST full match, so a parametric route such as
+``GET /{policy_id}`` will swallow every sibling literal path declared after it
+(``/roles`` would be parsed as a policy id). All literal paths are therefore
+declared first and the ``/{policy_id}`` handlers are kept last in this module.
+See ``tests/unit/routers/test_policies_route_order.py``.
 """
 
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
+from app.models import OrganizationMember
 from app.models.policy import (
     Policy,
     PolicyCreate,
@@ -101,6 +109,238 @@ async def list_policies(
     policies = result.scalars().all()
 
     return [PolicyResponse.from_orm(p) for p in policies]
+
+
+@router.post("/evaluate", response_model=PolicyEvaluateResponse)
+async def evaluate_policies(
+    request: PolicyEvaluateRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Evaluate policies for a given request.
+    """
+    # Initialize policy engine
+    cache = CacheService()
+    engine = PolicyEngine(db, cache)
+
+    # Add user context to request if not present
+    if not request.context:
+        request.context = {}
+
+    request.context.update(
+        {
+            "user_id": str(current_user.id),
+            "tenant_id": str(current_user.tenant_id),
+            "organization_id": str(current_user.organization_id)
+            if current_user.organization_id
+            else None,
+        }
+    )
+
+    # Evaluate policies
+    response = await engine.evaluate(request=request, tenant_id=str(current_user.tenant_id))
+
+    return response
+
+
+# Role management endpoints
+#
+# These literal paths MUST stay above the `/{policy_id}` handlers at the bottom
+# of this module, otherwise `/policies/roles` is matched as a policy id.
+
+
+@router.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+async def create_role(
+    role_data: RoleCreate, current_user=Depends(require_admin), db: Session = Depends(get_db)
+):
+    """
+    Create a new role (admin only).
+    """
+    # Check if role name already exists
+    result = await db.execute(
+        select(Role).where(
+            and_(Role.tenant_id == current_user.tenant_id, Role.name == role_data.name)
+        )
+    )
+    existing_role = result.scalar_one_or_none()
+
+    if existing_role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Role with this name already exists"
+        )
+
+    # Create new role
+    role = Role(
+        tenant_id=current_user.tenant_id,
+        organization_id=role_data.organization_id if role_data.organization_id else None,
+        name=role_data.name,
+        description=role_data.description,
+        permissions=role_data.permissions,
+    )
+
+    db.add(role)
+    await db.commit()
+    await db.refresh(role)
+
+    # Log audit event
+    audit_logger = AuditLogger(db)
+    await audit_logger.log(
+        action=AuditAction.ROLE_CREATE,
+        user_id=str(current_user.id),
+        resource_type="role",
+        resource_id=str(role.id),
+        details={"role_name": role.name},
+    )
+
+    return RoleResponse.from_orm(role)
+
+
+@router.get("/roles", response_model=List[RoleResponse])
+async def list_roles(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    organization_id: Optional[str] = None,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    List roles visible to the current user.
+
+    Scoping goes through organization membership because `organization_id` is
+    the only tenancy column that exists on the `roles` table (see
+    `app.models.Role` and alembic 000_init). The previous `Role.tenant_id`
+    filter referenced a column that has never existed and raised AttributeError
+    at request time, so this handler could not have returned 200 even once it
+    was reachable.
+    """
+    member_org_ids = select(OrganizationMember.organization_id).where(
+        OrganizationMember.user_id == current_user.id
+    )
+
+    stmt = select(Role).where(Role.organization_id.in_(member_org_ids))
+
+    if organization_id:
+        stmt = stmt.where(Role.organization_id == organization_id)
+
+    result = await db.execute(stmt.offset(skip).limit(limit))
+    roles = result.scalars().all()
+
+    return [RoleResponse.from_orm(r) for r in roles]
+
+
+@router.post("/roles/{role_id}/assign")
+async def assign_role_to_user(
+    role_id: str,
+    user_id: str,
+    organization_id: Optional[str] = None,
+    current_user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Assign a role to a user (admin only).
+    """
+    # Verify role exists
+    role_result = await db.execute(
+        select(Role).where(and_(Role.id == role_id, Role.tenant_id == current_user.tenant_id))
+    )
+    role = role_result.scalar_one_or_none()
+
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+
+    # Check if assignment already exists
+    existing_result = await db.execute(
+        select(UserRole).where(
+            and_(
+                UserRole.user_id == user_id,
+                UserRole.role_id == role_id,
+                UserRole.organization_id == organization_id,
+            )
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Role already assigned to user"
+        )
+
+    # Create assignment
+    user_role = UserRole(
+        user_id=user_id,
+        role_id=role_id,
+        organization_id=organization_id,
+        scope="organization" if organization_id else "tenant",
+    )
+
+    db.add(user_role)
+    await db.commit()
+
+    # Clear permission cache for user
+    cache = CacheService()
+    await cache.delete(f"user:permissions:{user_id}")
+
+    # Log audit event
+    audit_logger = AuditLogger(db)
+    await audit_logger.log(
+        action=AuditAction.ROLE_ASSIGN,
+        user_id=str(current_user.id),
+        resource_type="user_role",
+        resource_id=str(user_role.id),
+        details={"role_name": role.name, "assigned_to": user_id},
+    )
+
+    return {"message": "Role assigned successfully"}
+
+
+@router.delete("/roles/{role_id}/unassign")
+async def unassign_role_from_user(
+    role_id: str, user_id: str, current_user=Depends(require_admin), db: Session = Depends(get_db)
+):
+    """
+    Remove a role from a user (admin only).
+    """
+    # Find assignment
+    result = await db.execute(
+        select(UserRole).where(and_(UserRole.user_id == user_id, UserRole.role_id == role_id))
+    )
+    user_role = result.scalar_one_or_none()
+
+    if not user_role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Role assignment not found"
+        )
+
+    # Delete assignment
+    db.delete(user_role)
+    await db.commit()
+
+    # Clear permission cache for user
+    cache = CacheService()
+    await cache.delete(f"user:permissions:{user_id}")
+
+    # Log audit event
+    audit_logger = AuditLogger(db)
+    await audit_logger.log(
+        action=AuditAction.ROLE_UNASSIGN,
+        user_id=str(current_user.id),
+        resource_type="user_role",
+        resource_id=str(user_role.id),
+        details={"role_id": role_id, "unassigned_from": user_id},
+    )
+
+    return {"message": "Role unassigned successfully"}
+
+
+# ---------------------------------------------------------------------------
+# Parametric single-policy routes.
+#
+# KEEP THESE LAST. `/{policy_id}` matches any single path segment, so every
+# literal sibling route (`/roles`, `/evaluate`, ...) declared BELOW one of these
+# becomes permanently unreachable — Starlette returns the first full match in
+# declaration order. Add new literal `/policies/<name>` routes above this block.
+# ---------------------------------------------------------------------------
 
 
 @router.get("/{policy_id}", response_model=PolicyResponse)
@@ -214,216 +454,3 @@ async def delete_policy(
     )
 
     return None
-
-
-@router.post("/evaluate", response_model=PolicyEvaluateResponse)
-async def evaluate_policies(
-    request: PolicyEvaluateRequest,
-    current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    Evaluate policies for a given request.
-    """
-    # Initialize policy engine
-    cache = CacheService()
-    engine = PolicyEngine(db, cache)
-
-    # Add user context to request if not present
-    if not request.context:
-        request.context = {}
-
-    request.context.update(
-        {
-            "user_id": str(current_user.id),
-            "tenant_id": str(current_user.tenant_id),
-            "organization_id": str(current_user.organization_id)
-            if current_user.organization_id
-            else None,
-        }
-    )
-
-    # Evaluate policies
-    response = await engine.evaluate(request=request, tenant_id=str(current_user.tenant_id))
-
-    return response
-
-
-# Role management endpoints
-
-
-@router.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
-async def create_role(
-    role_data: RoleCreate, current_user=Depends(require_admin), db: Session = Depends(get_db)
-):
-    """
-    Create a new role (admin only).
-    """
-    # Check if role name already exists
-    result = await db.execute(
-        select(Role).where(
-            and_(Role.tenant_id == current_user.tenant_id, Role.name == role_data.name)
-        )
-    )
-    existing_role = result.scalar_one_or_none()
-
-    if existing_role:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Role with this name already exists"
-        )
-
-    # Create new role
-    role = Role(
-        tenant_id=current_user.tenant_id,
-        organization_id=role_data.organization_id if role_data.organization_id else None,
-        name=role_data.name,
-        description=role_data.description,
-        permissions=role_data.permissions,
-    )
-
-    db.add(role)
-    await db.commit()
-    await db.refresh(role)
-
-    # Log audit event
-    audit_logger = AuditLogger(db)
-    await audit_logger.log(
-        action=AuditAction.ROLE_CREATE,
-        user_id=str(current_user.id),
-        resource_type="role",
-        resource_id=str(role.id),
-        details={"role_name": role.name},
-    )
-
-    return RoleResponse.from_orm(role)
-
-
-@router.get("/roles", response_model=List[RoleResponse])
-async def list_roles(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    organization_id: Optional[str] = None,
-    current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    List all roles.
-    """
-    stmt = select(Role).where(Role.tenant_id == current_user.tenant_id)
-
-    if organization_id:
-        stmt = stmt.where(
-            or_(
-                Role.organization_id == organization_id,
-                Role.organization_id.is_(None),  # Include tenant-level roles
-            )
-        )
-
-    result = await db.execute(stmt.offset(skip).limit(limit))
-    roles = result.scalars().all()
-
-    return [RoleResponse.from_orm(r) for r in roles]
-
-
-@router.post("/roles/{role_id}/assign")
-async def assign_role_to_user(
-    role_id: str,
-    user_id: str,
-    organization_id: Optional[str] = None,
-    current_user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    """
-    Assign a role to a user (admin only).
-    """
-    # Verify role exists
-    role_result = await db.execute(
-        select(Role).where(and_(Role.id == role_id, Role.tenant_id == current_user.tenant_id))
-    )
-    role = role_result.scalar_one_or_none()
-
-    if not role:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
-
-    # Check if assignment already exists
-    existing_result = await db.execute(
-        select(UserRole).where(
-            and_(
-                UserRole.user_id == user_id,
-                UserRole.role_id == role_id,
-                UserRole.organization_id == organization_id,
-            )
-        )
-    )
-    existing = existing_result.scalar_one_or_none()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Role already assigned to user"
-        )
-
-    # Create assignment
-    user_role = UserRole(
-        user_id=user_id,
-        role_id=role_id,
-        organization_id=organization_id,
-        scope="organization" if organization_id else "tenant",
-    )
-
-    db.add(user_role)
-    await db.commit()
-
-    # Clear permission cache for user
-    cache = CacheService()
-    await cache.delete(f"user:permissions:{user_id}")
-
-    # Log audit event
-    audit_logger = AuditLogger(db)
-    await audit_logger.log(
-        action=AuditAction.ROLE_ASSIGN,
-        user_id=str(current_user.id),
-        resource_type="user_role",
-        resource_id=str(user_role.id),
-        details={"role_name": role.name, "assigned_to": user_id},
-    )
-
-    return {"message": "Role assigned successfully"}
-
-
-@router.delete("/roles/{role_id}/unassign")
-async def unassign_role_from_user(
-    role_id: str, user_id: str, current_user=Depends(require_admin), db: Session = Depends(get_db)
-):
-    """
-    Remove a role from a user (admin only).
-    """
-    # Find assignment
-    result = await db.execute(
-        select(UserRole).where(and_(UserRole.user_id == user_id, UserRole.role_id == role_id))
-    )
-    user_role = result.scalar_one_or_none()
-
-    if not user_role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role assignment not found"
-        )
-
-    # Delete assignment
-    db.delete(user_role)
-    await db.commit()
-
-    # Clear permission cache for user
-    cache = CacheService()
-    await cache.delete(f"user:permissions:{user_id}")
-
-    # Log audit event
-    audit_logger = AuditLogger(db)
-    await audit_logger.log(
-        action=AuditAction.ROLE_UNASSIGN,
-        user_id=str(current_user.id),
-        resource_type="user_role",
-        resource_id=str(user_role.id),
-        details={"role_id": role_id, "unassigned_from": user_id},
-    )
-
-    return {"message": "Role unassigned successfully"}
