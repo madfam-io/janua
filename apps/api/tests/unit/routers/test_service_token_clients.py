@@ -132,7 +132,7 @@ async def service_token_client():
                 client_id=NAUTA_CLIENT_ID,
                 secret=NAUTA_SECRET,
                 audience="karafiel-api",
-                allowed_scopes=["legal:draft"],
+                allowed_scopes=["legal:draft", "legal:client-profile"],
                 grant_types=["client_credentials"],
             )
         )
@@ -242,12 +242,84 @@ class TestServiceTokenIssuance:
         assert claims["actor_type"] == "service_account"
         assert claims["scope"] == "legal:draft"
 
+    async def test_nauta_client_receives_client_profile_scoped_token(self, service_token_client):
+        # karafiel PR #148: legal:client-profile lets Nauta create/update a
+        # client's OWN ClientProfile at /api/v1/legal/clients.
+        response = await _request_token(
+            service_token_client,
+            client_id=NAUTA_CLIENT_ID,
+            client_secret=NAUTA_SECRET,
+            scope="legal:client-profile",
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["scope"] == "legal:client-profile"
+        claims = jwt_manager.verify_token(
+            body["access_token"], token_type="access", audience="karafiel-api"
+        )
+        assert claims is not None
+        assert claims["sub"] == f"service-account:{NAUTA_CLIENT_ID}"
+        assert claims["actor_type"] == "service_account"
+        assert claims["scope"] == "legal:client-profile"
+
+    async def test_nauta_legal_scopes_are_independent(self, service_token_client):
+        """Neither legal scope implies the other — each token carries only
+        what it asked for, so Karafiel can guard drafts and client-profile
+        routes separately."""
+        draft_only = await _request_token(
+            service_token_client,
+            client_id=NAUTA_CLIENT_ID,
+            client_secret=NAUTA_SECRET,
+            scope="legal:draft",
+        )
+        assert draft_only.status_code == 200, draft_only.text
+        assert draft_only.json()["scope"] == "legal:draft"
+
+        profile_only = await _request_token(
+            service_token_client,
+            client_id=NAUTA_CLIENT_ID,
+            client_secret=NAUTA_SECRET,
+            scope="legal:client-profile",
+        )
+        assert profile_only.status_code == 200, profile_only.text
+        assert profile_only.json()["scope"] == "legal:client-profile"
+
+        # The grant is per-request, not per-client: holding both on the
+        # allowlist must not silently widen a single-scope token.
+        for issued, granted, withheld in (
+            (draft_only, "legal:draft", "legal:client-profile"),
+            (profile_only, "legal:client-profile", "legal:draft"),
+        ):
+            claims = jwt_manager.verify_token(
+                issued.json()["access_token"],
+                token_type="access",
+                audience="karafiel-api",
+            )
+            assert claims is not None
+            scopes = claims["scope"].split()
+            assert granted in scopes
+            assert withheld not in scopes
+
+    async def test_nauta_client_defaults_to_both_legal_scopes(self, service_token_client):
+        """Omitting scope grants the client's full allowlist — both legal scopes."""
+        response = await _request_token(
+            service_token_client,
+            client_id=NAUTA_CLIENT_ID,
+            client_secret=NAUTA_SECRET,
+            scope="",
+        )
+        assert response.status_code == 200, response.text
+        assert sorted(response.json()["scope"].split()) == [
+            "legal:client-profile",
+            "legal:draft",
+        ]
+
     def test_seed_list_pins_the_nauta_legal_drafts_contract(self):
         from scripts.seed_service_clients import SERVICE_CLIENTS
 
         entry = next(c for c in SERVICE_CLIENTS if c["name"] == "nauta-legal-drafts")
         assert entry["audience"] == "karafiel-api"
-        assert entry["allowed_scopes"] == ["legal:draft"]
+        assert entry["allowed_scopes"] == ["legal:draft", "legal:client-profile"]
         assert entry["grant_types"] == ["client_credentials"]
         assert entry["is_confidential"] is True
         assert entry["redirect_uris"] == []
@@ -290,6 +362,15 @@ class TestServiceTokenRejection:
         detail = _error_message(response)
         assert "invalid_scope" in detail
         assert "billing:events" in detail
+
+    async def test_legal_client_profile_scope_is_not_globally_grantable(self, service_token_client):
+        """Registering legal:client-profile in discovery must not make it
+        mintable by any client — only nauta-legal-drafts has it allowlisted."""
+        response = await _request_token(service_token_client, scope="legal:client-profile")
+        assert response.status_code == 400
+        detail = _error_message(response)
+        assert "invalid_scope" in detail
+        assert "legal:client-profile" in detail
 
     async def test_partially_escalated_scope_is_rejected(self, service_token_client):
         """One allowed + one foreign scope must still fail closed."""
