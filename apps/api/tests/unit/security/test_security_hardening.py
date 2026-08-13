@@ -315,10 +315,18 @@ class TestPasswordResetMethodName:
         assert hasattr(AuthService, "validate_password_strength")
 
     def test_reset_password_references_correct_method(self):
-        """Verify reset_password endpoint uses validate_password_strength."""
+        """Verify the reset path uses validate_password_strength.
+
+        Since 2026-08-13 the endpoint delegates to _consume_password_reset
+        (shared with the hosted reset form), so the guard follows the call:
+        the endpoint must delegate, and the helper must validate. The original
+        pre-existing-bug concern (a misnamed validate_password) stays covered.
+        """
         import inspect
         from app.routers.v1 import auth
 
-        source = inspect.getsource(auth.reset_password)
-        # This was a pre-existing bug — ensure it now uses the correct method
-        assert "validate_password_strength" in source or "validate_password(" in source
+        endpoint_source = inspect.getsource(auth.reset_password)
+        assert "_consume_password_reset" in endpoint_source
+
+        helper_source = inspect.getsource(auth._consume_password_reset)
+        assert "validate_password_strength" in helper_source

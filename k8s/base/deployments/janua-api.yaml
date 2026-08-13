@@ -145,8 +145,9 @@ spec:
               value: info
             - name: BASE_URL
               value: https://auth.madfam.io
-            # Frontend pages (NOT the API host — auth.madfam.io serves no pages;
-            # reset/verify email links are built on this, see PR#473)
+            # Frontend pages — verify-email links are built on this (PR#473).
+            # Password-reset links no longer are: since 2026-08-13 they land on
+            # the API's own hosted reset page (the frontend route is auth-walled).
             - name: FRONTEND_URL
               value: https://app.janua.dev
             # Product reset pages allowed to receive password-reset tokens via

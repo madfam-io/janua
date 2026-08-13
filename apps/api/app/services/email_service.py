@@ -164,14 +164,16 @@ class EmailService:
             )  # 1 hour
 
         # Generate reset URL. redirect_base is a caller-validated product page
-        # (see PASSWORD_RESET_REDIRECT_ORIGINS); the default is Janua's own
-        # frontend — NOT BASE_URL, which points at the API host in prod and
-        # serves no pages.
+        # (see PASSWORD_RESET_REDIRECT_ORIGINS); the default is the API's own
+        # hosted reset page (2026-08-13) — the FRONTEND_URL default before it
+        # pointed at an auth-walled route (app.janua.dev/auth/reset-password
+        # redirects to /login), so the default recovery path could never
+        # complete: the one user guaranteed unable to log in is the one
+        # holding a reset token.
         if redirect_base:
             reset_url = f"{redirect_base}?token={reset_token}"
         else:
-            frontend = settings.FRONTEND_URL or settings.BASE_URL
-            reset_url = f"{frontend}/auth/reset-password?token={reset_token}"
+            reset_url = f"{settings.BASE_URL}/api/v1/auth/reset-password?token={reset_token}"
 
         # Prepare email content
         template_data = {

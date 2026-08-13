@@ -715,6 +715,18 @@ async def login_page(
             font-size: 14px;
             display: none;
         }}
+        .aux-link {{
+            text-align: right;
+            margin-top: 6px;
+        }}
+        .aux-link a {{
+            color: #667eea;
+            font-size: 13px;
+            text-decoration: none;
+        }}
+        .aux-link a:hover {{
+            text-decoration: underline;
+        }}
         .footer {{
             text-align: center;
             margin-top: 24px;
@@ -745,6 +757,7 @@ async def login_page(
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required autocomplete="current-password">
+                <div class="aux-link"><a href="/api/v1/auth/forgot-password">Forgot your password?</a></div>
             </div>
             <button type="submit" id="submitBtn">Sign In</button>
         </form>
@@ -965,6 +978,7 @@ async def login_form(
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required>
+                <div style="text-align:right;margin-top:6px"><a href="/api/v1/auth/forgot-password" style="color:#667eea;font-size:13px;text-decoration:none">Forgot your password?</a></div>
             </div>
             <button type="submit">Sign In</button>
         </form>
@@ -1222,6 +1236,94 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     )
 
 
+async def _dispatch_password_reset(
+    email: str,
+    redirect_base_raw: Optional[str],
+    background_tasks: BackgroundTasks,
+    db,
+) -> None:
+    """Create a reset token and queue the email — shared by the JSON endpoint
+    and the hosted forgot-password form. Does nothing when no ACTIVE user
+    matches: enumeration safety is both callers' contract, so absence must be
+    indistinguishable from success at every transport."""
+    result = await db.execute(
+        select(User).where(User.email == email, User.status == UserStatus.ACTIVE)
+    )
+    user = result.scalar_one_or_none()
+    if not (user and settings.EMAIL_ENABLED):
+        return
+
+    reset_token = secrets.token_urlsafe(32)
+    reset = PasswordReset(
+        user_id=user.id, token=reset_token, expires_at=datetime.utcnow() + timedelta(hours=1)
+    )
+    db.add(reset)
+    await db.commit()
+
+    # Only a pre-registered product page may receive the token.
+    redirect_base = None
+    if redirect_base_raw:
+        allowed = {
+            origin.strip()
+            for origin in (settings.PASSWORD_RESET_REDIRECT_ORIGINS or "").split(",")
+            if origin.strip()
+        }
+        if redirect_base_raw in allowed:
+            redirect_base = redirect_base_raw
+
+    # Send email in background via the REAL mailer, with THE token that
+    # /password/reset validates. The previous dispatch pointed at a
+    # placebo EmailService (app.services.email logs and returns True —
+    # nothing was ever sent) and even misnamed its method
+    # (send_password_reset_email vs the placebo's send_password_reset),
+    # while the SMTP-capable service generated a DIFFERENT token for the
+    # URL than the one stored in password_resets. Recovery could never
+    # complete by construction.
+    background_tasks.add_task(
+        send_password_reset_email_task, user.email, reset_token, redirect_base
+    )
+
+
+async def _consume_password_reset(token: str, new_password: str, db) -> tuple[bool, str]:
+    """Validate a reset token and set the new password — shared by the JSON
+    endpoint and the hosted reset form. Token check precedes policy check so a
+    dead link surfaces before a weak password does."""
+    result = await db.execute(
+        select(PasswordReset).where(
+            PasswordReset.token == token,
+            PasswordReset.used == False,
+            PasswordReset.expires_at > datetime.utcnow(),
+        )
+    )
+    reset = result.scalar_one_or_none()
+
+    if not reset:
+        return False, "Invalid or expired reset token"
+
+    valid, message = AuthService.validate_password_strength(new_password)
+    if not valid:
+        return False, message
+
+    user = await db.get(User, reset.user_id)
+    user.password_hash = AuthService.hash_password(new_password)
+    # Completing a reset proves control of the mailbox the token was mailed
+    # to — the same evidence the magic-link flow auto-verifies on. Without
+    # this, an unverified account recovers its password only to be blocked
+    # minutes later at the authorize endpoint's REQUIRE_EMAIL_VERIFICATION
+    # gate (observed live 2026-08-13).
+    user.email_verified = True
+
+    reset.used = True
+    reset.used_at = datetime.utcnow()
+
+    await db.commit()
+
+    await log_activity(db, str(user.id), "password_reset", {})
+    await log_audit_event(db, str(user.id), "password_reset", {})
+
+    return True, "Password successfully reset"
+
+
 @router.post("/password/forgot")
 @limiter.limit("3/hour")  # Strict rate limiting for password reset requests
 async def forgot_password(
@@ -1231,83 +1333,265 @@ async def forgot_password(
     db: Session = Depends(get_db),
 ):
     """Request password reset email"""
-    result = await db.execute(
-        select(User).where(User.email == forgot_data.email, User.status == UserStatus.ACTIVE)
+    await _dispatch_password_reset(
+        forgot_data.email, forgot_data.redirect_base, background_tasks, db
     )
-    user = result.scalar_one_or_none()
-
     # Don't reveal if user exists
-    if user and settings.EMAIL_ENABLED:
-        # Create reset token
-        reset_token = secrets.token_urlsafe(32)
-        reset = PasswordReset(
-            user_id=user.id, token=reset_token, expires_at=datetime.utcnow() + timedelta(hours=1)
-        )
-        db.add(reset)
-        await db.commit()
-
-        # Only a pre-registered product page may receive the token.
-        redirect_base = None
-        if forgot_data.redirect_base:
-            allowed = {
-                origin.strip()
-                for origin in (settings.PASSWORD_RESET_REDIRECT_ORIGINS or "").split(",")
-                if origin.strip()
-            }
-            if forgot_data.redirect_base in allowed:
-                redirect_base = forgot_data.redirect_base
-
-        # Send email in background via the REAL mailer, with THE token that
-        # /password/reset validates. The previous dispatch pointed at a
-        # placebo EmailService (app.services.email logs and returns True —
-        # nothing was ever sent) and even misnamed its method
-        # (send_password_reset_email vs the placebo's send_password_reset),
-        # while the SMTP-capable service generated a DIFFERENT token for the
-        # URL than the one stored in password_resets. Recovery could never
-        # complete by construction.
-        background_tasks.add_task(
-            send_password_reset_email_task, user.email, reset_token, redirect_base
-        )
-
     return {"message": "If the email exists, a password reset link has been sent"}
 
 
 @router.post("/password/reset")
 async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
     """Reset password with token"""
-    # Find valid reset token
-    result = await db.execute(
-        select(PasswordReset).where(
-            PasswordReset.token == request.token,
-            PasswordReset.used == False,
-            PasswordReset.expires_at > datetime.utcnow(),
-        )
-    )
-    reset = result.scalar_one_or_none()
-
-    if not reset:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-
-    # Validate new password
-    valid, message = AuthService.validate_password_strength(request.new_password)
-    if not valid:
+    ok, message = await _consume_password_reset(request.token, request.new_password, db)
+    if not ok:
         raise HTTPException(status_code=400, detail=message)
+    return {"message": message}
 
-    # Update password
-    user = await db.get(User, reset.user_id)
-    user.password_hash = AuthService.hash_password(request.new_password)
 
-    # Mark token as used
-    reset.used = True
-    reset.used_at = datetime.utcnow()
+def _recovery_page_html(body: str) -> str:
+    """Visual shell for the hosted recovery pages — same look as the hosted
+    login page (whose CSS is inlined per-page by existing convention)."""
+    return f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password recovery - Janua</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .login-container {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }}
+        .logo {{ text-align: center; margin-bottom: 30px; }}
+        .logo h1 {{ font-size: 28px; color: #333; margin-bottom: 8px; }}
+        .logo p {{ color: #666; font-size: 14px; }}
+        .lead {{ color: #666; font-size: 14px; margin-bottom: 20px; }}
+        .lead a {{ color: #667eea; }}
+        .hint {{ color: #666; font-size: 12px; margin: -8px 0 16px; }}
+        .form-group {{ margin-bottom: 20px; }}
+        label {{
+            display: block;
+            margin-bottom: 6px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }}
+        input[type="email"], input[type="password"] {{
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5eb;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }}
+        input:focus {{
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }}
+        button {{
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }}
+        button:hover {{
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }}
+        .alert-error {{
+            background: #fee;
+            color: #c00;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }}
+        .alert-ok {{
+            background: #e8f5ee;
+            color: #14683c;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 24px;
+            color: #666;
+            font-size: 12px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="login-container">
+{body}
+    </div>
+</body>
+</html>
+"""
 
-    await db.commit()
 
-    # Log activity
-    await log_activity(db, str(user.id), "password_reset", {})
-    await log_audit_event(db, str(user.id), "password_reset", {})
+def _reset_form_body(token: str, error: Optional[str] = None) -> str:
+    import html as html_mod
 
-    return {"message": "Password successfully reset"}
+    error_html = f'<div class="alert-error">{html_mod.escape(error)}</div>' if error else ""
+    return f"""
+        <div class="logo"><h1>&#128274; Janua</h1><p>Choose a new password</p></div>
+        {error_html}
+        <form method="POST" action="/api/v1/auth/reset-password-form">
+            <input type="hidden" name="token" value="{html_mod.escape(token)}">
+            <div class="form-group">
+                <label for="new_password">New password</label>
+                <input type="password" id="new_password" name="new_password" required autocomplete="new-password" autofocus>
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">Confirm new password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required autocomplete="new-password">
+            </div>
+            <p class="hint">At least 12 characters, with an uppercase letter, a lowercase letter, a number, and a special character.</p>
+            <button type="submit">Set new password</button>
+        </form>
+        <div class="footer">Powered by Janua &bull; Secure Authentication</div>
+    """
+
+
+@router.get("/forgot-password")
+async def forgot_password_page():
+    """Hosted forgot-password page, linked from the hosted login page.
+
+    Before this page existed the hosted login form offered no recovery
+    affordance at all — a user who forgot their password had nowhere to go
+    (observed live 2026-08-13)."""
+    from fastapi.responses import HTMLResponse
+
+    body = """
+        <div class="logo"><h1>&#128274; Janua</h1><p>Password recovery</p></div>
+        <p class="lead">Enter your account email and we&#39;ll send you a reset link. The link works once and expires in 1 hour.</p>
+        <form method="POST" action="/api/v1/auth/forgot-password-form">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required autocomplete="email" autofocus>
+            </div>
+            <button type="submit">Send reset link</button>
+        </form>
+        <div class="footer">Powered by Janua &bull; Secure Authentication</div>
+    """
+    return HTMLResponse(content=_recovery_page_html(body))
+
+
+@router.post("/forgot-password-form")
+@limiter.limit("3/hour")  # Same budget as the JSON endpoint — one recovery surface
+async def forgot_password_form(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    email: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Browser half of /password/forgot: same dispatch, rendered as a page.
+    No redirect_base — the emailed link lands on the API-hosted reset page."""
+    import html as html_mod
+
+    from fastapi.responses import HTMLResponse
+
+    await _dispatch_password_reset(email, None, background_tasks, db)
+    body = f"""
+        <div class="logo"><h1>&#128274; Janua</h1><p>Password recovery</p></div>
+        <div class="alert-ok">If an account exists for <strong>{html_mod.escape(email)}</strong>, a reset link is on its way. It works once and expires in 1 hour.</div>
+        <p class="lead">Didn&#39;t get it? Check spam, or <a href="/api/v1/auth/forgot-password">try again</a> in a few minutes.</p>
+        <div class="footer">Powered by Janua &bull; Secure Authentication</div>
+    """
+    return HTMLResponse(content=_recovery_page_html(body))
+
+
+@router.get("/reset-password")
+async def reset_password_page(token: Optional[str] = None):
+    """Hosted reset page — the reset email's default landing since 2026-08-13.
+
+    The previous default pointed at the product frontend, whose
+    /auth/reset-password route sits behind the login wall: a user who cannot
+    log in (the entire premise of a reset) was bounced to /login and the
+    token was lost. This page is served by the API itself, on the same host
+    that mints the token, so it can never be auth-walled away."""
+    from fastapi.responses import HTMLResponse
+
+    if not token:
+        body = """
+        <div class="logo"><h1>&#128274; Janua</h1><p>Choose a new password</p></div>
+        <div class="alert-error">This page needs the link from your reset email. Open the most recent password-reset email and use its button or URL.</div>
+        <p class="lead">Need a new link? <a href="/api/v1/auth/forgot-password">Request one here</a>.</p>
+        <div class="footer">Powered by Janua &bull; Secure Authentication</div>
+        """
+        return HTMLResponse(content=_recovery_page_html(body), status_code=400)
+    return HTMLResponse(content=_recovery_page_html(_reset_form_body(token)))
+
+
+@router.post("/reset-password-form")
+@limiter.limit("10/hour")
+async def reset_password_form(
+    request: Request,
+    token: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Browser half of /password/reset: identical token validation and policy
+    via _consume_password_reset, rendered as pages instead of JSON."""
+    from fastapi.responses import HTMLResponse
+
+    if new_password != confirm_password:
+        return HTMLResponse(
+            content=_recovery_page_html(
+                _reset_form_body(token, "The two passwords don't match.")
+            ),
+            status_code=400,
+        )
+
+    ok, message = await _consume_password_reset(token, new_password, db)
+    if ok:
+        body = """
+        <div class="logo"><h1>&#128274; Janua</h1><p>Password updated</p></div>
+        <div class="alert-ok">Your password has been updated. Close this tab and sign in again from the application you came from.</div>
+        <div class="footer">Powered by Janua &bull; Secure Authentication</div>
+        """
+        return HTMLResponse(content=_recovery_page_html(body))
+
+    if message == "Invalid or expired reset token":
+        body = """
+        <div class="logo"><h1>&#128274; Janua</h1><p>Choose a new password</p></div>
+        <div class="alert-error">This reset link is invalid or has expired (links work once and last 1 hour).</div>
+        <p class="lead">Request a fresh one <a href="/api/v1/auth/forgot-password">here</a>.</p>
+        <div class="footer">Powered by Janua &bull; Secure Authentication</div>
+        """
+        return HTMLResponse(content=_recovery_page_html(body), status_code=400)
+
+    # Policy rejection — the token is still live, re-render the form with the
+    # policy message so the user can try a stronger password on the same link.
+    return HTMLResponse(
+        content=_recovery_page_html(_reset_form_body(token, message)), status_code=400
+    )
 
 
 @router.post("/password/change")
