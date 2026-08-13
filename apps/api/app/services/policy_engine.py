@@ -11,7 +11,7 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
-from sqlalchemy import and_
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 logger = structlog.get_logger(__name__)
@@ -41,15 +41,18 @@ class PolicyEngine:
         self.audit_logger = AuditLogger(db)
 
     async def evaluate(
-        self, request: PolicyEvaluateRequest, tenant_id: str
+        self, request: PolicyEvaluateRequest, organization_id: str
     ) -> PolicyEvaluateResponse:
         """
         Evaluate policies for a given request.
+
+        `organization_id` is the tenancy key — `policies` has no `tenant_id`
+        column, so the filters this replaced could never have run.
         """
         start_time = time.time()
 
         # Check cache first
-        cache_key = self._generate_cache_key(request, tenant_id)
+        cache_key = self._generate_cache_key(request, organization_id)
         if self.cache:
             cached_result = await self.cache.get(cache_key)
             if cached_result:
@@ -57,7 +60,7 @@ class PolicyEngine:
 
         # Get applicable policies
         policies = await self._get_applicable_policies(
-            tenant_id=tenant_id,
+            organization_id=organization_id,
             subject=request.subject,
             resource=request.resource,
             action=request.action,
@@ -65,10 +68,11 @@ class PolicyEngine:
 
         # Evaluate policies in priority order
         allowed = False
+        denied_by = None
         reasons = []
-        applied_policy_ids = []
+        matched_policy_ids = []
 
-        for policy in sorted(policies, key=lambda p: p.priority, reverse=True):
+        for policy in sorted(policies, key=lambda p: p.priority or 0, reverse=True):
             if not policy.enabled:
                 continue
 
@@ -77,30 +81,44 @@ class PolicyEngine:
 
             result, reason = await self._evaluate_single_policy(policy=policy, request=request)
 
-            applied_policy_ids.append(str(policy.id))
+            if not result:
+                continue
+
+            matched_policy_ids.append(str(policy.id))
             reasons.append(f"{policy.name}: {reason}")
 
-            if policy.effect == PolicyEffect.DENY and result:
-                # Explicit deny takes precedence
+            if policy.effect == PolicyEffect.DENY:
+                # Explicit deny takes precedence and short-circuits.
                 allowed = False
+                denied_by = str(policy.id)
                 reasons.append(f"Explicitly denied by policy: {policy.name}")
                 break
-            elif policy.effect == PolicyEffect.ALLOW and result:
+            elif policy.effect == PolicyEffect.ALLOW:
                 allowed = True
 
         # Calculate evaluation time
         evaluation_time_ms = int((time.time() - start_time) * 1000)
 
-        # Create response
+        # Create response. These are the fields PolicyEvaluateResponse actually
+        # declares; the previous call passed `reasons`/`applied_policies`/
+        # `evaluation_time_ms`, which pydantic dropped as extras, so reading
+        # them back in _log_evaluation raised AttributeError.
         response = PolicyEvaluateResponse(
             allowed=allowed,
-            reasons=reasons,
-            applied_policies=applied_policy_ids,
-            evaluation_time_ms=evaluation_time_ms,
+            matched_policies=matched_policy_ids,
+            denied_by=denied_by,
+            reason="; ".join(reasons) if reasons else "No applicable policy matched",
+            metadata={
+                "evaluation_time_ms": evaluation_time_ms,
+                "organization_id": str(organization_id),
+                "policies_considered": len(policies),
+            },
         )
 
         # Log evaluation
-        await self._log_evaluation(request=request, response=response, tenant_id=tenant_id)
+        await self._log_evaluation(
+            request=request, response=response, organization_id=organization_id
+        )
 
         # Cache result
         if self.cache:
@@ -113,69 +131,58 @@ class PolicyEngine:
         return response
 
     async def _get_applicable_policies(
-        self, tenant_id: str, subject: str, resource: str, action: str
+        self, organization_id: str, subject: str, resource: str, action: str
     ) -> List[Policy]:
         """
         Get all policies that could apply to this request.
+
+        Every branch is constrained to `organization_id`, including the
+        role-derived one — a role-policy mapping must not pull a policy in from
+        another organization.
         """
+        in_org = and_(Policy.organization_id == organization_id, Policy.enabled.is_(True))
+
         # Get user's roles
-        user_roles = self.db.query(UserRole).filter(UserRole.user_id == subject).all()
-        role_ids = [ur.role_id for ur in user_roles]
+        role_ids = []
+        if subject:
+            result = await self.db.execute(
+                select(UserRole.role_id).where(UserRole.user_id == subject)
+            )
+            role_ids = list(result.scalars().all())
 
         # Get policies directly assigned to user
-        user_policies = (
-            self.db.query(Policy)
-            .filter(
-                and_(
-                    Policy.tenant_id == tenant_id,
-                    Policy.target_type == "user",
-                    Policy.target_id == subject,
-                    Policy.enabled == True,
-                )
+        result = await self.db.execute(
+            select(Policy).where(
+                and_(in_org, Policy.target_type == "user", Policy.target_id == subject)
             )
-            .all()
         )
+        user_policies = list(result.scalars().all())
 
         # Get policies assigned to user's roles
         role_policies = []
         if role_ids:
-            role_policy_mappings = (
-                self.db.query(RolePolicy).filter(RolePolicy.role_id.in_(role_ids)).all()
+            result = await self.db.execute(
+                select(RolePolicy.policy_id).where(RolePolicy.role_id.in_(role_ids))
             )
-            policy_ids = [rp.policy_id for rp in role_policy_mappings]
+            policy_ids = list(result.scalars().all())
 
             if policy_ids:
-                role_policies = (
-                    self.db.query(Policy)
-                    .filter(and_(Policy.id.in_(policy_ids), Policy.enabled == True))
-                    .all()
+                result = await self.db.execute(
+                    select(Policy).where(and_(in_org, Policy.id.in_(policy_ids)))
                 )
+                role_policies = list(result.scalars().all())
 
         # Get organization-wide policies
-        org_policies = (
-            self.db.query(Policy)
-            .filter(
-                and_(
-                    Policy.tenant_id == tenant_id,
-                    Policy.target_type == "organization",
-                    Policy.enabled == True,
-                )
-            )
-            .all()
+        result = await self.db.execute(
+            select(Policy).where(and_(in_org, Policy.target_type == "organization"))
         )
+        org_policies = list(result.scalars().all())
 
         # Get resource-specific policies
-        resource_policies = (
-            self.db.query(Policy)
-            .filter(
-                and_(
-                    Policy.tenant_id == tenant_id,
-                    Policy.resource_type != None,
-                    Policy.enabled == True,
-                )
-            )
-            .all()
+        result = await self.db.execute(
+            select(Policy).where(and_(in_org, Policy.resource_type.is_not(None)))
         )
+        resource_policies = list(result.scalars().all())
 
         # Filter resource policies by pattern matching
         matching_resource_policies = []
@@ -334,36 +341,46 @@ class PolicyEngine:
         return f"policy:eval:{hashlib.sha256(key_data.encode()).hexdigest()}"
 
     async def _log_evaluation(
-        self, request: PolicyEvaluateRequest, response: PolicyEvaluateResponse, tenant_id: str
+        self, request: PolicyEvaluateRequest, response: PolicyEvaluateResponse, organization_id: str
     ):
         """
         Log policy evaluation for audit trail.
-        """
-        evaluation = PolicyEvaluation(
-            policy_id=response.applied_policies[0] if response.applied_policies else None,
-            subject=request.subject,
-            action=request.action,
-            resource=request.resource,
-            context=request.context,
-            allowed=response.allowed,
-            reasons=response.reasons,
-            applied_policies=response.applied_policies,
-            evaluation_time_ms=response.evaluation_time_ms,
-        )
 
-        self.db.add(evaluation)
-        self.db.commit()
+        Only the kwargs below are real columns on `PolicyEvaluation`; the call
+        this replaced passed six that do not exist (`subject`, `resource`,
+        `allowed`, `reasons`, `applied_policies`, `evaluation_time_ms`) and
+        would have raised TypeError in the declarative constructor.
+        """
+        # `policy_evaluations.policy_id` is NOT NULL, so a no-match evaluation
+        # cannot be recorded as a row — it is captured in the audit log only.
+        if response.matched_policies:
+            evaluation = PolicyEvaluation(
+                policy_id=response.matched_policies[0],
+                subject_id=request.subject_id,
+                resource_type=request.resource_type,
+                resource_id=request.resource_id,
+                action=request.action,
+                result=response.allowed,
+                context=request.context or {},
+            )
+
+            self.db.add(evaluation)
+            await self.db.commit()
 
         # Also log to audit system
         await self.audit_logger.log(
-            action=AuditAction.POLICY_EVALUATE,
-            user_id=request.subject,
+            event_type=AuditAction.POLICY_EVALUATE,
+            tenant_id=str(organization_id),
+            identity_id=request.subject_id,
+            organization_id=str(organization_id),
             resource_type="policy",
-            resource_id=request.resource,
+            resource_id=request.resource_id,
             details={
                 "allowed": response.allowed,
                 "action": request.action,
-                "evaluation_time_ms": response.evaluation_time_ms,
+                "resource": request.resource,
+                "matched_policies": response.matched_policies,
+                "evaluation_time_ms": response.metadata.get("evaluation_time_ms"),
             },
             ip_address=request.context.get("client_ip") if request.context else None,
         )
@@ -372,10 +389,18 @@ class PolicyEngine:
         """
         Compile policy to WASM for edge evaluation.
         Requires OPA CLI installed and configured.
+
+        NOTE: `rego_code` is not a column on `Policy` and never has been, so for
+        a persisted policy this returns None. Nothing in the application calls
+        this method; it is kept for the OPA integration it was written for.
         """
         import os
         import subprocess
         import tempfile
+
+        if not getattr(policy, "rego_code", None):
+            logger.warning("Policy has no rego_code; nothing to compile")
+            return None
 
         try:
             # Check if OPA is available

@@ -93,6 +93,7 @@ class PolicyCreate(BaseModel):
     rules: Dict[str, Any] = Field(default_factory=dict)
     effect: PolicyEffect = PolicyEffect.ALLOW
     priority: int = Field(default=0, ge=0, le=1000)
+    enabled: bool = True
     target_type: Optional[PolicyTargetType] = None
     target_id: Optional[str] = None
     resource_type: Optional[str] = None
@@ -100,6 +101,13 @@ class PolicyCreate(BaseModel):
     actions: List[str] = Field(default_factory=list)
     conditions: Dict[str, Any] = Field(default_factory=dict)
     expires_at: Optional[datetime] = None
+    organization_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Owning organization. Optional when the caller belongs to exactly one "
+            "organization; required otherwise. The caller must be a member of it."
+        ),
+    )
 
 
 class PolicyUpdate(BaseModel):
@@ -121,10 +129,16 @@ class PolicyUpdate(BaseModel):
 
 
 class PolicyResponse(BaseModel):
-    """Schema for policy response."""
+    """Schema for policy response.
+
+    `tenant_id` mirrors `organization_id` for wire compatibility, matching the
+    convention `RoleResponse` already uses. `policies.tenant_id` does not exist;
+    `organization_id` is the real tenancy column.
+    """
 
     id: str
     tenant_id: str
+    organization_id: Optional[str]
     name: str
     description: Optional[str]
     rules: Dict[str, Any]
@@ -148,17 +162,25 @@ class PolicyResponse(BaseModel):
 
     @classmethod
     def from_orm(cls, obj):
-        """Convert SQLAlchemy model to Pydantic schema."""
+        """Convert SQLAlchemy model to Pydantic schema.
+
+        Every attribute read here is a real column on `app.models.Policy`. The
+        previous `hasattr` guards on `enabled`/`version` silently degraded to
+        defaults for columns that did not exist at all, which hid the drift
+        instead of surfacing it.
+        """
+        organization_id = str(obj.organization_id) if obj.organization_id else None
         return cls(
             id=str(obj.id),
-            tenant_id=str(obj.tenant_id) if obj.tenant_id else "",
+            tenant_id=organization_id or "",
+            organization_id=organization_id,
             name=obj.name,
             description=obj.description,
             rules=obj.rules or {},
             effect=obj.effect,
             priority=obj.priority or 0,
-            enabled=obj.enabled if hasattr(obj, "enabled") else True,
-            version=obj.version if hasattr(obj, "version") else 1,
+            enabled=obj.enabled,
+            version=obj.version,
             target_type=obj.target_type,
             target_id=obj.target_id,
             resource_type=obj.resource_type,
@@ -172,7 +194,14 @@ class PolicyResponse(BaseModel):
 
 
 class PolicyEvaluateRequest(BaseModel):
-    """Schema for policy evaluation request."""
+    """Schema for policy evaluation request.
+
+    The wire format is structured (`subject_id`, `resource_type`, `resource_id`),
+    but `PolicyEngine` matches policies against flat `subject`/`resource`
+    strings. The two derived properties below are that adapter. They used to be
+    absent entirely, so `PolicyEngine.evaluate` raised `AttributeError` on
+    `request.subject` before it issued a single query.
+    """
 
     subject_id: Optional[str] = None  # user_id or role_id
     subject_type: str = Field(default="user", pattern="^(user|role)$")
@@ -180,6 +209,22 @@ class PolicyEvaluateRequest(BaseModel):
     resource_id: Optional[str] = None
     action: str = Field(..., min_length=1)
     context: Dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def subject(self) -> str:
+        """Flat subject identifier used for policy matching."""
+        return self.subject_id or ""
+
+    @property
+    def resource(self) -> str:
+        """Flat resource identifier, `type:id` when an id is supplied.
+
+        Policy `resource_pattern`s are wildcard globs, so `documents:*` matches
+        every document while `documents` still matches a type-only request.
+        """
+        if self.resource_id:
+            return f"{self.resource_type}:{self.resource_id}"
+        return self.resource_type
 
 
 class PolicyEvaluateResponse(BaseModel):

@@ -9,6 +9,7 @@ declared first and the ``/{policy_id}`` handlers are kept last in this module.
 See ``tests/unit/routers/test_policies_route_order.py``.
 """
 
+import enum
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -39,6 +40,50 @@ from app.services.policy_engine import PolicyEngine
 router = APIRouter(prefix="/v1/policies", tags=["policies"])
 
 
+def _member_org_ids(user):
+    """Subquery of the organization ids `user` belongs to.
+
+    `organization_id` is the tenancy column on `policies`, `roles` and
+    `organization_members` alike — none of those tables has a `tenant_id`
+    column. Scoping every policy query through membership keeps one
+    organization's policies invisible to another's admins.
+    """
+    return select(OrganizationMember.organization_id).where(OrganizationMember.user_id == user.id)
+
+
+async def _resolve_organization_id(db, user, requested: Optional[str]) -> str:
+    """Pick (and authorize) the organization a new policy belongs to.
+
+    An explicit `organization_id` must be one the caller belongs to, otherwise
+    an admin of org A could plant a policy in org B. When omitted, it is only
+    unambiguous if the caller belongs to exactly one organization.
+    """
+    result = await db.execute(_member_org_ids(user))
+    org_ids = [str(row) for row in result.scalars().all()]
+
+    if requested:
+        if str(requested) not in org_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of the requested organization",
+            )
+        return str(requested)
+
+    if len(org_ids) == 1:
+        return org_ids[0]
+
+    if not org_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Caller belongs to no organization; organization_id is required",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Caller belongs to multiple organizations; organization_id is required",
+    )
+
+
 @router.post("/", response_model=PolicyResponse, status_code=status.HTTP_201_CREATED)
 async def create_policy(
     policy_data: PolicyCreate, current_user=Depends(require_admin), db: Session = Depends(get_db)
@@ -46,14 +91,18 @@ async def create_policy(
     """
     Create a new policy (admin only).
     """
+    organization_id = await _resolve_organization_id(db, current_user, policy_data.organization_id)
+
     # Create new policy
     policy = Policy(
-        tenant_id=current_user.tenant_id,
+        organization_id=organization_id,
         name=policy_data.name,
         description=policy_data.description,
         rules=policy_data.rules,
         effect=policy_data.effect.value,
         priority=policy_data.priority,
+        enabled=policy_data.enabled,
+        version=1,
         target_type=policy_data.target_type.value if policy_data.target_type else None,
         target_id=policy_data.target_id,
         resource_type=policy_data.resource_type,
@@ -71,8 +120,9 @@ async def create_policy(
     audit_logger = AuditLogger(db)
     await audit_logger.log(
         event_type=AuditAction.POLICY_CREATE,
-        tenant_id=str(current_user.tenant_id) if hasattr(current_user, "tenant_id") else "",
+        tenant_id=organization_id,
         identity_id=str(current_user.id),
+        organization_id=organization_id,
         resource_type="policy",
         resource_id=str(policy.id),
         details={"policy_name": policy.name},
@@ -94,7 +144,7 @@ async def list_policies(
     """
     List all policies (admin only).
     """
-    stmt = select(Policy).where(Policy.tenant_id == current_user.tenant_id)
+    stmt = select(Policy).where(Policy.organization_id.in_(_member_org_ids(current_user)))
 
     if target_type:
         stmt = stmt.where(Policy.target_type == target_type)
@@ -124,6 +174,23 @@ async def evaluate_policies(
     cache = CacheService()
     engine = PolicyEngine(db, cache)
 
+    # Evaluation is scoped to one organization. `User` has no `organization_id`
+    # column (reading it here used to raise AttributeError); membership is the
+    # only link between a user and an organization.
+    result = await db.execute(_member_org_ids(current_user).limit(1))
+    organization_id = result.scalar_one_or_none()
+
+    if organization_id is None:
+        # Fail closed: no organization means no policies can apply.
+        return PolicyEvaluateResponse(
+            allowed=False,
+            reason="Caller belongs to no organization",
+        )
+
+    # Default the subject to the caller rather than evaluating an empty subject.
+    if not request.subject_id:
+        request.subject_id = str(current_user.id)
+
     # Add user context to request if not present
     if not request.context:
         request.context = {}
@@ -131,17 +198,13 @@ async def evaluate_policies(
     request.context.update(
         {
             "user_id": str(current_user.id),
-            "tenant_id": str(current_user.tenant_id),
-            "organization_id": str(current_user.organization_id)
-            if current_user.organization_id
-            else None,
+            "tenant_id": str(current_user.tenant_id) if current_user.tenant_id else None,
+            "organization_id": str(organization_id),
         }
     )
 
     # Evaluate policies
-    response = await engine.evaluate(request=request, tenant_id=str(current_user.tenant_id))
-
-    return response
+    return await engine.evaluate(request=request, organization_id=str(organization_id))
 
 
 # Role management endpoints
@@ -156,11 +219,17 @@ async def create_role(
 ):
     """
     Create a new role (admin only).
+
+    Scoped by `organization_id` for the same reason `list_roles` is: `roles` has
+    no `tenant_id` column, and `roles.organization_id` is NOT NULL, so the old
+    `organization_id=None` fallback could not have inserted a row either.
     """
-    # Check if role name already exists
+    organization_id = await _resolve_organization_id(db, current_user, role_data.organization_id)
+
+    # Check if role name already exists within the organization
     result = await db.execute(
         select(Role).where(
-            and_(Role.tenant_id == current_user.tenant_id, Role.name == role_data.name)
+            and_(Role.organization_id == organization_id, Role.name == role_data.name)
         )
     )
     existing_role = result.scalar_one_or_none()
@@ -172,8 +241,7 @@ async def create_role(
 
     # Create new role
     role = Role(
-        tenant_id=current_user.tenant_id,
-        organization_id=role_data.organization_id if role_data.organization_id else None,
+        organization_id=organization_id,
         name=role_data.name,
         description=role_data.description,
         permissions=role_data.permissions,
@@ -186,8 +254,10 @@ async def create_role(
     # Log audit event
     audit_logger = AuditLogger(db)
     await audit_logger.log(
-        action=AuditAction.ROLE_CREATE,
-        user_id=str(current_user.id),
+        event_type=AuditAction.ROLE_CREATE,
+        tenant_id=organization_id,
+        identity_id=str(current_user.id),
+        organization_id=organization_id,
         resource_type="role",
         resource_id=str(role.id),
         details={"role_name": role.name},
@@ -240,9 +310,14 @@ async def assign_role_to_user(
     """
     Assign a role to a user (admin only).
     """
-    # Verify role exists
+    # Verify the role exists inside an organization the caller belongs to.
     role_result = await db.execute(
-        select(Role).where(and_(Role.id == role_id, Role.tenant_id == current_user.tenant_id))
+        select(Role).where(
+            and_(
+                Role.id == role_id,
+                Role.organization_id.in_(_member_org_ids(current_user)),
+            )
+        )
     )
     role = role_result.scalar_one_or_none()
 
@@ -284,8 +359,10 @@ async def assign_role_to_user(
     # Log audit event
     audit_logger = AuditLogger(db)
     await audit_logger.log(
-        action=AuditAction.ROLE_ASSIGN,
-        user_id=str(current_user.id),
+        event_type=AuditAction.ROLE_ASSIGN,
+        tenant_id=str(role.organization_id) if role.organization_id else "",
+        identity_id=str(current_user.id),
+        organization_id=str(role.organization_id) if role.organization_id else None,
         resource_type="user_role",
         resource_id=str(user_role.id),
         details={"role_name": role.name, "assigned_to": user_id},
@@ -312,8 +389,12 @@ async def unassign_role_from_user(
             status_code=status.HTTP_404_NOT_FOUND, detail="Role assignment not found"
         )
 
-    # Delete assignment
-    db.delete(user_role)
+    # Capture before the row goes away — `user_role` is expired after commit.
+    user_role_id = str(user_role.id)
+    organization_id = str(user_role.organization_id) if user_role.organization_id else ""
+
+    # Delete assignment. `AsyncSession.delete` must be awaited.
+    await db.delete(user_role)
     await db.commit()
 
     # Clear permission cache for user
@@ -323,10 +404,12 @@ async def unassign_role_from_user(
     # Log audit event
     audit_logger = AuditLogger(db)
     await audit_logger.log(
-        action=AuditAction.ROLE_UNASSIGN,
-        user_id=str(current_user.id),
+        event_type=AuditAction.ROLE_UNASSIGN,
+        tenant_id=organization_id,
+        identity_id=str(current_user.id),
+        organization_id=organization_id or None,
         resource_type="user_role",
-        resource_id=str(user_role.id),
+        resource_id=user_role_id,
         details={"role_id": role_id, "unassigned_from": user_id},
     )
 
@@ -343,6 +426,28 @@ async def unassign_role_from_user(
 # ---------------------------------------------------------------------------
 
 
+async def _get_scoped_policy(db, current_user, policy_id: str) -> Policy:
+    """Load a policy the caller's organizations own, or 404.
+
+    A policy belonging to another organization is reported as missing rather
+    than forbidden, so the endpoint does not confirm that the id exists.
+    """
+    result = await db.execute(
+        select(Policy).where(
+            and_(
+                Policy.id == policy_id,
+                Policy.organization_id.in_(_member_org_ids(current_user)),
+            )
+        )
+    )
+    policy = result.scalar_one_or_none()
+
+    if not policy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+
+    return policy
+
+
 @router.get("/{policy_id}", response_model=PolicyResponse)
 async def get_policy(
     policy_id: str, current_user=Depends(require_admin), db: Session = Depends(get_db)
@@ -350,15 +455,7 @@ async def get_policy(
     """
     Get a specific policy by ID (admin only).
     """
-    result = await db.execute(
-        select(Policy).where(
-            and_(Policy.id == policy_id, Policy.tenant_id == current_user.tenant_id)
-        )
-    )
-    policy = result.scalar_one_or_none()
-
-    if not policy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+    policy = await _get_scoped_policy(db, current_user, policy_id)
 
     return PolicyResponse.from_orm(policy)
 
@@ -373,24 +470,18 @@ async def update_policy(
     """
     Update a policy (admin only).
     """
-    result = await db.execute(
-        select(Policy).where(
-            and_(Policy.id == policy_id, Policy.tenant_id == current_user.tenant_id)
-        )
-    )
-    policy = result.scalar_one_or_none()
+    policy = await _get_scoped_policy(db, current_user, policy_id)
 
-    if not policy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
-
-    # Update fields
+    # Update fields. Enums arrive as PolicyEffect/PolicyTargetType; the columns
+    # are plain strings, so unwrap them before assigning.
     update_data = policy_update.dict(exclude_unset=True)
     for field, value in update_data.items():
-        if hasattr(policy, field):
-            setattr(policy, field, value)
+        if not hasattr(policy, field):
+            continue
+        setattr(policy, field, value.value if isinstance(value, enum.Enum) else value)
 
     # Increment version
-    policy.version += 1
+    policy.version = (policy.version or 0) + 1
 
     await db.commit()
     await db.refresh(policy)
@@ -402,8 +493,10 @@ async def update_policy(
     # Log audit event
     audit_logger = AuditLogger(db)
     await audit_logger.log(
-        action=AuditAction.POLICY_UPDATE,
-        user_id=str(current_user.id),
+        event_type=AuditAction.POLICY_UPDATE,
+        tenant_id=str(policy.organization_id) if policy.organization_id else "",
+        identity_id=str(current_user.id),
+        organization_id=str(policy.organization_id) if policy.organization_id else None,
         resource_type="policy",
         resource_id=str(policy.id),
         details={"updated_fields": list(update_data.keys())},
@@ -419,15 +512,11 @@ async def delete_policy(
     """
     Delete a policy (admin only).
     """
-    result = await db.execute(
-        select(Policy).where(
-            and_(Policy.id == policy_id, Policy.tenant_id == current_user.tenant_id)
-        )
-    )
-    policy = result.scalar_one_or_none()
+    policy = await _get_scoped_policy(db, current_user, policy_id)
 
-    if not policy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+    # Capture before the row goes away — `policy` is expired after commit.
+    policy_name = policy.name
+    organization_id = str(policy.organization_id) if policy.organization_id else ""
 
     # Delete policy evaluations first
     await db.execute(delete(PolicyEvaluation).where(PolicyEvaluation.policy_id == policy_id))
@@ -435,8 +524,9 @@ async def delete_policy(
     # Delete role-policy mappings
     await db.execute(delete(RolePolicy).where(RolePolicy.policy_id == policy_id))
 
-    # Delete the policy
-    db.delete(policy)
+    # Delete the policy. `AsyncSession.delete` is a coroutine — the un-awaited
+    # call this replaced left the row in place and only emitted a warning.
+    await db.delete(policy)
     await db.commit()
 
     # Clear cache
@@ -446,11 +536,13 @@ async def delete_policy(
     # Log audit event
     audit_logger = AuditLogger(db)
     await audit_logger.log(
-        action=AuditAction.POLICY_DELETE,
-        user_id=str(current_user.id),
+        event_type=AuditAction.POLICY_DELETE,
+        tenant_id=organization_id,
+        identity_id=str(current_user.id),
+        organization_id=organization_id or None,
         resource_type="policy",
         resource_id=str(policy_id),
-        details={"policy_name": policy.name},
+        details={"policy_name": policy_name},
     )
 
     return None
