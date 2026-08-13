@@ -6,7 +6,7 @@ Cross-service identity for the RFC 0024 §P4 consolidations:
 |---|---|---|---|---|
 | Zavlo → Karafiel CFDI bridge (§P4.2) | `zavlo-cfdi-emitter` | `cfdi:issue` | `karafiel-api` | Karafiel API |
 | RouteCraft → Dhanam billing (§P4.3) | `routecraft-billing-relay` | `billing:events` | `dhanam-api` | Dhanam API |
-| Nauta → Karafiel legal drafts (D3.5) | `nauta-legal-drafts` | `legal:draft` | `karafiel-api` | Karafiel API |
+| Nauta → Karafiel legal drafts (D3.5) | `nauta-legal-drafts` | `legal:draft`, `legal:client-profile` | `karafiel-api` | Karafiel API |
 
 Both migration plans (`zavlo/docs/karafiel-cfdi-migration-plan.md`,
 `routecraft/docs/dhanam-payments-migration-plan.md`) are gated on this
@@ -189,6 +189,23 @@ Karafiel's CFDI billing bridge guards `POST` envelope ingestion with
 `required_scope="cfdi:issue"` and attributes the envelope to
 `claims["client_id"]` alongside the existing `source: "zavlo.*"`
 discriminator and idempotency key.
+
+Scope map on the Karafiel side:
+
+- `cfdi:issue` — Zavlo's CFDI envelope ingestion (above).
+- `legal:draft` — creates and compiles service-agreement drafts and reads
+  generated-document metadata.
+- `legal:client-profile` — creates and updates the calling client's **own**
+  legal-entity profile (`ClientProfile`) at `/api/v1/legal/clients`
+  (`POST`/`PUT`/`PATCH`/`GET`; `DELETE` is refused). Karafiel PR #148.
+
+`legal:draft` and `legal:client-profile` are **independent**: neither
+implies the other, and Karafiel enforces each separately on its own routes.
+A `legal:client-profile` token grants no access to drafts or generated
+documents, and a `legal:draft` token cannot write a client profile.
+`nauta-legal-drafts` is allowlisted for both because Nauta's
+`engagement.provision` needs both capabilities; each token still carries
+only the scopes that request asked for (omitting `scope` grants both).
 
 ## How Dhanam verifies (offline, JWKS)
 

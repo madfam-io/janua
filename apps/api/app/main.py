@@ -684,6 +684,7 @@ def openid_configuration():
             "cfdi:issue",
             "billing:events",
             "legal:draft",
+            "legal:client-profile",
         ],
         "token_endpoint_auth_methods_supported": [
             "client_secret_basic",
