@@ -5,16 +5,24 @@ These columns support the new API key management features:
 - revoked_at: explicit revocation timestamp (supplements is_active flag)
 - key_prefix: visible prefix like "sk_live_ab3f" for key identification
 
-Revision ID: 006_add_api_key_rate_limit_and_revoked
+Revision ID: 006_api_key_rate_limit_revoked
 Revises: 005_set_tezca_client_audience
 Create Date: 2026-04-15
+
+NOTE ON THE REVISION ID: this was "006_add_api_key_rate_limit_and_revoked" --
+38 characters. `alembic_version.version_num` is VARCHAR(32), so alembic could
+never record this revision: the write failed with StringDataRightTruncation and
+rolled the whole upgrade back. It was invisible only because the dangling
+down_revision in 004 stopped every upgrade before it got this far. Renaming is
+safe precisely because no database can ever have stored it. Keep revision ids
+<= 32 characters (enforced by tests/unit/test_alembic_revision_graph.py).
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "006_add_api_key_rate_limit_and_revoked"
+revision = "006_api_key_rate_limit_revoked"
 down_revision = "005_set_tezca_client_audience"
 branch_labels = None
 depends_on = None
