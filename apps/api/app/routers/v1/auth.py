@@ -1825,7 +1825,7 @@ async def magic_link_callback(
     result = await db.execute(
         select(MagicLink).where(
             MagicLink.token == token,
-            MagicLink.used == False,  # noqa: E712 — SQL identity, not a bool test
+            MagicLink.used_at.is_(None),
             MagicLink.expires_at > datetime.utcnow(),
         )
     )
@@ -1842,7 +1842,6 @@ async def magic_link_callback(
 
     # Burn the token before minting anything: a link that has produced a
     # session must never produce a second one.
-    magic_link.used = True
     magic_link.used_at = datetime.utcnow()
 
     access_token, _refresh_token, _session = await AuthService.create_session(
@@ -1884,7 +1883,7 @@ async def verify_magic_link(
     result = await db.execute(
         select(MagicLink).where(
             MagicLink.token == request.token,
-            MagicLink.used == False,
+            MagicLink.used_at.is_(None),
             MagicLink.expires_at > datetime.utcnow(),
         )
     )
@@ -1903,7 +1902,6 @@ async def verify_magic_link(
         raise HTTPException(status_code=400, detail="User not found")
 
     # Mark magic link as used
-    magic_link.used = True
     magic_link.used_at = datetime.utcnow()
 
     # Create session
