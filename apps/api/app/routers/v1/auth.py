@@ -6,7 +6,7 @@ import json
 import secrets
 from datetime import datetime, timedelta
 from typing import Dict, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -527,7 +527,20 @@ def _oauth_context_hidden_fields_html(
 
 
 async def _recover_authorize_url_from_client(client_id: str, db) -> Optional[str]:
-    """Rebuild a minimal /oauth/authorize URL when Redis pre-login state expired."""
+    """Send the user back to the CLIENT so it can start a fresh flow.
+
+    This used to rebuild a synthetic /oauth/authorize URL from the client's
+    registration. That URL carried no `state`, no `nonce` and no PKCE
+    challenge, because the server cannot know them — only the client that
+    started the flow does. Every modern OIDC client validates `state` and a
+    PKCE verifier against its own cookies, so the callback produced by such a
+    fabricated request could never be accepted: Auth.js rejects it with
+    `response parameter "state" missing` (observed in prod 2026-08-13).
+
+    A recovery that cannot succeed is worse than an honest restart. Returning
+    the client's own origin lets it mint a new state + verifier pair the way
+    it always does.
+    """
     from ...models import OAuthClient as _OAuthClient
 
     stmt = select(_OAuthClient).where(_OAuthClient.client_id == client_id)
@@ -545,14 +558,13 @@ async def _recover_authorize_url_from_client(client_id: str, db) -> Optional[str
     if not redirect_uris:
         return None
 
-    fallback_scope = " ".join(oauth_client.allowed_scopes or ["openid"])
-    query_params = {
-        "response_type": "code",
-        "client_id": client_id,
-        "redirect_uri": redirect_uris[0],
-        "scope": fallback_scope,
-    }
-    return f"/api/v1/oauth/authorize?{urlencode(query_params)}"
+    # The origin of the registered callback is the product itself. Landing
+    # there re-enters the product's own sign-in entry point, which starts a
+    # complete authorize request (state + PKCE) that its callback can verify.
+    parsed = urlparse(redirect_uris[0])
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}/"
 
 
 # GET /login - Render login form for OAuth flows

@@ -1503,6 +1503,12 @@ async def _handle_authorization_code_grant(
 
     # Validate client matches
     if code_data["client_id"] != client.client_id:
+        logger.warning(
+            "token.rejected",
+            reason="client_mismatch",
+            client_id=client.client_id,
+            code_client_id=code_data["client_id"],
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid_grant: Code was not issued to this client",
@@ -1510,6 +1516,13 @@ async def _handle_authorization_code_grant(
 
     # Validate redirect_uri matches
     if redirect_uri and code_data["redirect_uri"] != redirect_uri:
+        logger.warning(
+            "token.rejected",
+            reason="redirect_uri_mismatch",
+            client_id=client.client_id,
+            presented=redirect_uri,
+            issued_for=code_data["redirect_uri"],
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid_grant: redirect_uri mismatch",
@@ -1519,6 +1532,11 @@ async def _handle_authorization_code_grant(
     # Verify PKCE if code_challenge was provided during authorization
     if code_data.get("code_challenge"):
         if not code_verifier:
+            logger.warning(
+                "token.rejected",
+                reason="code_verifier_missing",
+                client_id=client.client_id,
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="invalid_request: code_verifier required",
@@ -1528,6 +1546,18 @@ async def _handle_authorization_code_grant(
             code_data["code_challenge"],
             code_data.get("code_challenge_method", "S256"),
         ):
+            # The client's verifier belongs to a different authorize request
+            # than the one that issued this code. Logging the challenge (a
+            # public, single-use hash — never the verifier) is what makes that
+            # diagnosable; without it a 400 here is indistinguishable from
+            # every other 400 and costs hours to chase.
+            logger.warning(
+                "token.rejected",
+                reason="pkce_mismatch",
+                client_id=client.client_id,
+                issued_challenge=code_data["code_challenge"],
+                method=code_data.get("code_challenge_method", "S256"),
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="invalid_grant: PKCE verification failed",
