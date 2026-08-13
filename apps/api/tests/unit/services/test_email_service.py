@@ -170,10 +170,18 @@ class TestSendEmail:
         """Create EmailService instance."""
         return EmailService()
 
-    async def test_send_email_alpha_mode(self, service):
-        """Test sending email in alpha mode (no SMTP)."""
+    async def test_send_email_without_transport_reports_failure(self, service):
+        """With no transport configured, the send must report failure.
+
+        This asserted `is True` ("alpha mode") until 2026-08-13, which made an
+        email that physically could not be delivered indistinguishable from a
+        delivered one — every caller logged success and every UI said "check
+        your inbox". Reporting False is what lets callers tell the truth.
+        """
         with patch("app.services.email_service.settings") as mock_settings:
             mock_settings.SMTP_HOST = None
+            mock_settings.EMAIL_PROVIDER = "smtp"
+            mock_settings.RESEND_API_KEY = None
 
             result = await service._send_email(
                 to_email="test@example.com",
@@ -182,7 +190,7 @@ class TestSendEmail:
                 text_content="Test Text",
             )
 
-        assert result is True
+        assert result is False
 
     async def test_send_email_with_smtp_success(self, service):
         """Test sending email with SMTP configuration."""

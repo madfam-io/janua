@@ -1,0 +1,15 @@
+Hi {{ user_name }},
+
+Sign in to Janua by clicking this link:
+{{ magic_url }}
+
+This link works once and expires in 15 minutes.
+
+If you didn't ask to sign in, you can safely ignore this email. Never forward this
+link — anyone holding it can sign in as you until it expires.
+
+Need help? Contact us at {{ support_email }}
+
+---
+Janua Team
+{{ base_url }}

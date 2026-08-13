@@ -27,7 +27,11 @@ from app.services.account_lockout_service import AccountLockoutService
 from app.services.auth_service import AuthService
 from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.email import EmailService
-from app.services.email_service import send_password_reset_email_task
+from app.services.email_service import (
+    send_magic_link_email_task,
+    send_password_reset_email_task,
+    send_verification_email_task,
+)
 from app.services.webhooks import WebhookEventType, trigger_user_webhook
 
 from ...models import ActivityLog, EmailVerification, MagicLink, PasswordReset, User, UserStatus
@@ -285,7 +289,7 @@ async def sign_up(
         await db.commit()
 
         background_tasks.add_task(
-            EmailService.send_verification_email, user.email, verification_token
+            send_verification_email_task, user.email, verification_token
         )
 
     return SignInResponse(
@@ -1713,7 +1717,7 @@ async def resend_verification_email(
 
     # Send email in background
     background_tasks.add_task(
-        EmailService.send_verification_email, current_user.email, verification_token
+        send_verification_email_task, current_user.email, verification_token
     )
 
     return {"message": "Verification email sent"}
@@ -1770,10 +1774,93 @@ async def send_magic_link(
 
     # Send email in background
     background_tasks.add_task(
-        EmailService.send_magic_link_email, user.email, magic_token, safe_redirect_url
+        send_magic_link_email_task, user.email, magic_token, safe_redirect_url
     )
 
     return {"message": "Magic link sent to email"}
+
+
+@router.get("/magic-link/callback")
+async def magic_link_callback(
+    token: Optional[str] = None,
+    req: Request = None,
+    db: Session = Depends(get_db),
+):
+    """Land a clicked magic link and forward to the product with a session.
+
+    A link in an email is a GET, and only Janua can trade the one-time magic
+    token for a session — so without this route the whole passwordless flow
+    had no door to knock on: `/magic-link/verify` is a POST returning JSON,
+    which no mail client can reach. Products (nauta's /portal/verify) expect
+    to be handed the access token on the query string; that contract is why
+    the token travels this way rather than in a body.
+    """
+    from fastapi.responses import HTMLResponse, RedirectResponse
+
+    def _expired_page() -> HTMLResponse:
+        return HTMLResponse(
+            content=_recovery_page_html(
+                '<h1>🔗 Link expired</h1>'
+                '<p class="lede">Magic links work once and expire after 15 minutes.</p>'
+                '<p>Request a new one from the page you were signing in to.</p>'
+            ),
+            status_code=400,
+        )
+
+    if not token:
+        return _expired_page()
+
+    result = await db.execute(
+        select(MagicLink).where(
+            MagicLink.token == token,
+            MagicLink.used == False,  # noqa: E712 — SQL identity, not a bool test
+            MagicLink.expires_at > datetime.utcnow(),
+        )
+    )
+    magic_link = result.scalar_one_or_none()
+    if not magic_link:
+        return _expired_page()
+
+    result = await db.execute(
+        select(User).where(User.id == magic_link.user_id, User.status == UserStatus.ACTIVE)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        return _expired_page()
+
+    # Burn the token before minting anything: a link that has produced a
+    # session must never produce a second one.
+    magic_link.used = True
+    magic_link.used_at = datetime.utcnow()
+
+    access_token, _refresh_token, _session = await AuthService.create_session(
+        db, user, ip_address=req.client.host if req and req.client else None,
+        user_agent=req.headers.get("user-agent") if req else None,
+    )
+
+    # Signing in by emailed link proves control of the mailbox.
+    if not user.email_verified:
+        user.email_verified = True
+    await db.commit()
+
+    await log_activity(db, str(user.id), "signin", {"method": "magic_link"}, req)
+
+    # Re-validate at redemption: the allowlist may have changed since the link
+    # was issued, and this is the moment a credential is handed over.
+    destination = validate_redirect_url(magic_link.redirect_url, default_url=None)
+    if not destination:
+        return HTMLResponse(
+            content=_recovery_page_html(
+                '<h1>✅ Signed in</h1>'
+                '<p class="lede">Your link was valid, but its destination is no longer '
+                'an allowed address, so we did not forward you.</p>'
+                '<p>Return to the site you were signing in to and try again.</p>'
+            ),
+            status_code=400,
+        )
+
+    separator = "&" if "?" in destination else "?"
+    return RedirectResponse(url=f"{destination}{separator}token={access_token}", status_code=302)
 
 
 @router.post("/magic-link/verify", response_model=SignInResponse)
