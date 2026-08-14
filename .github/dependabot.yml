@@ -25,35 +25,11 @@ updates:
       - "dependencies"
       - "automated"
     ignore:
-      # Dev-tooling MAJORS are migration projects, not dependency updates: a
-      # TypeScript or ESLint major rewrites diagnostics and config formats, and
-      # the work is scheduling a migration, not clicking merge. Left ungrouped
-      # they reopen weekly and go stale, which is how #505 (typescript 5->6) and
-      # #504 (jest-dom 6->7) came to sit here. Held so raising them is a
-      # deliberate act; minor and patch still flow through the routine group.
-      # RUNTIME majors are deliberately NOT ignored — those can carry security
-      # fixes and each deserves its own decision.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "eslint"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@eslint/js"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "jest"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@types/jest"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@testing-library/*"
-        update-types: ["version-update:semver-major"]
-      # `@types/node` must track the Node MAJOR we actually run, not the newest
-      # version published. Dependabot cannot know that, so its "latest" is wrong
-      # here by construction: on 2026-08-07 `main` ran Node 20 in all 8 workflows
-      # while carrying @types/node ^25.3.0 — five majors of drift, with the types
-      # describing APIs that do not exist where the code executes. #433 then
-      # proposed 26.1.2, which would have widened it further, and was closed.
-      # #493 is the correct shape: move the runtime AND the types together.
-      # Minor/patch updates still flow; only the major is held so the pairing
-      # stays a deliberate decision instead of a weekly re-triage.
+      # Majors are NOT held. The operator's standing decision (2026-08-14) is to
+      # take major bumps promptly rather than defer them, so suppressing them
+      # here would only recreate the silent drift the @types/node note below
+      # describes — Dependabot stops telling us, and the gap widens unseen.
+      # Grouping above is what removes the noise; holds are not needed for it.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
