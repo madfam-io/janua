@@ -1,8 +1,15 @@
 """Add guest_invites table for guest access link management.
 
 Revision ID: 004_add_guest_invites
-Revises: 003_add_product_tiers
+Revises: 003
 Create Date: 2026-03-15
+
+NOTE ON down_revision: migrations 000-003 use bare numeric revision ids
+('000'..'003'); 004 onwards use `NNN_slug` ids. This file originally pointed at
+"003_add_product_tiers" -- the *filename stem* of 003, not its revision id,
+which is '003'. That dangling parent made every alembic command (history,
+heads, current, stamp, upgrade) raise KeyError: '003_add_product_tiers', so no
+migration from 004 onwards could ever be applied. Keep this pointing at '003'.
 """
 
 import uuid
@@ -12,7 +19,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "004_add_guest_invites"
-down_revision = "003_add_product_tiers"
+down_revision = "003"
 branch_labels = None
 depends_on = None
 

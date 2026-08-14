@@ -36,10 +36,26 @@ exit(0 if asyncio.run(check()) else 1)
     # Run Alembic migrations only if DB is reachable
     if [ "$DB_READY" = true ]; then
         cd /app
-        if alembic upgrade head 2>&1; then
-            echo "✅ Database migrations completed successfully"
+        # The revision tree must resolve to exactly one head. This reads
+        # alembic/versions/ only (no database), so it is environment-
+        # independent: a failure here is always a code defect.
+        if ! HEADS_OUT=$(alembic heads 2>&1) || [ "$(printf '%s\n' "$HEADS_OUT" | grep -c '(head)')" -ne 1 ]; then
+            echo "❌ FATAL: alembic revision tree is broken (not exactly 1 resolvable head)."
+            echo "$HEADS_OUT"
+            exit 1
+        fi
+
+        # Applying migrations is opt-in -- see docker-entrypoint.sh for the
+        # rationale (deliberate operator action, and replicas race DDL).
+        if [ "${JANUA_APPLY_MIGRATIONS:-false}" = "true" ]; then
+            if alembic upgrade head 2>&1; then
+                echo "✅ Database migrations completed successfully"
+            else
+                echo "❌ FATAL: migration failed. Refusing to start on an unmigrated schema."
+                exit 1
+            fi
         else
-            echo "⚠️ Migration failed — starting API anyway"
+            echo "⚠️ MIGRATION_DRIFT: not applying migrations (JANUA_APPLY_MIGRATIONS is not 'true')."
         fi
     else
         echo "⚠️ Database not reachable after 30s — starting API anyway"
