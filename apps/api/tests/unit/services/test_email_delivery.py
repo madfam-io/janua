@@ -236,7 +236,7 @@ class TestTemplateLocalization:
         """This is localization, not replacement."""
         service = EmailService()
         rendered = service._render_template("magic_link.html", TEMPLATE_CONTEXT, "en")
-        assert "Sign in to Janua" in rendered
+        assert "Sign in to your portal" in rendered
         assert 'lang="en"' in rendered
 
     def test_untranslated_message_falls_back_to_english_rather_than_failing(self):
@@ -267,11 +267,11 @@ class TestTemplateLocalization:
     def test_default_locale_setting_drives_unspecified_sends(self):
         service = EmailService()
         with patch.object(email_module.settings, "DEFAULT_EMAIL_LOCALE", "en"):
-            assert "Sign in to Janua" in service._render_template(
+            assert "Sign in to your portal" in service._render_template(
                 "magic_link.html", TEMPLATE_CONTEXT
             )
         with patch.object(email_module.settings, "DEFAULT_EMAIL_LOCALE", "es"):
-            assert "Inicie sesión en Janua" in service._render_template(
+            assert "Inicie sesión en su portal" in service._render_template(
                 "magic_link.html", TEMPLATE_CONTEXT
             )
 
