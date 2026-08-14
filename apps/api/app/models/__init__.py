@@ -547,7 +547,7 @@ class Policy(Base):
     by `app/routers/v1/policies.py` and `app/services/policy_engine.py` from the
     day those modules were written, but existed on neither the model nor the
     table, so every policy CRUD call raised before touching the database. Added
-    in alembic 010_add_policy_authorization_columns.
+    in alembic 010_policy_authz_columns.
     """
 
     __tablename__ = "policies"

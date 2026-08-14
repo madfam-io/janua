@@ -15,13 +15,13 @@ defaults without a backfill step.
 `IF NOT EXISTS` keeps this idempotent against environments that ran
 `Base.metadata.create_all` instead of migrations (the test suite does).
 
-Revision ID: 010_add_policy_authorization_columns
+Revision ID: 010_policy_authz_columns
 Revises: 009_add_legacy_webhook_events
 """
 
 from alembic import op
 
-revision = "010_add_policy_authorization_columns"
+revision = "010_policy_authz_columns"
 down_revision = "009_add_legacy_webhook_events"
 branch_labels = None
 depends_on = None
