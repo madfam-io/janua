@@ -253,13 +253,16 @@ class TestTemplateLocalization:
         service = EmailService()
         spanish = service._render_template("magic_link.html", TEMPLATE_CONTEXT, "es")
         assert 'lang="es-MX"' in spanish
-        assert "Plataforma de identidad segura" in spanish
-        assert "Secure Identity Platform" not in spanish
+        # The tagline is MADFAM's now, not one platform's — the header reads
+        # MADFAM on every message (see docs/EMAIL_SENDER_POLICY.md). What this
+        # test guards is unchanged: the frame's language must match the body's.
+        assert "Tecnología, diseñada para tu operación" in spanish
+        assert "Technology, engineered for your operation" not in spanish
 
         # Untranslated body → English body → English frame, not a mix.
         fallback = service._render_template("security_alert.html", TEMPLATE_CONTEXT, "es")
         assert 'lang="en"' in fallback
-        assert "Secure Identity Platform" in fallback
+        assert "Technology, engineered for your operation" in fallback
 
     def test_default_locale_setting_drives_unspecified_sends(self):
         service = EmailService()
