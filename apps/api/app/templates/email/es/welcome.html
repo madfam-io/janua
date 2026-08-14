@@ -1,18 +1,22 @@
 {% extends "base.html" %}
 
+{# Prose that addresses the reader goes through t() and follows the tú/usted
+   choice; register-neutral text — field labels, the button, link names —
+   stays inline. See es/magic_link.html. #}
+
 {% block content %}
-<h2 style="color: #1f2937; margin: 0 0 20px 0;">Le damos la bienvenida a Janua 🎉</h2>
+<h2 style="color: #1f2937; margin: 0 0 20px 0;">{{ t('welcome.heading') }}</h2>
 
 <p style="margin: 0 0 20px 0;">
     Hola {{ user_name }}:
 </p>
 
 <p style="margin: 0 0 20px 0;">
-    Su cuenta de Janua se creó correctamente. Ya forma parte de una plataforma de identidad segura en la que confían organizaciones de todo el mundo.
+    {{ t('welcome.intro') }}
 </p>
 
 <div class="info">
-    <strong>Datos de su cuenta:</strong><br>
+    <strong>{{ t('welcome.account_details') }}</strong><br>
     Correo electrónico: {{ user_email }}<br>
     Organización: {{ organization_name }}<br>
     Plan: {{ plan_name }}<br>
@@ -21,24 +25,24 @@
 
 <h3 style="color: #1f2937; margin: 30px 0 15px 0;">Primeros pasos en Janua</h3>
 
-<p style="margin: 0 0 20px 0;">Le sugerimos empezar por aquí para aprovechar Janua al máximo:</p>
+<p style="margin: 0 0 20px 0;">{{ t('welcome.steps_intro') }}</p>
 
 <ol style="margin: 0 0 20px 0; padding-left: 20px;">
     <li style="margin-bottom: 10px;">
-        <strong>Active la autenticación de dos factores</strong><br>
-        <span style="color: #6b7280; font-size: 14px;">Añada una capa adicional de seguridad a su cuenta</span>
+        <strong>{{ t('welcome.step_mfa_title') }}</strong><br>
+        <span style="color: #6b7280; font-size: 14px;">{{ t('welcome.step_mfa_body') }}</span>
     </li>
     <li style="margin-bottom: 10px;">
-        <strong>Configure su organización</strong><br>
-        <span style="color: #6b7280; font-size: 14px;">Invite a su equipo y defina roles y permisos</span>
+        <strong>{{ t('welcome.step_org_title') }}</strong><br>
+        <span style="color: #6b7280; font-size: 14px;">{{ t('welcome.step_org_body') }}</span>
     </li>
     <li style="margin-bottom: 10px;">
-        <strong>Intégrelo con su aplicación</strong><br>
-        <span style="color: #6b7280; font-size: 14px;">Use nuestros SDK para añadir autenticación a sus aplicaciones</span>
+        <strong>{{ t('welcome.step_integrate_title') }}</strong><br>
+        <span style="color: #6b7280; font-size: 14px;">{{ t('welcome.step_integrate_body') }}</span>
     </li>
     <li style="margin-bottom: 10px;">
-        <strong>Habilite las llaves de acceso</strong><br>
-        <span style="color: #6b7280; font-size: 14px;">Configure el acceso sin contraseña para mayor seguridad</span>
+        <strong>{{ t('welcome.step_passkeys_title') }}</strong><br>
+        <span style="color: #6b7280; font-size: 14px;">{{ t('welcome.step_passkeys_body') }}</span>
     </li>
 </ol>
 
@@ -47,19 +51,19 @@
 </div>
 
 <div style="background-color: #f9fafb; border-radius: 6px; padding: 20px; margin: 30px 0;">
-    <h4 style="margin: 0 0 10px 0; color: #1f2937;">¿Necesita ayuda?</h4>
+    <h4 style="margin: 0 0 10px 0; color: #1f2937;">{{ t('welcome.help_title') }}</h4>
     <p style="margin: 0 0 10px 0; font-size: 14px;">
-        Nuestro equipo está a sus órdenes:
+        {{ t('welcome.help_body') }}
     </p>
     <ul style="margin: 10px 0 0 0; padding-left: 20px; font-size: 14px;">
         <li><a href="https://docs.janua.dev" style="color: #3b82f6;">Documentación</a> - Guías y referencia de la API</li>
-        <li><a href="https://janua.dev/support" style="color: #3b82f6;">Centro de soporte</a> - Reciba ayuda de nuestro equipo</li>
+        <li><a href="https://janua.dev/support" style="color: #3b82f6;">Centro de soporte</a> - {{ t('welcome.help_support') }}</li>
         <li><a href="https://github.com/madfam-io/janua" style="color: #3b82f6;">GitHub</a> - Ejemplos de código y SDK</li>
     </ul>
 </div>
 
 <p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px;">
-    Gracias por elegir Janua. Nos da gusto acompañarle en la seguridad de su plataforma.
+    {{ t('welcome.thanks') }}
 </p>
 
 <p style="margin: 20px 0 0 0;">
