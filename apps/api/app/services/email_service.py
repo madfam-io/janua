@@ -355,8 +355,17 @@ class EmailService:
             )
             context = {
                 "current_year": datetime.utcnow().year,
-                "subject": data.get("subject", "Janua"),
+                # The frame is MADFAM's, so the fallback subject is too.
+                "subject": data.get("subject", "MADFAM"),
                 "locale": body_locale,
+                # madfam.io serves its legal pages under a LOCALE PREFIX, and
+                # only `en` and `es` exist. Derived from the language the body
+                # actually rendered in — `body_locale`, not the requested one —
+                # so an untranslated body that fell back to English does not
+                # link a Spanish reader to a page in the wrong language.
+                # Anything unknown falls to `en`, which exists, rather than
+                # producing a 404 that asserts a notice we then do not show.
+                "legal_locale": "es" if str(body_locale).lower().startswith("es") else "en",
                 **data,
             }
             return template.render(**context)

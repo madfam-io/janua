@@ -134,9 +134,21 @@
                     <a href="{{ platform_url | default('https://janua.dev', true) }}">{{ platform_name | default('Janua', true) }}</a>
                 </p>
                 <p style="margin: 0 0 10px 0;">
-                    <a href="https://janua.dev/privacy">{{ t('privacy') }}</a> •
-                    <a href="https://janua.dev/terms">{{ t('terms') }}</a> •
-                    <a href="https://janua.dev/support">{{ t('support') }}</a>
+                    <!-- These three 404'd on janua.dev. They are not decoration:
+                         an "Aviso de privacidad" link that goes nowhere ASSERTS a
+                         notice exists, which under LFPDPPP is worse than omitting
+                         it — especially where the processing involves sensitive
+                         health data. The real pages live on madfam.io and are
+                         LOCALE-PREFIXED, so the path is built from the recipient's
+                         language rather than hardcoded. `/es/privacidad` does NOT
+                         exist; the Spanish route is /es/privacy. Verified 2026-08-14:
+                         /en/privacy /en/terms /en/cookies /es/privacy /es/terms all 200.
+                         Support is dropped: janua.dev/support 404s and we have no
+                         support site — hola@ is where a client should write, and it
+                         is now the sender they can simply reply to. -->
+                    <a href="https://madfam.io/{{ legal_locale }}/privacy">{{ t('privacy') }}</a> •
+                    <a href="https://madfam.io/{{ legal_locale }}/terms">{{ t('terms') }}</a> •
+                    <a href="mailto:hola@madfam.io">{{ t('support') }}</a>
                 </p>
                 <p style="margin: 0; color: #9ca3af; font-size: 11px;">
                     {{ t('why_received') }}
