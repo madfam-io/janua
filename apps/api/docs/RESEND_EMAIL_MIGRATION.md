@@ -261,7 +261,7 @@ HTML Preview: <!DOCTYPE html><html>...
 
 1. **Add Domain to Resend**:
    ```bash
-   Domain: janua.dev
+   Domain: madfam.io
    Add DNS records as shown in Resend dashboard
    Verify domain ownership
    ```
@@ -270,9 +270,13 @@ HTML Preview: <!DOCTYPE html><html>...
    ```bash
    RESEND_API_KEY=re_xxxxxxxxxxxxx
    EMAIL_ENABLED=true
-   EMAIL_FROM_ADDRESS=noreply@janua.dev
-   EMAIL_FROM_NAME=Janua
+   EMAIL_FROM_ADDRESS=hola@madfam.io
+   EMAIL_FROM_NAME=MADFAM
    ```
+
+   One sender across every MADFAM platform, on the one Resend-verified
+   domain. `docs/EMAIL_SENDER_POLICY.md` explains why, and what has to be
+   true before this may change.
 
 3. **Test Email Delivery**:
    ```bash
@@ -281,7 +285,7 @@ HTML Preview: <!DOCTYPE html><html>...
      -H "Authorization: Bearer $RESEND_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{
-       "from": "noreply@janua.dev",
+       "from": "hola@madfam.io",
        "to": ["test@example.com"],
        "subject": "Test Email",
        "html": "<p>Testing Resend integration</p>"
