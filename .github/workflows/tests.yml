@@ -116,6 +116,11 @@ jobs:
         env:
           ENVIRONMENT: test
           DATABASE_URL: postgresql+asyncpg://janua:janua_test@localhost:5432/janua_test
+          # pytest.ini pins DATABASE_URL to sqlite for every run, so the
+          # migration re-entrancy guard reads this instead -- it is the only way
+          # that test can reach the postgres service above. Unset in CI, it
+          # fails rather than skips; see tests/unit/test_migration_reentrancy.py.
+          MIGRATION_TEST_DATABASE_URL: postgresql+asyncpg://janua:janua_test@localhost:5432/janua_test
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: test-secret-key-do-not-use-in-production
           PYTHONPATH: ${{ github.workspace }}/apps/api

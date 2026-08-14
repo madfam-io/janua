@@ -15,6 +15,8 @@ migration from 004 onwards could ever be applied. Keep this pointing at '003'.
 import uuid
 
 import sqlalchemy as sa
+from sqlalchemy import inspect
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -25,6 +27,17 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+
+    # Environments that ran `Base.metadata.create_all` (settings.AUTO_MIGRATE)
+    # already have this table even though alembic_version still reads an older
+    # revision -- see the same note in 007. Creating it unconditionally raises
+    # DuplicateTable and rolls back the whole chain, which is what keeps every
+    # later migration from ever being applied. Same idempotency contract as
+    # 003/007/009/010/011.
+    if inspect(bind).has_table("guest_invites"):
+        return
+
     op.create_table(
         "guest_invites",
         sa.Column("id", sa.Uuid(), primary_key=True, default=uuid.uuid4),
