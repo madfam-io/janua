@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="color: #1f2937; margin: 0 0 20px 0;">Inicie sesión en Janua</h2>
+
+<p style="margin: 0 0 20px 0;">
+    Hola {{ user_name }}:
+</p>
+
+<p style="margin: 0 0 20px 0;">
+    Use el siguiente botón para iniciar sesión. No necesita contraseña: el enlace le da acceso directo.
+</p>
+
+<div style="text-align: center;">
+    <a href="{{ magic_link }}" class="button">Iniciar sesión</a>
+</div>
+
+<p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px;">
+    Este enlace funciona una sola vez y expira en 15 minutos.
+</p>
+
+<div class="warning">
+    <strong>⚠️ Aviso de seguridad</strong><br>
+    Si usted no solicitó iniciar sesión, puede ignorar este correo electrónico: el enlace
+    está ligado a su dirección y no hace nada hasta que se abre. Nunca lo reenvíe, ya que
+    cualquier persona que lo tenga podría entrar a su cuenta hasta que el enlace expire.
+</div>
+
+<p style="margin: 20px 0 0 0; color: #6b7280; font-size: 12px;">
+    Si el botón no funciona, copie esta dirección en su navegador:<br>
+    {{ magic_link }}
+</p>
+{% endblock %}

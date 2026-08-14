@@ -1,0 +1,29 @@
+Le invitaron a unirse a {{ organization_name }}
+
+Hola:
+
+{{ inviter_name }} le invitó a unirse a {{ organization_name }} en Janua.
+
+DETALLES DE LA INVITACIÓN
+-------------------------
+Rol: {{ role }}
+{% if teams %}Equipos: {{ teams|join(', ') }}{% endif %}
+
+ACEPTAR LA INVITACIÓN
+---------------------
+Abra el siguiente enlace para aceptar su invitación:
+{{ invitation_url }}
+
+⏰ IMPORTANTE: esta invitación expira el {{ expires_at }}
+
+ACERCA DE JANUA
+---------------
+Janua es una plataforma de autenticación empresarial que ofrece administración
+segura de accesos, integración con inicio de sesión único (SSO), autenticación de
+varios factores y funciones completas de identidad de usuarios.
+
+¿Tiene alguna duda? Escríbanos a {{ support_email }}
+
+---
+Janua by Innovaciones MADFAM
+{{ base_url }}

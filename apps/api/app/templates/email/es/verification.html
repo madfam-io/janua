@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="color: #1f2937; margin: 0 0 20px 0;">Verifique su correo electrónico</h2>
+
+<p style="margin: 0 0 20px 0;">
+    Hola {{ user_name }}:
+</p>
+
+<p style="margin: 0 0 20px 0;">
+    Le damos la bienvenida a Janua. Verifique su dirección de correo electrónico para terminar de configurar su cuenta y acceder a todas las funciones.
+</p>
+
+{% if verification_code %}
+<div class="code-box">
+    <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">
+        Su código de verificación:
+    </p>
+    <div class="code">{{ verification_code }}</div>
+    <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 12px;">
+        Este código expira en 15 minutos
+    </p>
+</div>
+{% endif %}
+
+<p style="margin: 0 0 20px 0; text-align: center;">
+    O haga clic en el siguiente botón para verificar su correo electrónico:
+</p>
+
+<div style="text-align: center;">
+    <a href="{{ verification_link }}" class="button">Verificar correo electrónico</a>
+</div>
+
+<div class="info">
+    <strong>¿Por qué verificar su correo electrónico?</strong><br>
+    La verificación nos ayuda a proteger su cuenta y habilita funciones importantes como la recuperación de contraseña y las notificaciones de seguridad.
+</div>
+
+<p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px;">
+    Si usted no creó una cuenta en Janua, puede ignorar este correo electrónico.
+</p>
+{% endblock %}

@@ -15,11 +15,11 @@ from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
 import structlog
-from jinja2 import Environment, FileSystemLoader
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Content, Email, Mail, To
 
 from app.config import settings
+from app.services.email_i18n import build_email_environment
 
 logger = structlog.get_logger()
 
@@ -64,7 +64,10 @@ class EnhancedEmailService:
     def __init__(self, redis_client: Optional[redis.Redis] = None):
         self.redis_client = redis_client
         self.template_dir = Path(__file__).parent.parent / "templates" / "email"
-        self.jinja_env = Environment(loader=FileSystemLoader(self.template_dir), autoescape=True)
+        # Shared factory: templates/email/base.html renders localized chrome
+        # via t()/lang(), which must be registered on every environment
+        # that loads this directory.
+        self.jinja_env = build_email_environment(self.template_dir)
 
         # Email provider configuration with priority order
         self.providers = self._configure_providers()

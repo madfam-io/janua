@@ -11,12 +11,44 @@ UI said "check your inbox" — so these tests assert the things a 200 cannot.
 """
 
 import inspect
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.services import email_service as email_module
+from app.services.email_i18n import resolve_locale, subject_for
 from app.services.email_service import EmailService
+
+# Messages with a full Spanish translation. Parametrizing from one list keeps
+# a newly localized template from being added without a guard.
+LOCALIZED_TEMPLATES = [
+    "magic_link",
+    "password_reset",
+    "verification",
+    "welcome",
+    "invitation",
+]
+
+# Enough context that every action button in every template has an href.
+TEMPLATE_CONTEXT = {
+    "user_name": "Ana",
+    "magic_link": "https://example.test/go?token=abc",
+    "magic_url": "https://example.test/go?token=abc",
+    "reset_link": "https://example.test/go?token=abc",
+    "reset_url": "https://example.test/go?token=abc",
+    "verification_link": "https://example.test/go?token=abc",
+    "verification_url": "https://example.test/go?token=abc",
+    "dashboard_link": "https://example.test/go?token=abc",
+    "dashboard_url": "https://example.test/go?token=abc",
+    "invitation_url": "https://example.test/go?token=abc",
+    "inviter_name": "Luis",
+    "organization_name": "Acme",
+    "role": "admin",
+    "expires_at": "2026-09-01",
+    "support_email": "soporte@janua.dev",
+    "base_url": "https://janua.dev",
+}
 
 
 class TestSendersExist:
@@ -87,7 +119,12 @@ class TestTemplatesRender:
     @pytest.mark.parametrize(
         "template",
         ["password_reset.html", "verification.html", "welcome.html", "magic_link.html",
-         "security_alert.html", "mfa_recovery.html"],
+         "security_alert.html", "mfa_recovery.html",
+         # Localized templates live in a subdirectory but inherit the same
+         # base.html — the loader root, not the template's own folder, is
+         # what `{% extends %}` resolves against.
+         "es/password_reset.html", "es/verification.html", "es/welcome.html",
+         "es/magic_link.html", "es/invitation.html"],
     )
     # Name kept short on purpose: a longer snake_case name here matched
     # TruffleHog's Lob API-key pattern and failed secret scanning (2026-08-13).
@@ -104,6 +141,13 @@ class TestTemplatesRender:
             ("password_reset.html", "reset_link"),
             ("verification.html", "verification_link"),
             ("magic_link.html", "magic_link"),
+            ("welcome.html", "dashboard_link"),
+            ("invitation.html", "invitation_url"),
+            ("es/password_reset.html", "reset_link"),
+            ("es/verification.html", "verification_link"),
+            ("es/magic_link.html", "magic_link"),
+            ("es/welcome.html", "dashboard_link"),
+            ("es/invitation.html", "invitation_url"),
         ],
     )
     def test_action_button_carries_a_real_href(self, template, link_var):
@@ -125,6 +169,204 @@ class TestTemplatesRender:
         assert "https://x.test/a" in rendered
         # base.html footer needs current_year; absent, Jinja renders "" silently.
         assert str(__import__("datetime").datetime.utcnow().year) in rendered
+
+
+class TestLocaleResolution:
+    """Spanish-speaking recipients were getting English as their first
+    touchpoint; there was no locale concept in the mail path at all."""
+
+    def test_explicit_argument_wins_over_stored_preference(self):
+        user = SimpleNamespace(locale="en")
+        assert resolve_locale("es-MX", user=user, default="en") == "es"
+
+    def test_stored_user_locale_wins_over_deployment_default(self):
+        """`users.locale` is a real nullable column on the User model."""
+        user = SimpleNamespace(locale="en")
+        assert resolve_locale(None, user=user, default="es") == "en"
+
+    def test_deployment_default_used_when_recipient_has_no_preference(self):
+        assert resolve_locale(None, user=SimpleNamespace(locale=None), default="en") == "en"
+
+    def test_falls_back_to_spanish_when_nothing_is_configured(self):
+        """es-MX is the default for client-facing mail: this platform's users
+        are predominantly Mexican."""
+        assert resolve_locale(None, None, None) == "es"
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("es", "es"), ("es-MX", "es"), ("es_MX", "es"), ("ES-mx", "es"), ("es-419", "es"),
+         ("en", "en"), ("en-US", "en")],
+    )
+    def test_regional_variants_share_one_translation_set(self, raw, expected):
+        assert resolve_locale(raw) == expected
+
+    @pytest.mark.parametrize("raw", ["fr-CA", "de", "", None, "  ", 42, "zz"])
+    def test_unsupported_tag_does_not_shadow_the_next_tier(self, raw):
+        """An untranslated stored locale must fall through, not win — otherwise
+        it selects a language with no templates behind it."""
+        assert resolve_locale(raw, default="en") == "en"
+
+
+class TestTemplateLocalization:
+    """A Spanish recipient must get the Spanish body, an English one English."""
+
+    @pytest.mark.parametrize("template", LOCALIZED_TEMPLATES)
+    @pytest.mark.parametrize("extension", ["html", "txt"])
+    def test_es_recipient_body(self, template, extension):
+        service = EmailService()
+        rendered = service._render_template(f"{template}.{extension}", TEMPLATE_CONTEXT, "es-MX")
+        english = service._render_template(f"{template}.{extension}", TEMPLATE_CONTEXT, "en")
+        assert rendered != english
+        assert "Email content unavailable" not in rendered
+        # A machine-translation smell test: es-MX transactional copy is
+        # usted-form and says "correo electrónico", never "email".
+        assert "Hola" in rendered or "Le invitaron" in rendered
+
+    @pytest.mark.parametrize("template", LOCALIZED_TEMPLATES)
+    def test_localized_html_still_renders_a_real_href(self, template):
+        """The localized copies must not lose the action button the English
+        ones only just got."""
+        service = EmailService()
+        rendered = service._render_template(f"{template}.html", TEMPLATE_CONTEXT, "es")
+        assert 'href=""' not in rendered
+        assert "https://example.test/go?token=abc" in rendered
+        assert "<html" in rendered.lower()
+
+    def test_english_is_still_available(self):
+        """This is localization, not replacement."""
+        service = EmailService()
+        rendered = service._render_template("magic_link.html", TEMPLATE_CONTEXT, "en")
+        assert "Sign in to Janua" in rendered
+        assert 'lang="en"' in rendered
+
+    def test_untranslated_message_falls_back_to_english_rather_than_failing(self):
+        """security_alert has no Spanish copy yet; it must still send."""
+        service = EmailService()
+        rendered = service._render_template("security_alert.html", TEMPLATE_CONTEXT, "es")
+        assert "<html" in rendered.lower()
+        assert "Email content unavailable" not in rendered
+
+    def test_frame_language_matches_body_language(self):
+        """base.html's header/footer sit outside every content block. A
+        Spanish body inside an English frame — or vice versa — is a worse
+        email than a consistent one."""
+        service = EmailService()
+        spanish = service._render_template("magic_link.html", TEMPLATE_CONTEXT, "es")
+        assert 'lang="es-MX"' in spanish
+        assert "Plataforma de identidad segura" in spanish
+        assert "Secure Identity Platform" not in spanish
+
+        # Untranslated body → English body → English frame, not a mix.
+        fallback = service._render_template("security_alert.html", TEMPLATE_CONTEXT, "es")
+        assert 'lang="en"' in fallback
+        assert "Secure Identity Platform" in fallback
+
+    def test_default_locale_setting_drives_unspecified_sends(self):
+        service = EmailService()
+        with patch.object(email_module.settings, "DEFAULT_EMAIL_LOCALE", "en"):
+            assert "Sign in to Janua" in service._render_template(
+                "magic_link.html", TEMPLATE_CONTEXT
+            )
+        with patch.object(email_module.settings, "DEFAULT_EMAIL_LOCALE", "es"):
+            assert "Inicie sesión en Janua" in service._render_template(
+                "magic_link.html", TEMPLATE_CONTEXT
+            )
+
+    def test_template_globals_registered_on_every_shared_environment(self):
+        """base.html calls t() and lang(); Jinja raises on calling an
+        undefined name, so an environment over this directory without them
+        cannot render anything."""
+        from app.services.resend_email_service import ResendEmailService
+
+        for env in (EmailService().jinja_env, ResendEmailService().jinja_env):
+            assert "t" in env.globals
+            assert "lang" in env.globals
+
+
+class TestSubjectLocalization:
+    """Subjects were English string literals at each call site."""
+
+    @pytest.mark.parametrize(
+        "message_key", ["verification", "password_reset", "magic_link", "welcome", "invitation"]
+    )
+    def test_every_message_has_both_languages(self, message_key):
+        spanish = subject_for(message_key, "es", organization_name="Acme")
+        english = subject_for(message_key, "en", organization_name="Acme")
+        assert spanish and english and spanish != english
+
+    def test_subject_resolves_through_the_same_mechanism_as_the_body(self):
+        assert subject_for("magic_link", "es-MX") == subject_for("magic_link", "es")
+
+    def test_unknown_locale_gets_english_subject_not_an_empty_one(self):
+        assert subject_for("magic_link", "fr") == subject_for("magic_link", "en")
+
+    def test_invitation_subject_interpolates_the_organization(self):
+        assert "Acme" in subject_for("invitation", "es", organization_name="Acme")
+
+    @pytest.mark.asyncio
+    async def test_sender_passes_the_localized_subject_to_the_transport(self):
+        """The subject a recipient sees must follow the same locale as the
+        body — it is the only part visible before opening."""
+        service = EmailService()
+        with patch.object(service, "_send_email", new=AsyncMock(return_value=True)) as send:
+            await service.send_magic_link_email("a@b.test", "tok", locale="es-MX")
+        assert send.await_args.kwargs["subject"] == subject_for("magic_link", "es")
+
+        with patch.object(service, "_send_email", new=AsyncMock(return_value=True)) as send:
+            await service.send_magic_link_email("a@b.test", "tok", locale="en")
+        assert send.await_args.kwargs["subject"] == "Your Janua sign-in link"
+
+
+class TestSendersAcceptLocale:
+    """Routers resolve the recipient's language while they still hold a DB
+    session; background tasks have none of their own."""
+
+    @pytest.mark.parametrize(
+        "task_name",
+        ["send_magic_link_email_task", "send_password_reset_email_task",
+         "send_verification_email_task"],
+    )
+    def test_background_entrypoints_take_a_locale(self, task_name):
+        task = getattr(email_module, task_name)
+        assert "locale" in inspect.signature(task).parameters
+
+    @pytest.mark.parametrize(
+        "method_name",
+        ["send_magic_link_email", "send_password_reset_email", "send_verification_email",
+         "send_welcome_email"],
+    )
+    def test_senders_take_an_explicit_locale_and_a_user(self, method_name):
+        params = inspect.signature(getattr(EmailService, method_name)).parameters
+        assert "locale" in params
+        assert "user" in params
+
+    def test_routers_pass_the_recipient_locale(self):
+        """Without this the stored preference never reaches the mailer, and
+        every recipient silently gets the deployment default.
+
+        Read defensively: the password-reset dispatch is the one path a
+        locked-out user depends on, so a recipient object without the
+        attribute must not raise there.
+        """
+        from app.routers.v1 import auth
+
+        source = inspect.getsource(auth)
+        assert 'getattr(user, "locale", None)' in source
+        assert 'getattr(current_user, "locale", None)' in source
+        assert "user.locale," not in source  # the unguarded read
+
+    @pytest.mark.asyncio
+    async def test_verification_task_sends_a_button_href(self):
+        """This path passed only verification_url, while the template renders
+        href="{{ verification_link }}" — so the mail every new account gets
+        shipped with an empty button."""
+        with patch.object(email_module.EmailService, "_send_email",
+                          new=AsyncMock(return_value=True)) as send:
+            await email_module.send_verification_email_task("a@b.test", "tok123", locale="es")
+        html = send.await_args.kwargs["html_content"]
+        assert 'href=""' not in html
+        assert "tok123" in html
+        assert "Verifique su correo electrónico" in html
 
 
 class TestMagicLinkCallbackRoute:

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 style="margin: 0 0 20px 0; font-size: 28px; color: #1f2937;">Le invitaron a colaborar</h1>
+
+<p style="margin: 0 0 15px 0; font-size: 16px; color: #4b5563;">
+    Hola:
+</p>
+
+<p style="margin: 0 0 15px 0; font-size: 16px; color: #4b5563;">
+    <strong>{{ inviter_name }}</strong> le invitó a unirse a <strong>{{ organization_name }}</strong> en Janua.
+</p>
+
+<div class="info" style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 4px;">
+    <p style="margin: 0 0 10px 0; font-weight: 600; color: #1e40af;">Detalles de la invitación</p>
+    <p style="margin: 0 0 5px 0; font-size: 14px; color: #1f2937;"><strong>Rol:</strong> {{ role }}</p>
+    {% if teams %}
+    <p style="margin: 0; font-size: 14px; color: #1f2937;"><strong>Equipos:</strong> {{ teams|join(', ') }}</p>
+    {% endif %}
+</div>
+
+<p style="text-align: center; margin: 30px 0;">
+    <a href="{{ invitation_url }}" class="button" style="display: inline-block; padding: 14px 32px; background-color: #3b82f6; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Aceptar invitación</a>
+</p>
+
+<div class="warning" style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+    <p style="margin: 0; font-size: 14px; color: #92400e;">
+        <strong>⏰ Esta invitación expira el {{ expires_at }}</strong><br>
+        Le pedimos aceptarla antes de esa fecha.
+    </p>
+</div>
+
+<div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; border-radius: 6px;">
+    <p style="margin: 0 0 10px 0; font-weight: 600; font-size: 14px; color: #1f2937;">¿Qué es Janua?</p>
+    <p style="margin: 0; font-size: 14px; color: #4b5563; line-height: 1.6;">
+        Janua es una plataforma de autenticación empresarial que ofrece administración segura de accesos,
+        integración con inicio de sesión único (SSO), autenticación de varios factores y funciones
+        completas de identidad de usuarios.
+    </p>
+</div>
+
+<p style="margin-top: 32px; font-size: 13px; color: #6b7280; line-height: 1.5;">
+    Si el botón anterior no funciona, copie y pegue esta dirección en su navegador:<br>
+    <span style="word-break: break-all; color: #3b82f6;">{{ invitation_url }}</span>
+</p>
+
+<p style="margin-top: 24px; font-size: 14px; color: #6b7280;">
+    ¿Tiene alguna duda? Escriba a <a href="mailto:{{ support_email }}" style="color: #3b82f6; text-decoration: none;">{{ support_email }}</a>
+</p>
+{% endblock %}

@@ -1,0 +1,16 @@
+Hola {{ user_name }}:
+
+Inicie sesión en Janua con este enlace:
+{{ magic_url }}
+
+Este enlace funciona una sola vez y expira en 15 minutos.
+
+Si usted no solicitó iniciar sesión, puede ignorar este correo electrónico. Nunca
+reenvíe este enlace: cualquier persona que lo tenga podría entrar a su cuenta hasta
+que expire.
+
+¿Necesita ayuda? Escríbanos a {{ support_email }}
+
+---
+Equipo Janua
+{{ base_url }}
