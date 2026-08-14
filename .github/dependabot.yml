@@ -8,19 +8,43 @@ updates:
       day: "monday"
     open-pull-requests-limit: 10
     groups:
-      dev-dependencies:
-        dependency-type: "development"
+      # ONE roll-up PR per week for everything routine. Previously dev deps
+      # grouped minor+patch but production grouped PATCH ONLY, so every
+      # production MINOR arrived as its own PR — that asymmetry is most of why
+      # 11 Dependabot PRs were open at once on 2026-08-14, each 30+ commits
+      # behind main with CI from the day it opened. A stale green check is not
+      # evidence, so each one needed a rebase before it could be merged, which
+      # is precisely the per-PR toil grouping exists to remove.
+      routine:
+        patterns:
+          - "*"
         update-types:
           - "minor"
-          - "patch"
-      production-dependencies:
-        dependency-type: "production"
-        update-types:
           - "patch"
     labels:
       - "dependencies"
       - "automated"
     ignore:
+      # Dev-tooling MAJORS are migration projects, not dependency updates: a
+      # TypeScript or ESLint major rewrites diagnostics and config formats, and
+      # the work is scheduling a migration, not clicking merge. Left ungrouped
+      # they reopen weekly and go stale, which is how #505 (typescript 5->6) and
+      # #504 (jest-dom 6->7) came to sit here. Held so raising them is a
+      # deliberate act; minor and patch still flow through the routine group.
+      # RUNTIME majors are deliberately NOT ignored — those can carry security
+      # fixes and each deserves its own decision.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/jest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@testing-library/*"
+        update-types: ["version-update:semver-major"]
       # `@types/node` must track the Node MAJOR we actually run, not the newest
       # version published. Dependabot cannot know that, so its "latest" is wrong
       # here by construction: on 2026-08-07 `main` ran Node 20 in all 8 workflows
