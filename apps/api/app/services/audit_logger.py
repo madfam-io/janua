@@ -67,6 +67,18 @@ class AuditEventType(str, Enum):
     SECURITY_SUSPICIOUS_ACTIVITY = "security.suspicious"
     SECURITY_ACCESS_DENIED = "security.access_denied"
 
+    # Policy / RBAC events
+    # `app/routers/v1/policies.py` and `app/services/policy_engine.py` referenced
+    # these seven members before they were defined, so each handler raised
+    # AttributeError on the audit call even when the query above it succeeded.
+    POLICY_CREATE = "policy.create"
+    POLICY_UPDATE = "policy.update"
+    POLICY_DELETE = "policy.delete"
+    POLICY_EVALUATE = "policy.evaluate"
+    ROLE_CREATE = "role.create"
+    ROLE_ASSIGN = "role.assign"
+    ROLE_UNASSIGN = "role.unassign"
+
     # Billing events
     BILLING_SUBSCRIPTION_CREATE = "billing.subscription_create"
     BILLING_SUBSCRIPTION_UPDATE = "billing.subscription_update"

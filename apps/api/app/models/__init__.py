@@ -537,6 +537,19 @@ organization_members = OrganizationMember.__table__
 
 
 class Policy(Base):
+    """Authorization policy.
+
+    `organization_id` is the tenancy column — there is no `policies.tenant_id`
+    and never has been (see alembic 000_init). Scope policies the same way
+    `Role` and `OrganizationMember` are scoped.
+
+    The authorization columns below (effect .. expires_at) were read and written
+    by `app/routers/v1/policies.py` and `app/services/policy_engine.py` from the
+    day those modules were written, but existed on neither the model nor the
+    table, so every policy CRUD call raised before touching the database. Added
+    in alembic 010_policy_authz_columns.
+    """
+
     __tablename__ = "policies"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -544,6 +557,22 @@ class Policy(Base):
     description = Column(Text)
     rules = Column(JSONB, default={})
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+
+    # Authorization semantics
+    effect = Column(String(20), nullable=False, default="allow", server_default="allow")
+    priority = Column(Integer, nullable=False, default=0, server_default="0")
+    enabled = Column(Boolean, nullable=False, default=True, server_default=sa.text("true"))
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+
+    # Targeting
+    target_type = Column(String(50))  # user | role | organization | global
+    target_id = Column(String(255))
+    resource_type = Column(String(255))
+    resource_pattern = Column(String(500))
+    actions = Column(JSONB, default=list)
+    conditions = Column(JSONB, default=dict)
+    expires_at = Column(DateTime)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
