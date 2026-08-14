@@ -256,7 +256,7 @@ class TestTemplateLocalization:
         # The tagline is MADFAM's now, not one platform's — the header reads
         # MADFAM on every message (see docs/EMAIL_SENDER_POLICY.md). What this
         # test guards is unchanged: the frame's language must match the body's.
-        assert "Tecnología, diseñada para tu operación" in spanish
+        assert "Tecnología, diseñada para su operación" in spanish
         assert "Technology, engineered for your operation" not in spanish
 
         # Untranslated body → English body → English frame, not a mix.
@@ -317,7 +317,7 @@ class TestSubjectLocalization:
 
         with patch.object(service, "_send_email", new=AsyncMock(return_value=True)) as send:
             await service.send_magic_link_email("a@b.test", "tok", locale="en")
-        assert send.await_args.kwargs["subject"] == "Your Janua sign-in link"
+        assert send.await_args.kwargs["subject"] == "Your sign-in link"
 
 
 class TestSendersAcceptLocale:
