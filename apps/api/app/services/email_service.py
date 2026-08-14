@@ -68,11 +68,26 @@ def resolve_sender(redirect_url: str | None = None) -> tuple[str, str]:
     accumulates reputation across every client and every service, with one
     SPF/DKIM/DMARC setup instead of N. madfam.io is Resend-verified.
 
-    `redirect_url` is accepted and unused: it keeps the seam open for a future
-    per-tenant decision without another signature change through four callers,
-    and documents that the information IS available if the policy changes.
+    THIS IS PHASE 1 OF A TWO-PHASE POLICY, not a permanent answer. See
+    `docs/EMAIL_SENDER_POLICY.md`.
+
+      Phase 1 (now, and every new engagement): MADFAM sends, MADFAM brands,
+      the platform is credited. The client is meeting our ecosystem for the
+      first time and we control the sending domain, so this is the only shape
+      that is both recognisable and deliverable.
+
+      Phase 2 (once MADFAM manages the client's own domain, e.g.
+      creatumundo.mx): mail comes from THEIR domain with THEIR branding. It
+      requires their domain verified in Resend — their DNS, which is exactly
+      what "we manage their web presence" gives us.
+
+    `redirect_url` is accepted and unused ON PURPOSE. It is the Phase 2 hook:
+    the redirect host identifies the tenant, so when a client's domain is
+    verified this function can switch senders without another signature change
+    through four callers. DO NOT REMOVE IT because it is currently unused —
+    that is the seam, not dead code.
     """
-    del redirect_url  # see docstring: the seam is deliberate, the policy is not per-tenant
+    del redirect_url  # Phase 2 hook; see docstring before deleting
     name = settings.FROM_NAME or settings.EMAIL_FROM_NAME or "MADFAM"
     address = settings.FROM_EMAIL or settings.EMAIL_FROM_ADDRESS
     return name, address
