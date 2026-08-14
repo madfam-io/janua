@@ -55,6 +55,14 @@ class AuditEventType(str, Enum):
     ORG_MEMBER_REMOVE = "org.member_remove"
     ORG_ROLE_CHANGE = "org.role_change"
 
+    # Invitation events. The invitation service has referenced all four of
+    # these since it was written; none of them existed, so every invitation
+    # operation raised AttributeError at its audit call.
+    INVITATION_CREATE = "invitation.create"
+    INVITATION_ACCEPT = "invitation.accept"
+    INVITATION_REVOKE = "invitation.revoke"
+    INVITATION_RESEND = "invitation.resend"
+
     # API events
     API_KEY_CREATE = "api.key_create"
     API_KEY_ROTATE = "api.key_rotate"

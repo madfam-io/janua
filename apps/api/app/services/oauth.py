@@ -13,6 +13,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.locale import normalize_locale
 from app.services.auth_service import AuthService
 
 from ..models import OAuthAccount, OAuthProvider, User, UserStatus
@@ -436,9 +437,20 @@ class OAuthService:
 
     @classmethod
     def find_or_create_user(
-        cls, db: Session, provider: OAuthProvider, user_info: Dict[str, Any], tokens: Dict[str, Any]
+        cls,
+        db: Session,
+        provider: OAuthProvider,
+        user_info: Dict[str, Any],
+        tokens: Dict[str, Any],
+        locale: Optional[str] = None,
     ) -> Tuple[User, bool]:
-        """Find existing user or create new one from OAuth info"""
+        """Find existing user or create new one from OAuth info.
+
+        `locale` is the language negotiated from the callback request, used
+        only when the provider did not tell us one. It is never applied to an
+        already-existing user: a returning user's stored preference outranks
+        whatever browser they happen to be signing in from today.
+        """
         # Check if OAuth account exists
         oauth_account = (
             db.query(OAuthAccount)
@@ -481,6 +493,14 @@ class OAuthService:
         # Create new user if doesn't exist
         is_new_user = False
         if not user:
+            # `locale` is a standard OIDC claim, so most providers hand us the
+            # language the user already chose in their identity account. That
+            # beats the browser header, which is why it is checked first;
+            # unsupported claims normalize to None and fall through.
+            raw_claims = user_info.get("raw_data") or {}
+            claimed_locale = normalize_locale(
+                raw_claims.get("locale") or raw_claims.get("preferredLanguage")
+            )
             user = User(
                 email=user_info.get("email"),
                 email_verified=user_info.get("email_verified", False),
@@ -488,6 +508,7 @@ class OAuthService:
                 last_name=user_info.get("last_name"),
                 profile_image_url=user_info.get("profile_image_url"),
                 status=UserStatus.ACTIVE,
+                locale=claimed_locale or locale,
             )
             db.add(user)
             db.flush()
@@ -535,9 +556,20 @@ class OAuthService:
 
     @classmethod
     async def handle_oauth_callback(
-        cls, db: Session, provider: OAuthProvider, code: str, state: str, redirect_uri: str
+        cls,
+        db: Session,
+        provider: OAuthProvider,
+        code: str,
+        state: str,
+        redirect_uri: str,
+        locale: Optional[str] = None,
     ) -> Optional[Tuple[User, Dict[str, Any]]]:
-        """Handle OAuth callback and create/update user"""
+        """Handle OAuth callback and create/update user.
+
+        `locale` is threaded through from the router because this layer is the
+        only one that touches User construction and the router is the only one
+        that can see request headers.
+        """
         # Exchange code for tokens
         tokens = await cls.exchange_code_for_tokens(provider, code, redirect_uri)
         if not tokens:
@@ -551,7 +583,7 @@ class OAuthService:
             return None
 
         # Find or create user
-        user, is_new = cls.find_or_create_user(db, provider, user_info, tokens)
+        user, is_new = cls.find_or_create_user(db, provider, user_info, tokens, locale=locale)
 
         # Create session tokens
         access_token, refresh_token, session = AuthService.create_user_session(db, user)
