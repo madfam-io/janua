@@ -236,7 +236,7 @@ class TestTemplateLocalization:
         """This is localization, not replacement."""
         service = EmailService()
         rendered = service._render_template("magic_link.html", TEMPLATE_CONTEXT, "en")
-        assert "Sign in to Janua" in rendered
+        assert "Sign in to your portal" in rendered
         assert 'lang="en"' in rendered
 
     def test_untranslated_message_falls_back_to_english_rather_than_failing(self):
@@ -253,22 +253,25 @@ class TestTemplateLocalization:
         service = EmailService()
         spanish = service._render_template("magic_link.html", TEMPLATE_CONTEXT, "es")
         assert 'lang="es-MX"' in spanish
-        assert "Plataforma de identidad segura" in spanish
-        assert "Secure Identity Platform" not in spanish
+        # The tagline is MADFAM's now, not one platform's — the header reads
+        # MADFAM on every message (see docs/EMAIL_SENDER_POLICY.md). What this
+        # test guards is unchanged: the frame's language must match the body's.
+        assert "Tecnología, diseñada para su operación" in spanish
+        assert "Technology, engineered for your operation" not in spanish
 
         # Untranslated body → English body → English frame, not a mix.
         fallback = service._render_template("security_alert.html", TEMPLATE_CONTEXT, "es")
         assert 'lang="en"' in fallback
-        assert "Secure Identity Platform" in fallback
+        assert "Technology, engineered for your operation" in fallback
 
     def test_default_locale_setting_drives_unspecified_sends(self):
         service = EmailService()
         with patch.object(email_module.settings, "DEFAULT_EMAIL_LOCALE", "en"):
-            assert "Sign in to Janua" in service._render_template(
+            assert "Sign in to your portal" in service._render_template(
                 "magic_link.html", TEMPLATE_CONTEXT
             )
         with patch.object(email_module.settings, "DEFAULT_EMAIL_LOCALE", "es"):
-            assert "Inicie sesión en Janua" in service._render_template(
+            assert "Inicie sesión en su portal" in service._render_template(
                 "magic_link.html", TEMPLATE_CONTEXT
             )
 
@@ -314,7 +317,7 @@ class TestSubjectLocalization:
 
         with patch.object(service, "_send_email", new=AsyncMock(return_value=True)) as send:
             await service.send_magic_link_email("a@b.test", "tok", locale="en")
-        assert send.await_args.kwargs["subject"] == "Your Janua sign-in link"
+        assert send.await_args.kwargs["subject"] == "Your sign-in link"
 
 
 class TestSendersAcceptLocale:

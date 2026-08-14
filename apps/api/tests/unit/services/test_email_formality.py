@@ -430,7 +430,9 @@ class TestRenderedOutput:
     @pytest.mark.parametrize(
         "name,usted_phrase,tu_phrase",
         [
-            ("magic_link.html", "Inicie sesión en Janua", "Inicia sesión en Janua"),
+            # was "Inicie sesión en Janua" / "Inicia sesión en Janua" — the
+            # sender-identity branch stopped naming the platform at the reader.
+            ("magic_link.html", "Inicie sesión en su portal", "Inicia sesión en tu portal"),
             ("magic_link.txt", "¿Necesita ayuda?", "¿Necesitas ayuda?"),
             ("verification.html", "Verifique su correo", "Verifica tu correo"),
             ("password_reset.html", "Restablezca su contraseña", "Restablece tu contraseña"),
@@ -484,7 +486,8 @@ class TestServiceRenderPath:
 
     def test_service_defaults_to_usted(self):
         html = EmailService()._render_template("magic_link.html", dict(TEMPLATE_CONTEXT), "es")
-        assert "Inicie sesión en Janua" in html
+        # was "Inicie sesión en Janua"
+        assert "Inicie sesión en su portal" in html
 
     def test_english_body_is_unaffected_by_the_register(self):
         """`tú` is a Spanish concept; asking for it must not perturb English."""
@@ -500,7 +503,7 @@ class TestServiceRenderPath:
         "template_name,url_key,tu_phrase",
         [
             ("verification.html", "verification_url", "Verifica tu correo electrónico"),
-            ("magic_link.html", "magic_url", "Inicia sesión en Janua"),
+            ("magic_link.html", "magic_url", "Inicia sesión en tu portal"),
             ("password_reset.html", "reset_url", "Restablece tu contraseña"),
         ],
     )

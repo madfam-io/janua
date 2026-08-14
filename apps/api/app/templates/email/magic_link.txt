@@ -1,6 +1,6 @@
 Hi {{ user_name }},
 
-Sign in to Janua by clicking this link:
+Sign in to your portal by clicking this link:
 {{ magic_url }}
 
 This link works once and expires in 15 minutes.

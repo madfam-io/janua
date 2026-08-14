@@ -212,8 +212,11 @@ class Settings(BaseSettings):
     # Email
     EMAIL_ENABLED: bool = Field(default=False)
     EMAIL_PROVIDER: str = Field(default="resend", pattern="^(resend|smtp|sendgrid)$")
-    EMAIL_FROM_ADDRESS: str = Field(default="noreply@janua.dev")
-    EMAIL_FROM_NAME: str = Field(default="Janua")
+    # madfam.io, not janua.dev. A client's first message is a sign-in link;
+    # arriving from a brand they have never heard of, on an unrelated domain,
+    # it is indistinguishable from phishing. madfam.io is Resend-verified.
+    EMAIL_FROM_ADDRESS: str = Field(default="hola@madfam.io")
+    EMAIL_FROM_NAME: str = Field(default="MADFAM")
     RESEND_API_KEY: Optional[str] = Field(default=None)
     # Language for transactional mail when the recipient has no stored locale
     # and the caller did not specify one. Defaults to Spanish: this platform's
@@ -297,9 +300,7 @@ class Settings(BaseSettings):
     # Storage (R2/S3-compatible object storage — optional)
     STORAGE_ENABLED: bool = Field(default=False, description="Enable object storage")
     STORAGE_BUCKET_NAME: Optional[str] = Field(default=None, description="Storage bucket name")
-    STORAGE_ACCESS_KEY_ID: Optional[str] = Field(
-        default=None, description="Storage access key ID"
-    )
+    STORAGE_ACCESS_KEY_ID: Optional[str] = Field(default=None, description="Storage access key ID")
     STORAGE_SECRET_ACCESS_KEY: Optional[str] = Field(
         default=None, description="Storage secret access key"
     )
@@ -658,12 +659,14 @@ class Settings(BaseSettings):
                     "FIELD_ENCRYPTION_KEY must be set in production for SOC 2 compliance. "
                     "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
                 )
-            if not self.SECRET_KEY or self.SECRET_KEY == "development-secret-key-change-in-production":
-                raise ValueError(
-                    "SECRET_KEY must be set to a strong, unique value in production."
-                )
+            if (
+                not self.SECRET_KEY
+                or self.SECRET_KEY == "development-secret-key-change-in-production"
+            ):
+                raise ValueError("SECRET_KEY must be set to a strong, unique value in production.")
             if self.DATABASE_SSL_MODE in ("disable", "allow"):
                 import warnings
+
                 warnings.warn(
                     f"DATABASE_SSL_MODE is '{self.DATABASE_SSL_MODE}' in production. "
                     "Set to 'require', 'verify-ca', or 'verify-full' for encrypted connections.",
@@ -687,16 +690,30 @@ class Settings(BaseSettings):
 
         # Fields that can be overridden from Vault
         secret_fields = [
-            "FIELD_ENCRYPTION_KEY", "JWT_PRIVATE_KEY", "JWT_SECRET_KEY", "SECRET_KEY",
-            "INTERNAL_API_KEY", "RESEND_API_KEY", "SENDGRID_API_KEY",
-            "OAUTH_GOOGLE_CLIENT_SECRET", "OAUTH_GITHUB_CLIENT_SECRET",
-            "OAUTH_MICROSOFT_CLIENT_SECRET", "OAUTH_APPLE_PRIVATE_KEY",
-            "OAUTH_DISCORD_CLIENT_SECRET", "OAUTH_TWITTER_CLIENT_SECRET",
-            "OAUTH_LINKEDIN_CLIENT_SECRET", "OAUTH_SLACK_CLIENT_SECRET",
-            "CONEKTA_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET", "DHANAM_WEBHOOK_SECRET",
+            "FIELD_ENCRYPTION_KEY",
+            "JWT_PRIVATE_KEY",
+            "JWT_SECRET_KEY",
+            "SECRET_KEY",
+            "INTERNAL_API_KEY",
+            "RESEND_API_KEY",
+            "SENDGRID_API_KEY",
+            "OAUTH_GOOGLE_CLIENT_SECRET",
+            "OAUTH_GITHUB_CLIENT_SECRET",
+            "OAUTH_MICROSOFT_CLIENT_SECRET",
+            "OAUTH_APPLE_PRIVATE_KEY",
+            "OAUTH_DISCORD_CLIENT_SECRET",
+            "OAUTH_TWITTER_CLIENT_SECRET",
+            "OAUTH_LINKEDIN_CLIENT_SECRET",
+            "OAUTH_SLACK_CLIENT_SECRET",
+            "CONEKTA_WEBHOOK_SECRET",
+            "STRIPE_WEBHOOK_SECRET",
+            "DHANAM_WEBHOOK_SECRET",
             "FEDERATION_API_TOKEN",
-            "CLOUDFLARE_TURNSTILE_SECRET", "CLOUDFLARE_R2_SECRET_KEY", "R2_SECRET_ACCESS_KEY",
-            "MONITORING_API_KEY", "SMTP_PASSWORD",
+            "CLOUDFLARE_TURNSTILE_SECRET",
+            "CLOUDFLARE_R2_SECRET_KEY",
+            "R2_SECRET_ACCESS_KEY",
+            "MONITORING_API_KEY",
+            "SMTP_PASSWORD",
         ]
 
         async def _load():

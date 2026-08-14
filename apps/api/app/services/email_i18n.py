@@ -192,8 +192,8 @@ SUBJECTS: Dict[str, Dict[str, str]] = {
         "es": "Restablezca su contraseña de Janua",
     },
     "magic_link": {
-        "en": "Your Janua sign-in link",
-        "es": "Su enlace de acceso a Janua",
+        "en": "Your sign-in link",
+        "es": "Su enlace de acceso",
     },
     "welcome": {
         "en": "Welcome to Janua!",
@@ -212,7 +212,7 @@ SUBJECTS: Dict[str, Dict[str, str]] = {
 SUBJECTS_ES_TU: Dict[str, str] = {
     "verification": "Verifica tu cuenta de Janua",
     "password_reset": "Restablece tu contraseña de Janua",
-    "magic_link": "Tu enlace de acceso a Janua",
+    "magic_link": "Tu enlace de acceso",
     "welcome": "Te damos la bienvenida a Janua",
     "invitation": "Te invitaron a unirse a {organization_name} en Janua",
 }
@@ -259,22 +259,28 @@ def subject_for(
 # --------------------------------------------------------------------------
 CHROME: Dict[str, Dict[str, str]] = {
     "en": {
-        "tagline": "Secure Identity Platform",
+        # The header now reads MADFAM on every message, so the tagline is
+        # MADFAM's rather than one platform's.
+        "tagline": "Technology, engineered for your operation",
         "rights": "All rights reserved.",
+        "powered_by": "Powered by",
         "privacy": "Privacy Policy",
         "terms": "Terms of Service",
         "support": "Support",
-        "why_received": "You received this email because you have an account with Janua.",
-        "location": "Innovaciones MADFAM (MADFAM) • Mexico City, Mexico",
+        "why_received": "You received this email because you have an account with MADFAM.",
+        "location": "Innovaciones MADFAM S.A.S. de C.V. • Cuernavaca, Morelos, Mexico",
     },
     "es": {
-        "tagline": "Plataforma de identidad segura",
+        "tagline": "Tecnología, diseñada para su operación",
         "rights": "Todos los derechos reservados.",
+        # "Con tecnología de" is the standard es-MX rendering of "Powered by".
+        # "Impulsado por" reads as marketing; this reads as an attribution.
+        "powered_by": "Con tecnología de",
         "privacy": "Aviso de privacidad",
         "terms": "Términos del servicio",
         "support": "Soporte",
-        "why_received": "Recibió este correo electrónico porque tiene una cuenta en Janua.",
-        "location": "Innovaciones MADFAM (MADFAM) • Ciudad de México, México",
+        "why_received": "Recibió este correo electrónico porque tiene una cuenta con MADFAM.",
+        "location": "Innovaciones MADFAM S.A.S. de C.V. • Cuernavaca, Morelos, México",
     },
 }
 
@@ -302,7 +308,7 @@ ES_BODY: Dict[str, str] = {
     # -- shared across messages ------------------------------------------
     "common.need_help": "¿Necesita ayuda? Escríbanos a",
     # -- magic_link -------------------------------------------------------
-    "magic_link.heading": "Inicie sesión en Janua",
+    "magic_link.heading": "Inicie sesión en su portal",
     "magic_link.intro": (
         "Use el siguiente botón para iniciar sesión. No necesita contraseña: "
         "el enlace le da acceso directo."
@@ -314,7 +320,7 @@ ES_BODY: Dict[str, str] = {
         "cuenta hasta que el enlace expire."
     ),
     "magic_link.button_fallback": "Si el botón no funciona, copie esta dirección en su navegador:",
-    "magic_link.txt_intro": "Inicie sesión en Janua con este enlace:",
+    "magic_link.txt_intro": "Inicie sesión en su portal con este enlace:",
     "magic_link.txt_security_notice": (
         "Si usted no solicitó iniciar sesión, puede ignorar este correo electrónico. Nunca\n"
         "reenvíe este enlace: cualquier persona que lo tenga podría entrar a su cuenta hasta\n"
@@ -449,11 +455,21 @@ ES_STRINGS: Dict[str, str] = {**CHROME["es"], **ES_BODY}
 # --------------------------------------------------------------------------
 ES_TU: Dict[str, str] = {
     # -- chrome -----------------------------------------------------------
-    "why_received": "Recibiste este correo electrónico porque tienes una cuenta en Janua.",
+    # The frame is MADFAM's in BOTH registers. `why_received` said "una cuenta
+    # en Janua" here while the usted copy already said MADFAM — which would
+    # have shown the brand this branch exists to stop showing to exactly the
+    # readers who asked for the friendlier register.
+    #
+    # `tagline` was register-neutral while it read "Plataforma de identidad
+    # segura", a sentence about the product. It now addresses the reader's
+    # operation ("su"/"tu"), so it is register-sensitive and moved out of
+    # ES_REGISTER_NEUTRAL.
+    "tagline": "Tecnología, diseñada para tu operación",
+    "why_received": "Recibiste este correo electrónico porque tienes una cuenta con MADFAM.",
     # -- shared -----------------------------------------------------------
     "common.need_help": "¿Necesitas ayuda? Escríbenos a",
     # -- magic_link -------------------------------------------------------
-    "magic_link.heading": "Inicia sesión en Janua",
+    "magic_link.heading": "Inicia sesión en tu portal",
     "magic_link.intro": (
         "Usa el siguiente botón para iniciar sesión. No necesitas contraseña: "
         "el enlace te da acceso directo."
@@ -465,7 +481,7 @@ ES_TU: Dict[str, str] = {
         "cuenta hasta que el enlace expire."
     ),
     "magic_link.button_fallback": "Si el botón no funciona, copia esta dirección en tu navegador:",
-    "magic_link.txt_intro": "Inicia sesión en Janua con este enlace:",
+    "magic_link.txt_intro": "Inicia sesión en tu portal con este enlace:",
     "magic_link.txt_security_notice": (
         "Si no solicitaste iniciar sesión, puedes ignorar este correo electrónico. Nunca\n"
         "reenvíes este enlace: cualquier persona que lo tenga podría entrar a tu cuenta hasta\n"
@@ -586,8 +602,10 @@ ES_TU: Dict[str, str] = {
 # register-sensitive string cannot reach a reader unreviewed.
 # --------------------------------------------------------------------------
 ES_REGISTER_NEUTRAL: Set[str] = {
-    "tagline",  # "Plataforma de identidad segura" — names the product
+    # `tagline` is NOT here any more: it now reads "diseñada para su operación",
+    # which addresses the reader, so it lives in ES_TU with both registers.
     "rights",  # "Todos los derechos reservados." — boilerplate, no addressee
+    "powered_by",  # "Con tecnología de" — an attribution, no addressee
     "privacy",  # "Aviso de privacidad" — the name of a document
     "terms",  # "Términos del servicio" — the name of a document
     "support",  # "Soporte" — a noun

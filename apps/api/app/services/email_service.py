@@ -42,6 +42,62 @@ def _redact_email(email: str) -> str:
     return f"{local[:2]}***@{domain}"
 
 
+def resolve_sender(redirect_url: str | None = None) -> tuple[str, str]:
+    """The (display name, address) every message comes FROM.
+
+    ALWAYS `MADFAM <hola@madfam.io>`. Deliberately not per-tenant, and not
+    per-platform. The address is the one a client can simply reply to, which
+    is also why it is the `support` link in the footer; `config.py` defaults
+    EMAIL_FROM_ADDRESS to it.
+
+    WHY IT USED TO BE `Janua <noreply@janua.dev>` AND WHY THAT WAS WRONG. The
+    first message a fractional-CTO client ever receives is a sign-in link. It
+    arrived from a brand they had never heard of, on a domain unrelated to
+    anything they had been told about, asking them to authenticate — which is
+    indistinguishable from phishing, and deleting it is the correct reaction
+    from a careful person.
+
+    WHY NOT THE CLIENT'S OWN NAME EITHER. An earlier version of this function
+    put the tenant on the From line (`Crea Tu Mundo <hola@madfam.io>`).
+    That optimises the wrong thing. Bespoke clients meet several MADFAM
+    platforms over an engagement — Janua for identity, Nauta for the
+    workspace, Karafiel for documents — and a sender that changes per tenant
+    or per product teaches them nothing and looks like several vendors. One
+    consistent sender is what builds recognition, and recognition is what
+    makes the NEXT email safe to open. The platform is credited inside the
+    message, "Powered by", where it informs without competing.
+
+    WHY ONE DOMAIN, NOT `noreply@<tenant>.madfam.io`. Per-subdomain sending
+    splits reputation across domains that each send a handful of messages a
+    year, and a domain with no reputation lands in spam. One verified domain
+    accumulates reputation across every client and every service, with one
+    SPF/DKIM/DMARC setup instead of N. madfam.io is Resend-verified.
+
+    THIS IS PHASE 1 OF A TWO-PHASE POLICY, not a permanent answer. See
+    `docs/EMAIL_SENDER_POLICY.md`.
+
+      Phase 1 (now, and every new engagement): MADFAM sends, MADFAM brands,
+      the platform is credited. The client is meeting our ecosystem for the
+      first time and we control the sending domain, so this is the only shape
+      that is both recognisable and deliverable.
+
+      Phase 2 (once MADFAM manages the client's own domain, e.g.
+      creatumundo.mx): mail comes from THEIR domain with THEIR branding. It
+      requires their domain verified in Resend — their DNS, which is exactly
+      what "we manage their web presence" gives us.
+
+    `redirect_url` is accepted and unused ON PURPOSE. It is the Phase 2 hook:
+    the redirect host identifies the tenant, so when a client's domain is
+    verified this function can switch senders without another signature change
+    through four callers. DO NOT REMOVE IT because it is currently unused —
+    that is the seam, not dead code.
+    """
+    del redirect_url  # Phase 2 hook; see docstring before deleting
+    name = settings.FROM_NAME or settings.EMAIL_FROM_NAME or "MADFAM"
+    address = settings.FROM_EMAIL or settings.EMAIL_FROM_ADDRESS
+    return name, address
+
+
 class EmailService:
     """Email service for sending transactional emails"""
 
@@ -192,9 +248,7 @@ class EmailService:
                 "created_at": datetime.utcnow().isoformat(),
                 "type": "password_reset",
             }
-            await self.redis_client.setex(
-                token_key, 60 * 60, json.dumps(token_data)
-            )  # 1 hour
+            await self.redis_client.setex(token_key, 60 * 60, json.dumps(token_data))  # 1 hour
 
         # Generate reset URL. redirect_base is a caller-validated product page
         # (see PASSWORD_RESET_REDIRECT_ORIGINS); the default is the API's own
@@ -334,8 +388,17 @@ class EmailService:
             )
             context = {
                 "current_year": datetime.utcnow().year,
-                "subject": data.get("subject", "Janua"),
+                # The frame is MADFAM's, so the fallback subject is too.
+                "subject": data.get("subject", "MADFAM"),
                 "locale": body_locale,
+                # madfam.io serves its legal pages under a LOCALE PREFIX, and
+                # only `en` and `es` exist. Derived from the language the body
+                # actually rendered in — `body_locale`, not the requested one —
+                # so an untranslated body that fell back to English does not
+                # link a Spanish reader to a page in the wrong language.
+                # Anything unknown falls to `en`, which exists, rather than
+                # producing a 404 that asserts a notice we then do not show.
+                "legal_locale": "es" if str(body_locale).lower().startswith("es") else "en",
                 # `t()` reads this off the context, which is why base.html and
                 # every es/ template pick up the register without naming it.
                 "formality": resolved_formality,
@@ -385,11 +448,11 @@ class EmailService:
         if "magic_link" in template_name:
             url = data.get("magic_url", "")
             if informal:
-                return f"Inicia sesión en Janua aquí: {url}"
+                return f"Inicia sesión en tu portal aquí: {url}"
             return (
-                f"Inicie sesión en Janua aquí: {url}"
+                f"Inicie sesión en su portal aquí: {url}"
                 if spanish
-                else f"Sign in to Janua by clicking: {url}"
+                else f"Sign in to your portal by clicking: {url}"
             )
         if "password_reset" in template_name:
             url = data.get("reset_url", "")
@@ -459,8 +522,19 @@ class EmailService:
             "magic_link.txt", template_data, recipient_locale, recipient_formality
         )
 
+        # `redirect_url` travels through so the From line can carry the CLIENT'S
+        # name. This is the one flow where it matters most: a magic link is the
+        # first message a new client ever receives, and it asks them to
+        # authenticate. `resolve_sender` reads the tenant off this host — the
+        # same host the link sends them back to — so the sender and the
+        # destination agree, which is what makes it read as legitimate rather
+        # than as phishing.
         sent = await self._send_email(
-            to_email=email, subject=subject, html_content=html_content, text_content=text_content
+            to_email=email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+            redirect_url=redirect_url,
         )
         if sent:
             logger.info("Magic link email sent", email=_redact_email(email))
@@ -496,9 +570,7 @@ class EmailService:
             # rename of either name still finds a value rather than a blank href.
             "invitation_url": invite_url,
             "invitation_link": invite_url,
-            "expires_at": (
-                expires_at.strftime("%B %d, %Y at %I:%M %p UTC") if expires_at else ""
-            ),
+            "expires_at": (expires_at.strftime("%B %d, %Y at %I:%M %p UTC") if expires_at else ""),
             "teams": teams or [],
             "base_url": settings.BASE_URL,
             "company_name": "Janua",
@@ -522,7 +594,12 @@ class EmailService:
         return sent
 
     async def _send_via_resend(
-        self, to_email: str, subject: str, html_content: str, text_content: str = None
+        self,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        text_content: str = None,
+        redirect_url: str | None = None,
     ) -> bool:
         """Send through Resend's HTTPS API.
 
@@ -534,7 +611,7 @@ class EmailService:
         disagreed. Nothing this service ever sent left the cluster.
         """
         payload: Dict[str, Any] = {
-            "from": formataddr((settings.FROM_NAME or "Janua", settings.FROM_EMAIL)),
+            "from": formataddr(resolve_sender(redirect_url)),
             "to": [to_email],
             "subject": subject,
         }
@@ -563,14 +640,26 @@ class EmailService:
         return True
 
     async def _send_email(
-        self, to_email: str, subject: str, html_content: str, text_content: str = None
+        self,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        text_content: str = None,
+        redirect_url: str | None = None,
     ) -> bool:
-        """Send an email via the configured provider."""
+        """Send an email via the configured provider.
+
+        `redirect_url` is optional and defaults to None, so every existing
+        caller keeps the generic MADFAM sender. Only the flows that know which
+        tenant they are addressing — the magic link knows, because it already
+        carries where it is sending the person back TO — pass it and get the
+        client's own name on the From line.
+        """
 
         try:
             if settings.EMAIL_PROVIDER == "resend" and settings.RESEND_API_KEY:
                 return await self._send_via_resend(
-                    to_email, subject, html_content, text_content
+                    to_email, subject, html_content, text_content, redirect_url
                 )
 
             # Check if email configuration is available
@@ -588,7 +677,7 @@ class EmailService:
             # Create message
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = formataddr((settings.FROM_NAME or "Janua", settings.FROM_EMAIL))
+            msg["From"] = formataddr(resolve_sender(redirect_url))
             msg["To"] = to_email
 
             # Add text and HTML parts
@@ -709,9 +798,7 @@ async def send_verification_email_task(
         service = EmailService()
         recipient_locale = resolve_locale(locale, default=service._default_locale())
         recipient_formality = resolve_formality(formality)
-        verification_url = (
-            f"{settings.FRONTEND_URL}/auth/verify-email?token={verification_token}"
-        )
+        verification_url = f"{settings.FRONTEND_URL}/auth/verify-email?token={verification_token}"
         template_data = {
             "user_name": user_name or email.split("@")[0],
             "verification_url": verification_url,
@@ -734,8 +821,6 @@ async def send_verification_email_task(
             ),
         )
         if not sent:
-            logger.warning(
-                "Verification email NOT sent", email=_redact_email(email)
-            )
+            logger.warning("Verification email NOT sent", email=_redact_email(email))
     except Exception:
         logger.exception("Verification email task failed")
