@@ -170,8 +170,8 @@ CHROME: Dict[str, Dict[str, str]] = {
         "privacy": "Privacy Policy",
         "terms": "Terms of Service",
         "support": "Support",
-        "why_received": "You received this email because you have an account with Janua.",
-        "location": "Innovaciones MADFAM (MADFAM) • Mexico City, Mexico",
+        "why_received": "You received this email because you have an account with MADFAM.",
+        "location": "Innovaciones MADFAM S.A.S. de C.V. • Cuernavaca, Morelos, Mexico",
     },
     "es": {
         "tagline": "Tecnología, diseñada para tu operación",
@@ -182,8 +182,8 @@ CHROME: Dict[str, Dict[str, str]] = {
         "privacy": "Aviso de privacidad",
         "terms": "Términos del servicio",
         "support": "Soporte",
-        "why_received": "Recibió este correo electrónico porque tiene una cuenta en Janua.",
-        "location": "Innovaciones MADFAM (MADFAM) • Ciudad de México, México",
+        "why_received": "Recibió este correo electrónico porque tiene una cuenta con MADFAM.",
+        "location": "Innovaciones MADFAM S.A.S. de C.V. • Cuernavaca, Morelos, México",
     },
 }
 

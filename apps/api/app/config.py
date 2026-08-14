@@ -215,7 +215,7 @@ class Settings(BaseSettings):
     # madfam.io, not janua.dev. A client's first message is a sign-in link;
     # arriving from a brand they have never heard of, on an unrelated domain,
     # it is indistinguishable from phishing. madfam.io is Resend-verified.
-    EMAIL_FROM_ADDRESS: str = Field(default="noreply@madfam.io")
+    EMAIL_FROM_ADDRESS: str = Field(default="hola@madfam.io")
     EMAIL_FROM_NAME: str = Field(default="MADFAM")
     RESEND_API_KEY: Optional[str] = Field(default=None)
     # Language for transactional mail when the recipient has no stored locale
