@@ -215,6 +215,14 @@ class Settings(BaseSettings):
     EMAIL_FROM_ADDRESS: str = Field(default="noreply@janua.dev")
     EMAIL_FROM_NAME: str = Field(default="Janua")
     RESEND_API_KEY: Optional[str] = Field(default=None)
+    # Language for transactional mail when the recipient has no stored locale
+    # and the caller did not specify one. Defaults to Spanish: this platform's
+    # users are predominantly Mexican, and mail was English-only before.
+    DEFAULT_EMAIL_LOCALE: str = Field(
+        default="es",
+        pattern="^[a-z]{2}(-[A-Za-z0-9]{2,8})?$",
+        description="Default language for transactional email (BCP 47 tag, e.g. es, es-MX, en)",
+    )
 
     # SMTP Configuration (for development/self-hosted)
     SMTP_HOST: Optional[str] = Field(default=None)

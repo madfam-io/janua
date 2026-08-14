@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="color: #1f2937; margin: 0 0 20px 0;">Le damos la bienvenida a Janua 🎉</h2>
+
+<p style="margin: 0 0 20px 0;">
+    Hola {{ user_name }}:
+</p>
+
+<p style="margin: 0 0 20px 0;">
+    Su cuenta de Janua se creó correctamente. Ya forma parte de una plataforma de identidad segura en la que confían organizaciones de todo el mundo.
+</p>
+
+<div class="info">
+    <strong>Datos de su cuenta:</strong><br>
+    Correo electrónico: {{ user_email }}<br>
+    Organización: {{ organization_name }}<br>
+    Plan: {{ plan_name }}<br>
+    Identificador de cuenta: {{ account_id }}
+</div>
+
+<h3 style="color: #1f2937; margin: 30px 0 15px 0;">Primeros pasos en Janua</h3>
+
+<p style="margin: 0 0 20px 0;">Le sugerimos empezar por aquí para aprovechar Janua al máximo:</p>
+
+<ol style="margin: 0 0 20px 0; padding-left: 20px;">
+    <li style="margin-bottom: 10px;">
+        <strong>Active la autenticación de dos factores</strong><br>
+        <span style="color: #6b7280; font-size: 14px;">Añada una capa adicional de seguridad a su cuenta</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Configure su organización</strong><br>
+        <span style="color: #6b7280; font-size: 14px;">Invite a su equipo y defina roles y permisos</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Intégrelo con su aplicación</strong><br>
+        <span style="color: #6b7280; font-size: 14px;">Use nuestros SDK para añadir autenticación a sus aplicaciones</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Habilite las llaves de acceso</strong><br>
+        <span style="color: #6b7280; font-size: 14px;">Configure el acceso sin contraseña para mayor seguridad</span>
+    </li>
+</ol>
+
+<div style="text-align: center;">
+    <a href="{{ dashboard_link }}" class="button">Ir al panel</a>
+</div>
+
+<div style="background-color: #f9fafb; border-radius: 6px; padding: 20px; margin: 30px 0;">
+    <h4 style="margin: 0 0 10px 0; color: #1f2937;">¿Necesita ayuda?</h4>
+    <p style="margin: 0 0 10px 0; font-size: 14px;">
+        Nuestro equipo está a sus órdenes:
+    </p>
+    <ul style="margin: 10px 0 0 0; padding-left: 20px; font-size: 14px;">
+        <li><a href="https://docs.janua.dev" style="color: #3b82f6;">Documentación</a> - Guías y referencia de la API</li>
+        <li><a href="https://janua.dev/support" style="color: #3b82f6;">Centro de soporte</a> - Reciba ayuda de nuestro equipo</li>
+        <li><a href="https://github.com/madfam-io/janua" style="color: #3b82f6;">GitHub</a> - Ejemplos de código y SDK</li>
+    </ul>
+</div>
+
+<p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px;">
+    Gracias por elegir Janua. Nos da gusto acompañarle en la seguridad de su plataforma.
+</p>
+
+<p style="margin: 20px 0 0 0;">
+    Saludos cordiales,<br>
+    <strong>El equipo de Janua</strong>
+</p>
+{% endblock %}

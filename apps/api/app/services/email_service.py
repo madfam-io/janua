@@ -16,9 +16,15 @@ from typing import Any, Dict, Optional
 import httpx
 import redis.asyncio as redis
 import structlog
-from jinja2 import Environment, FileSystemLoader
 
 from app.config import settings
+from app.services.email_i18n import (
+    FALLBACK_LOCALE,
+    build_email_environment,
+    resolve_locale,
+    subject_for,
+    template_candidates,
+)
 
 logger = structlog.get_logger()
 
@@ -39,12 +45,22 @@ class EmailService:
     def __init__(self, redis_client: Optional[redis.Redis] = None):
         self.redis_client = redis_client
         self.template_dir = Path(__file__).parent.parent / "templates" / "email"
-        self.jinja_env = Environment(loader=FileSystemLoader(self.template_dir), autoescape=True)
+        # Shared factory: base.html's localized chrome sits outside every
+        # content block, so the globals backing it must exist on every
+        # environment that loads this directory.
+        self.jinja_env = build_email_environment(self.template_dir)
 
     async def send_verification_email(
-        self, email: str, user_name: str = None, user_id: str = None
+        self,
+        email: str,
+        user_name: str = None,
+        user_id: str = None,
+        locale: Optional[str] = None,
+        user: Any = None,
     ) -> str:
         """Send email verification email and return verification token"""
+
+        recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
 
         # Generate verification token
         verification_token = self._generate_verification_token()
@@ -81,9 +97,9 @@ class EmailService:
         }
 
         # Render email template
-        subject = "Verify your Janua account"
-        html_content = self._render_template("verification.html", template_data)
-        text_content = self._render_template("verification.txt", template_data)
+        subject = subject_for("verification", recipient_locale)
+        html_content = self._render_template("verification.html", template_data, recipient_locale)
+        text_content = self._render_template("verification.txt", template_data, recipient_locale)
 
         # Send email
         success = await self._send_email(
@@ -144,6 +160,8 @@ class EmailService:
         reset_token: str,
         user_name: str = None,
         redirect_base: str = None,
+        locale: Optional[str] = None,
+        user: Any = None,
     ) -> str:
         """Send password reset email for an already-issued token.
 
@@ -152,6 +170,8 @@ class EmailService:
         generated its own token here, so the emailed link could never match
         the stored one.
         """
+
+        recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
 
         # Mirror to Redis for observability (audit 2026-04-23 M2: JSON).
         if self.redis_client:
@@ -188,9 +208,9 @@ class EmailService:
         }
 
         # Render email template
-        subject = "Reset your Janua password"
-        html_content = self._render_template("password_reset.html", template_data)
-        text_content = self._render_template("password_reset.txt", template_data)
+        subject = subject_for("password_reset", recipient_locale)
+        html_content = self._render_template("password_reset.html", template_data, recipient_locale)
+        text_content = self._render_template("password_reset.txt", template_data, recipient_locale)
 
         # Send email
         success = await self._send_email(
@@ -204,8 +224,16 @@ class EmailService:
             logger.error("Failed to send password reset email", email=_redact_email(email))
             raise Exception("Failed to send password reset email")
 
-    async def send_welcome_email(self, email: str, user_name: str = None) -> bool:
+    async def send_welcome_email(
+        self,
+        email: str,
+        user_name: str = None,
+        locale: Optional[str] = None,
+        user: Any = None,
+    ) -> bool:
         """Send welcome email to new user"""
+
+        recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
 
         template_data = {
             "user_name": user_name or email.split("@")[0],
@@ -217,9 +245,9 @@ class EmailService:
         }
 
         # Render email template
-        subject = "Welcome to Janua!"
-        html_content = self._render_template("welcome.html", template_data)
-        text_content = self._render_template("welcome.txt", template_data)
+        subject = subject_for("welcome", recipient_locale)
+        html_content = self._render_template("welcome.html", template_data, recipient_locale)
+        text_content = self._render_template("welcome.txt", template_data, recipient_locale)
 
         # Send email
         success = await self._send_email(
@@ -241,40 +269,105 @@ class EmailService:
         token_hash = hashlib.sha256(random_bytes).hexdigest()
         return token_hash[:64]  # 64-char hex string
 
-    def _render_template(self, template_name: str, data: Dict[str, Any]) -> str:
-        """Render email template with data.
+    def _render_template(
+        self, template_name: str, data: Dict[str, Any], locale: Optional[str] = None
+    ) -> str:
+        """Render email template with data, in the recipient's language.
 
         Injects the context every template inherits from base.html. Jinja
         renders an undefined variable as empty string, so a missing value here
         does not fail loudly — it silently ships a mail with a blank footer or,
         worse, a blank button href. Callers supply the `*_link` names the
         templates actually reference.
+
+        `template_name` is always the English name; the localized file is
+        selected here. `select_template` walks the candidates in order and
+        takes the first that exists, so a language with no translation for
+        this particular message still sends — in English — rather than
+        raising into the fallback text below.
         """
+        resolved_locale = resolve_locale(locale, default=self._default_locale())
         try:
-            template = self.jinja_env.get_template(template_name)
+            template = self.jinja_env.select_template(
+                template_candidates(template_name, resolved_locale)
+            )
+            # Chrome follows the template that actually won, not the language
+            # that was asked for. When a message has no translation yet, the
+            # English body is selected — and an English body inside a Spanish
+            # header and footer is a worse email than a consistently English
+            # one. Keeps "body language == frame language" always true.
+            body_locale = (
+                resolved_locale
+                if (template.name or "").startswith(f"{resolved_locale}/")
+                else FALLBACK_LOCALE
+            )
             context = {
                 "current_year": datetime.utcnow().year,
                 "subject": data.get("subject", "Janua"),
+                "locale": body_locale,
                 **data,
             }
             return template.render(**context)
         except Exception as e:
             logger.error(
-                "Template rendering failed", template=template_name, error_type=type(e).__name__
+                "Template rendering failed",
+                template=template_name,
+                locale=resolved_locale,
+                error_type=type(e).__name__,
             )
-            # Fallback to simple text
-            if "verification" in template_name:
-                return f"Please verify your email by clicking: {data.get('verification_url', '')}"
-            elif "magic_link" in template_name:
-                return f"Sign in to Janua by clicking: {data.get('magic_url', '')}"
-            elif "password_reset" in template_name:
-                return f"Reset your password by clicking: {data.get('reset_url', '')}"
-            elif "welcome" in template_name:
-                return f"Welcome to Janua, {data.get('user_name', 'there')}!"
-            return "Email content unavailable"
+            return self._fallback_body(template_name, data, resolved_locale)
+
+    @staticmethod
+    def _default_locale() -> Optional[str]:
+        """The deployment-wide default, read at call time so tests and
+        per-environment overrides of DEFAULT_EMAIL_LOCALE take effect."""
+        return getattr(settings, "DEFAULT_EMAIL_LOCALE", None)
+
+    @staticmethod
+    def _fallback_body(template_name: str, data: Dict[str, Any], locale: str) -> str:
+        """Last-resort plain text when the template itself failed to render.
+
+        Localized too: a recipient hitting the degraded path is no more
+        likely to read English than one hitting the happy path.
+        """
+        spanish = locale == "es"
+        if "verification" in template_name:
+            url = data.get("verification_url", "")
+            return (
+                f"Verifique su correo electrónico aquí: {url}"
+                if spanish
+                else f"Please verify your email by clicking: {url}"
+            )
+        if "magic_link" in template_name:
+            url = data.get("magic_url", "")
+            return (
+                f"Inicie sesión en Janua aquí: {url}"
+                if spanish
+                else f"Sign in to Janua by clicking: {url}"
+            )
+        if "password_reset" in template_name:
+            url = data.get("reset_url", "")
+            return (
+                f"Restablezca su contraseña aquí: {url}"
+                if spanish
+                else f"Reset your password by clicking: {url}"
+            )
+        if "welcome" in template_name:
+            name = data.get("user_name", "there")
+            return (
+                f"Le damos la bienvenida a Janua, {name}."
+                if spanish
+                else f"Welcome to Janua, {name}!"
+            )
+        return "Contenido no disponible" if spanish else "Email content unavailable"
 
     async def send_magic_link_email(
-        self, email: str, magic_token: str, redirect_url: Optional[str] = None
+        self,
+        email: str,
+        magic_token: str,
+        redirect_url: Optional[str] = None,
+        locale: Optional[str] = None,
+        user: Any = None,
     ) -> bool:
         """Send a passwordless sign-in link.
 
@@ -283,6 +376,7 @@ class EmailService:
         magic token for a session. The callback then forwards to redirect_url
         (already allowlist-validated when the link was requested).
         """
+        recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
         callback = f"{settings.API_BASE_URL or settings.BASE_URL}/api/v1/auth/magic-link/callback"
         magic_url = f"{callback}?token={magic_token}"
 
@@ -295,9 +389,9 @@ class EmailService:
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
         }
 
-        subject = "Your Janua sign-in link"
-        html_content = self._render_template("magic_link.html", template_data)
-        text_content = self._render_template("magic_link.txt", template_data)
+        subject = subject_for("magic_link", recipient_locale)
+        html_content = self._render_template("magic_link.html", template_data, recipient_locale)
+        text_content = self._render_template("magic_link.txt", template_data, recipient_locale)
 
         sent = await self._send_email(
             to_email=email, subject=subject, html_content=html_content, text_content=text_content
@@ -413,7 +507,10 @@ def get_email_service(redis_client: Optional[redis.Redis] = None) -> EmailServic
 
 
 async def send_password_reset_email_task(
-    email: str, reset_token: str, redirect_base: Optional[str] = None
+    email: str,
+    reset_token: str,
+    redirect_base: Optional[str] = None,
+    locale: Optional[str] = None,
 ) -> None:
     """Background-task entrypoint for the forgot-password flow.
 
@@ -421,11 +518,15 @@ async def send_password_reset_email_task(
     never raises — a mail failure must not surface into the request path.
     Without SMTP_HOST configured, _send_email already degrades to a logged
     no-op; the warning below makes that state visible instead of silent.
+
+    `locale` is read off the User row by the router: a background task has no
+    DB session of its own, so the recipient's stored language has to be
+    resolved while the request still holds one.
     """
     try:
         service = EmailService()
         sent = await service.send_password_reset_email(
-            email, reset_token, redirect_base=redirect_base
+            email, reset_token, redirect_base=redirect_base, locale=locale
         )
         if not sent:
             logger.warning(
@@ -437,7 +538,10 @@ async def send_password_reset_email_task(
 
 
 async def send_magic_link_email_task(
-    email: str, magic_token: str, redirect_url: Optional[str] = None
+    email: str,
+    magic_token: str,
+    redirect_url: Optional[str] = None,
+    locale: Optional[str] = None,
 ) -> None:
     """Background-task entrypoint for the magic-link flow.
 
@@ -450,7 +554,7 @@ async def send_magic_link_email_task(
     """
     try:
         service = EmailService()
-        sent = await service.send_magic_link_email(email, magic_token, redirect_url)
+        sent = await service.send_magic_link_email(email, magic_token, redirect_url, locale=locale)
         if not sent:
             logger.warning(
                 "Magic link email NOT sent — the recipient will never receive a sign-in link",
@@ -461,7 +565,10 @@ async def send_magic_link_email_task(
 
 
 async def send_verification_email_task(
-    email: str, verification_token: str, user_name: Optional[str] = None
+    email: str,
+    verification_token: str,
+    user_name: Optional[str] = None,
+    locale: Optional[str] = None,
 ) -> None:
     """Background-task entrypoint for email verification.
 
@@ -472,21 +579,30 @@ async def send_verification_email_task(
     """
     try:
         service = EmailService()
+        recipient_locale = resolve_locale(locale, default=service._default_locale())
         verification_url = (
             f"{settings.FRONTEND_URL}/auth/verify-email?token={verification_token}"
         )
         template_data = {
             "user_name": user_name or email.split("@")[0],
             "verification_url": verification_url,
+            # verification.html renders the button as href="{{ verification_link }}".
+            # This path passed only *_url, so the one email every new account
+            # receives shipped with an empty href.
+            "verification_link": verification_url,
             "base_url": settings.BASE_URL,
             "company_name": "Janua",
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
         }
         sent = await service._send_email(
             to_email=email,
-            subject="Verify your Janua email address",
-            html_content=service._render_template("verification.html", template_data),
-            text_content=service._render_template("verification.txt", template_data),
+            subject=subject_for("verification", recipient_locale),
+            html_content=service._render_template(
+                "verification.html", template_data, recipient_locale
+            ),
+            text_content=service._render_template(
+                "verification.txt", template_data, recipient_locale
+            ),
         )
         if not sent:
             logger.warning(

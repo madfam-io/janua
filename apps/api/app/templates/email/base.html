@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang() }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -107,7 +107,7 @@
                     </svg>
                 </div>
                 <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Janua</h1>
-                <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 14px;">Secure Identity Platform</p>
+                <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 14px;">{{ t('tagline') }}</p>
             </div>
             
             <div class="content">
@@ -117,17 +117,17 @@
             
             <div class="footer">
                 <p style="margin: 0 0 10px 0;">
-                    © {{ current_year }} Janua by Innovaciones MADFAM. All rights reserved.
+                    © {{ current_year }} Janua by Innovaciones MADFAM. {{ t('rights') }}
                 </p>
                 <p style="margin: 0 0 10px 0;">
-                    <a href="https://janua.dev/privacy">Privacy Policy</a> • 
-                    <a href="https://janua.dev/terms">Terms of Service</a> • 
-                    <a href="https://janua.dev/support">Support</a>
+                    <a href="https://janua.dev/privacy">{{ t('privacy') }}</a> •
+                    <a href="https://janua.dev/terms">{{ t('terms') }}</a> •
+                    <a href="https://janua.dev/support">{{ t('support') }}</a>
                 </p>
                 <p style="margin: 0; color: #9ca3af; font-size: 11px;">
-                    You received this email because you have an account with Janua.
+                    {{ t('why_received') }}
                     <br>
-                    Innovaciones MADFAM (MADFAM) • Mexico City, Mexico
+                    {{ t('location') }}
                 </p>
             </div>
         </div>

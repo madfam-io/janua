@@ -289,7 +289,10 @@ async def sign_up(
         await db.commit()
 
         background_tasks.add_task(
-            send_verification_email_task, user.email, verification_token
+            send_verification_email_task,
+            user.email,
+            verification_token,
+            locale=getattr(user, "locale", None),
         )
 
     return SignInResponse(
@@ -1296,7 +1299,11 @@ async def _dispatch_password_reset(
     # URL than the one stored in password_resets. Recovery could never
     # complete by construction.
     background_tasks.add_task(
-        send_password_reset_email_task, user.email, reset_token, redirect_base
+        send_password_reset_email_task,
+        user.email,
+        reset_token,
+        redirect_base,
+        locale=getattr(user, "locale", None),
     )
 
 
@@ -1729,7 +1736,10 @@ async def resend_verification_email(
 
     # Send email in background
     background_tasks.add_task(
-        send_verification_email_task, current_user.email, verification_token
+        send_verification_email_task,
+        current_user.email,
+        verification_token,
+        locale=getattr(current_user, "locale", None),
     )
 
     return {"message": "Verification email sent"}
@@ -1786,7 +1796,11 @@ async def send_magic_link(
 
     # Send email in background
     background_tasks.add_task(
-        send_magic_link_email_task, user.email, magic_token, safe_redirect_url
+        send_magic_link_email_task,
+        user.email,
+        magic_token,
+        safe_redirect_url,
+        locale=getattr(user, "locale", None),
     )
 
     return {"message": "Magic link sent to email"}

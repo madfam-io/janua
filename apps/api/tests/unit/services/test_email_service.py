@@ -153,13 +153,16 @@ class TestRenderTemplate:
         assert "TestUser" in result
 
     def test_render_unknown_template_fallback(self, service):
-        """Test unknown template fallback."""
+        """Test unknown template fallback.
+
+        The degraded path is localized too: a recipient who hits it is no more
+        likely to read English than one who does not.
+        """
         data = {}
 
         with patch.object(service.jinja_env, "get_template", side_effect=Exception("Template not found")):
-            result = service._render_template("unknown.html", data)
-
-        assert result == "Email content unavailable"
+            assert service._render_template("unknown.html", data, "en") == "Email content unavailable"
+            assert service._render_template("unknown.html", data, "es") == "Contenido no disponible"
 
 
 class TestSendEmail:

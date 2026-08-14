@@ -13,9 +13,9 @@ from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
 import structlog
-from jinja2 import Environment, FileSystemLoader
 
 from app.config import settings
+from app.services.email_i18n import build_email_environment
 
 # Optional import for resend - gracefully handle if not installed
 try:
@@ -64,7 +64,10 @@ class ResendEmailService:
     def __init__(self, redis_client: Optional[redis.Redis] = None):
         self.redis_client = redis_client
         self.template_dir = Path(__file__).parent.parent / "templates" / "email"
-        self.jinja_env = Environment(loader=FileSystemLoader(self.template_dir), autoescape=True)
+        # Shared factory: templates/email/base.html renders localized chrome
+        # via t()/lang(), which must be registered on every environment
+        # that loads this directory.
+        self.jinja_env = build_email_environment(self.template_dir)
 
         # Initialize Resend client
         if settings.RESEND_API_KEY:

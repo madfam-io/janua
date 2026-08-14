@@ -1,0 +1,21 @@
+Hola {{ user_name }}:
+
+Le damos la bienvenida a Janua. Verifique su dirección de correo electrónico para
+terminar de configurar su cuenta y acceder a todas las funciones.
+
+Verifique su correo electrónico con este enlace:
+{{ verification_url }}
+
+Este enlace de verificación expira en 24 horas.
+
+¿Por qué verificar su correo electrónico?
+La verificación nos ayuda a proteger su cuenta y habilita funciones importantes
+como la recuperación de contraseña y las notificaciones de seguridad.
+
+Si usted no creó una cuenta en Janua, puede ignorar este correo electrónico.
+
+¿Necesita ayuda? Escríbanos a {{ support_email }}
+
+---
+Equipo Janua
+{{ base_url }}
