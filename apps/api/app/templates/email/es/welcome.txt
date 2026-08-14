@@ -16,5 +16,5 @@ Hola {{ user_name }}:
 {{ t('welcome.txt_closing') }}
 
 ---
-Equipo Janua
+{{ t('signoff') }}
 {{ base_url }}

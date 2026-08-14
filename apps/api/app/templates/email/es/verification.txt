@@ -15,5 +15,5 @@ Este enlace de verificación expira en 24 horas.
 {{ t('common.need_help') }} {{ support_email }}
 
 ---
-Equipo Janua
+{{ t('signoff') }}
 {{ base_url }}

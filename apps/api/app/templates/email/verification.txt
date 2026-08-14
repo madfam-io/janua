@@ -15,5 +15,5 @@ If you didn't create an account with Janua, you can safely ignore this email.
 Need help? Contact us at {{ support_email }}
 
 ---
-Janua Team
+{{ t('signoff') }}
 {{ base_url }}

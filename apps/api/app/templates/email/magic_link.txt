@@ -11,5 +11,5 @@ link — anyone holding it can sign in as you until it expires.
 Need help? Contact us at {{ support_email }}
 
 ---
-Janua Team
+{{ t('signoff') }}
 {{ base_url }}
