@@ -162,8 +162,11 @@ def subject_for(message_key: str, locale: Optional[str] = None, **fields: Any) -
 # --------------------------------------------------------------------------
 CHROME: Dict[str, Dict[str, str]] = {
     "en": {
-        "tagline": "Secure Identity Platform",
+        # The header now reads MADFAM on every message, so the tagline is
+        # MADFAM's rather than one platform's.
+        "tagline": "Technology, engineered for your operation",
         "rights": "All rights reserved.",
+        "powered_by": "Powered by",
         "privacy": "Privacy Policy",
         "terms": "Terms of Service",
         "support": "Support",
@@ -171,8 +174,11 @@ CHROME: Dict[str, Dict[str, str]] = {
         "location": "Innovaciones MADFAM (MADFAM) • Mexico City, Mexico",
     },
     "es": {
-        "tagline": "Plataforma de identidad segura",
+        "tagline": "Tecnología, diseñada para tu operación",
         "rights": "Todos los derechos reservados.",
+        # "Con tecnología de" is the standard es-MX rendering of "Powered by".
+        # "Impulsado por" reads as marketing; this reads as an attribution.
+        "powered_by": "Con tecnología de",
         "privacy": "Aviso de privacidad",
         "terms": "Términos del servicio",
         "support": "Soporte",

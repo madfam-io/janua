@@ -12,7 +12,6 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
 
 import httpx
 import redis.asyncio as redis
@@ -41,75 +40,42 @@ def _redact_email(email: str) -> str:
 
 
 def resolve_sender(redirect_url: str | None = None) -> tuple[str, str]:
-    """The (display name, address) a message should come FROM.
+    """The (display name, address) every message comes FROM.
 
-    WHY THIS EXISTS. Janua sent every message as `Janua <noreply@janua.dev>`.
-    For an internal MADFAM service that is fine. For a CLIENT it is not: the
-    first thing a fractional-CTO client ever receives is a sign-in link, and it
-    arrived from a brand they have never heard of, on a domain unrelated to
-    anything they had been told about, containing a link asking them to
-    authenticate. That is indistinguishable from phishing, and the correct
-    reaction from a careful person is to delete it.
+    ALWAYS `MADFAM <noreply@madfam.io>`. Deliberately not per-tenant, and not
+    per-platform.
 
-    THE DISPLAY NAME CARRIES THE TENANT; THE DOMAIN CARRIES DELIVERABILITY.
-    Sending as `noreply@<tenant>.madfam.io` looks purer and is worse: it splits
-    sender reputation across domains that each send a handful of messages a
-    year, and a domain with no reputation lands in spam. One verified sending
-    domain accumulates reputation across every client and every service, and is
-    one SPF/DKIM/DMARC setup rather than N.
+    WHY IT USED TO BE `Janua <noreply@janua.dev>` AND WHY THAT WAS WRONG. The
+    first message a fractional-CTO client ever receives is a sign-in link. It
+    arrived from a brand they had never heard of, on a domain unrelated to
+    anything they had been told about, asking them to authenticate — which is
+    indistinguishable from phishing, and deleting it is the correct reaction
+    from a careful person.
 
-    THE TENANT IS READ FROM THE REDIRECT HOST, not passed in. The magic-link
-    flow already knows where it is sending someone back to — that host IS the
-    tenant — so there is no new parameter to thread through call sites and no
-    second source of truth to disagree with the first.
+    WHY NOT THE CLIENT'S OWN NAME EITHER. An earlier version of this function
+    put the tenant on the From line (`Crea Tu Mundo <noreply@madfam.io>`).
+    That optimises the wrong thing. Bespoke clients meet several MADFAM
+    platforms over an engagement — Janua for identity, Nauta for the
+    workspace, Karafiel for documents — and a sender that changes per tenant
+    or per product teaches them nothing and looks like several vendors. One
+    consistent sender is what builds recognition, and recognition is what
+    makes the NEXT email safe to open. The platform is credited inside the
+    message, "Powered by", where it informs without competing.
+
+    WHY ONE DOMAIN, NOT `noreply@<tenant>.madfam.io`. Per-subdomain sending
+    splits reputation across domains that each send a handful of messages a
+    year, and a domain with no reputation lands in spam. One verified domain
+    accumulates reputation across every client and every service, with one
+    SPF/DKIM/DMARC setup instead of N. madfam.io is Resend-verified.
+
+    `redirect_url` is accepted and unused: it keeps the seam open for a future
+    per-tenant decision without another signature change through four callers,
+    and documents that the information IS available if the policy changes.
     """
-    default_name = settings.FROM_NAME or settings.EMAIL_FROM_NAME or "MADFAM"
+    del redirect_url  # see docstring: the seam is deliberate, the policy is not per-tenant
+    name = settings.FROM_NAME or settings.EMAIL_FROM_NAME or "MADFAM"
     address = settings.FROM_EMAIL or settings.EMAIL_FROM_ADDRESS
-
-    if not redirect_url:
-        return default_name, address
-
-    try:
-        host = (urlparse(redirect_url).hostname or "").lower()
-    except ValueError:
-        # A malformed redirect must not break sending. The default sender is
-        # always correct-if-generic; failing to send is never better.
-        return default_name, address
-
-    label = _tenant_label_for_host(host)
-    return (label or default_name), address
-
-
-def _tenant_label_for_host(host: str) -> str | None:
-    """Human label for a tenant host, or None when it is not a tenant.
-
-    Deliberately a pure string transform over the host rather than a database
-    read: this runs on the sending path, where an extra query buys a failure
-    mode (a slow or down lookup delays or drops a sign-in email) in exchange
-    for a nicety. A workspace whose display name differs from its slug is
-    handled by TENANT_SENDER_NAMES below.
-    """
-    if not host or "." not in host:
-        return None
-    slug, _, remainder = host.partition(".")
-    # Only MADFAM-operated tenant subdomains. A client-owned domain is not
-    # something we can infer a label from, and guessing wrong on a legal
-    # counterparty's name is worse than being generic.
-    if remainder != "madfam.io" or slug in _NON_TENANT_HOSTS:
-        return None
-    return TENANT_SENDER_NAMES.get(slug) or slug.replace("-", " ").title()
-
-
-# Hosts under madfam.io that are MADFAM's own surfaces, not client tenants.
-_NON_TENANT_HOSTS = frozenset(
-    {"auth", "cto", "nauta", "www", "api", "app", "admin", "docs", "crm", "status"}
-)
-
-# Slug -> the name the client actually calls themselves, where it differs from
-# a title-cased slug. `crea` would otherwise render as "Crea".
-TENANT_SENDER_NAMES: dict[str, str] = {
-    "crea": "Crea Tu Mundo",
-}
+    return name, address
 
 
 class EmailService:

@@ -106,7 +106,13 @@
                         <path d="M20 14C21.1 14 22 14.9 22 16V20C22 21.1 21.1 22 20 22C18.9 22 18 21.1 18 20V16C18 14.9 18.9 14 20 14ZM20 24C21.1 24 22 24.9 22 26C22 27.1 21.1 28 20 28C18.9 28 18 27.1 18 26C18 24.9 18.9 24 20 24Z" fill="#3b82f6"/>
                     </svg>
                 </div>
-                <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Janua</h1>
+                <!-- MADFAM is the sender on EVERY message, whichever platform
+                     produced it. Bespoke clients meet several of our platforms
+                     over an engagement; a header that changes per product
+                     teaches them nothing and reads as several vendors. One
+                     consistent brand is what makes the NEXT email safe to
+                     open. The platform is credited in the footer instead. -->
+                <h1 style="margin: 0; font-size: 24px; font-weight: 600;">MADFAM</h1>
                 <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 14px;">{{ t('tagline') }}</p>
             </div>
             
@@ -117,7 +123,15 @@
             
             <div class="footer">
                 <p style="margin: 0 0 10px 0;">
-                    © {{ current_year }} Janua by Innovaciones MADFAM. {{ t('rights') }}
+                    © {{ current_year }} Innovaciones MADFAM S.A.S. de C.V. {{ t('rights') }}
+                </p>
+                <!-- "Powered by" credits the platform without competing with the
+                     MADFAM brand above. `platform_name`/`platform_url` default
+                     to Janua so every existing caller renders correctly; a
+                     platform that passes its own gets its own. -->
+                <p style="margin: 0 0 10px 0; font-size: 12px; opacity: 0.75;">
+                    {{ t('powered_by') }}
+                    <a href="{{ platform_url | default('https://janua.dev', true) }}">{{ platform_name | default('Janua', true) }}</a>
                 </p>
                 <p style="margin: 0 0 10px 0;">
                     <a href="https://janua.dev/privacy">{{ t('privacy') }}</a> •
