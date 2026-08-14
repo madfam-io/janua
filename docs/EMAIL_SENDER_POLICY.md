@@ -9,7 +9,7 @@ managing that client's web presence.
 Applies from first contact until we manage the client's domain.
 
 ```
-From:    MADFAM <noreply@madfam.io>
+From:    MADFAM <hola@madfam.io>
 Header:  MADFAM
 Footer:  © Innovaciones MADFAM S.A.S. de C.V.
          Con tecnología de <platform>   ("Powered by" in en)

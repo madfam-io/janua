@@ -236,6 +236,10 @@ class TestTemplateLocalization:
         """This is localization, not replacement."""
         service = EmailService()
         rendered = service._render_template("magic_link.html", TEMPLATE_CONTEXT, "en")
+        # Was "Sign in to Janua". The headline names the recipient's portal, not
+        # the platform, because the platform is credited and never branded as
+        # the sender (docs/EMAIL_SENDER_POLICY.md). Still a locale-specific
+        # string, so this keeps proving English rendered rather than Spanish.
         assert "Sign in to your portal" in rendered
         assert 'lang="en"' in rendered
 
@@ -256,6 +260,11 @@ class TestTemplateLocalization:
         # The tagline is MADFAM's now, not one platform's — the header reads
         # MADFAM on every message (see docs/EMAIL_SENDER_POLICY.md). What this
         # test guards is unchanged: the frame's language must match the body's.
+        # "tu operación" → "su operación": the frame settled on the usted
+        # register as the DEFAULT. It is no longer the only register — #540
+        # added the reader's tú/usted choice, and ES_TU carries the tú variant
+        # ("para tu operación"). This asserts the default the render path uses
+        # when no formality is passed.
         assert "Tecnología, diseñada para su operación" in spanish
         assert "Technology, engineered for your operation" not in spanish
 
@@ -266,6 +275,9 @@ class TestTemplateLocalization:
 
     def test_default_locale_setting_drives_unspecified_sends(self):
         service = EmailService()
+        # Headlines were "Sign in to Janua" / "Inicie sesión en Janua" before the
+        # sender-identity change. They still differ per locale, which is the
+        # whole point of this test — DEFAULT_EMAIL_LOCALE must pick the body.
         with patch.object(email_module.settings, "DEFAULT_EMAIL_LOCALE", "en"):
             assert "Sign in to your portal" in service._render_template(
                 "magic_link.html", TEMPLATE_CONTEXT
@@ -317,6 +329,10 @@ class TestSubjectLocalization:
 
         with patch.object(service, "_send_email", new=AsyncMock(return_value=True)) as send:
             await service.send_magic_link_email("a@b.test", "tok", locale="en")
+        # Was "Your Janua sign-in link". The subject dropped the platform name
+        # for the same reason the headline did. Deliberately still the literal
+        # English string rather than subject_for(...): comparing against the
+        # table the code reads would pass whatever the table said.
         assert send.await_args.kwargs["subject"] == "Your sign-in link"
 
 
