@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.locale import locale_from_request
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.services.oauth import OAuthService
@@ -234,7 +235,7 @@ async def oauth_callback(
 
         # Handle OAuth callback
         result = await OAuthService.handle_oauth_callback(
-            db, oauth_provider, code, state, redirect_uri
+            db, oauth_provider, code, state, redirect_uri, locale=locale_from_request(request)
         )
 
         if not result:

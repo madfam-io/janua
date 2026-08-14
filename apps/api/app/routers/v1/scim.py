@@ -13,6 +13,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database_manager import get_db
+from app.core.locale import normalize_locale
 from app.core.tenant_context import TenantContext
 from app.models.enterprise import Organization, OrganizationMember, OrganizationRole, SCIMResource
 
@@ -374,6 +375,12 @@ async def create_user(
             display_name=user_data.get("displayName"),
             status="active" if active else "inactive",
             email_verified=True,  # SCIM users are pre-verified
+            # SCIM core schema defines both `locale` and `preferredLanguage`;
+            # Okta and Entra populate them from the directory. This is a
+            # machine-to-machine call, so the request's own Accept-Language
+            # describes the provisioning agent, not the human being created —
+            # the body attribute is the only honest source here.
+            locale=normalize_locale(user_data.get("locale") or user_data.get("preferredLanguage")),
         )
         db.add(user)
 

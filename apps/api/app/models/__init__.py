@@ -2,7 +2,7 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 import sqlalchemy as sa
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
@@ -612,6 +612,33 @@ class Invitation(Base):
     accepted_at = Column(DateTime)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # The three helpers below are called from the invitation service and
+    # router but were never defined anywhere, so every reference raised
+    # AttributeError. They are pure functions of columns that already exist,
+    # so defining them needs no migration.
+
+    @property
+    def is_expired(self) -> bool:
+        """True once the invitation's window has closed."""
+        if not self.expires_at:
+            return False
+        return datetime.utcnow() > self.expires_at
+
+    @property
+    def is_valid(self) -> bool:
+        """True when this invitation can still be accepted."""
+        return self.status == "pending" and not self.is_expired
+
+    def generate_invite_url(self, base_url: Optional[str] = None) -> str:
+        """Build the acceptance link carrying this invitation's token.
+
+        The token is the whole point of the link: it is what
+        `/invitations/validate/{token}` and `/invitations/accept` look up. A
+        link built any other way cannot be redeemed.
+        """
+        root = (base_url or "").rstrip("/")
+        return f"{root}/invitations/accept?token={self.token}"
 
 
 class GuestInvite(Base):

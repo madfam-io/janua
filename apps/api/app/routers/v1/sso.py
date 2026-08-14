@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.locale import locale_from_request
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.services.sso_service import SSOService
@@ -354,7 +355,9 @@ async def saml_acs(
             raise HTTPException(status_code=400, detail="Missing SAML response")
 
         # Handle SAML response
-        result = await sso_service.handle_saml_response(saml_response, relay_state)
+        result = await sso_service.handle_saml_response(
+            saml_response, relay_state, locale=locale_from_request(request)
+        )
 
         # Create JWT tokens and session
         import structlog
@@ -452,6 +455,7 @@ async def saml_slo(
 
 @router.get("/oidc/callback")
 async def oidc_callback(
+    request: Request,
     code: str,
     state: str,
     error: Optional[str] = None,
@@ -473,7 +477,9 @@ async def oidc_callback(
             )
 
         # Handle OIDC callback
-        result = await sso_service.handle_oidc_callback(code, state)
+        result = await sso_service.handle_oidc_callback(
+            code, state, locale=locale_from_request(request)
+        )
 
         # Create session and redirect
         access_token = result.get("access_token")

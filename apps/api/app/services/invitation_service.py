@@ -2,20 +2,24 @@
 Service for managing organization invitations.
 """
 
+import secrets
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+import structlog
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Organization, OrganizationMember
 from app.models.invitation import Invitation, InvitationCreate, InvitationResponse, InvitationStatus
-from app.models.policy import Role, UserRole
+from app.models.policy import Role
 from app.models.user import User
 from app.services.audit_logger import AuditAction, AuditLogger
 from app.services.cache import CacheService
 from app.services.email_service import EmailService
+
+logger = structlog.get_logger()
 
 
 class InvitationService:
@@ -35,35 +39,61 @@ class InvitationService:
         """
         Create a new invitation.
         """
-        # Verify organization exists and user has permission
+        # Verify the organization exists.
+        #
+        # This used to filter on `Organization.tenant_id`, a column the
+        # organizations table does not have, so the query raised before it
+        # could scope anything. The scoping it was reaching for is restored
+        # below against columns that exist — it must not simply be dropped:
+        # `require_org_admin` only proves the caller administers SOME
+        # organization, so without a per-organization check any org admin
+        # could invite members into an organization they have nothing to do
+        # with.
         organization = (
             self.db.query(Organization)
-            .filter(
-                and_(
-                    Organization.id == invitation_data.organization_id,
-                    Organization.tenant_id == tenant_id,
-                )
-            )
+            .filter(Organization.id == invitation_data.organization_id)
             .first()
         )
 
         if not organization:
             raise ValueError("Organization not found")
 
-        # Check if user is already a member
-        existing_member = (
-            self.db.query(OrganizationMember)
-            .filter(
-                and_(
-                    OrganizationMember.organization_id == invitation_data.organization_id,
-                    OrganizationMember.user_email == invitation_data.email,
+        # The caller must administer THIS organization — as its owner, or via
+        # an admin/owner membership row.
+        is_owner = str(getattr(organization, "owner_id", "")) == str(invited_by.id)
+        if not is_owner:
+            admin_membership = (
+                self.db.query(OrganizationMember)
+                .filter(
+                    and_(
+                        OrganizationMember.organization_id == organization.id,
+                        OrganizationMember.user_id == invited_by.id,
+                        OrganizationMember.role.in_(["admin", "owner"]),
+                    )
                 )
+                .first()
             )
-            .first()
-        )
+            if not admin_membership:
+                raise ValueError("Organization not found")
 
-        if existing_member:
-            raise ValueError("User is already a member of this organization")
+        # Check if the invitee is already a member. Membership is keyed by
+        # user_id, not by email, so resolve the address first; an address with
+        # no account cannot already be a member.
+        invitee = self.db.query(User).filter(User.email == invitation_data.email).first()
+        if invitee is not None:
+            existing_member = (
+                self.db.query(OrganizationMember)
+                .filter(
+                    and_(
+                        OrganizationMember.organization_id == organization.id,
+                        OrganizationMember.user_id == invitee.id,
+                    )
+                )
+                .first()
+            )
+
+            if existing_member:
+                raise ValueError("User is already a member of this organization")
 
         # Check for existing pending invitation
         existing_invitation = (
@@ -93,15 +123,20 @@ class InvitationService:
         # Calculate expiration
         expires_at = datetime.utcnow() + timedelta(days=invitation_data.expires_in or 7)
 
-        # Create invitation
+        # Create invitation.
+        #
+        # `token` is NOT NULL and unique, and it is the only thing
+        # /invitations/validate/{token} and /invitations/accept look up — yet
+        # nothing here ever generated one. Every invitation was therefore
+        # un-redeemable even before the email failed to send. Mint it here so
+        # the value that gets mailed is the value the verify path validates.
         invitation = Invitation(
-            tenant_id=tenant_id,
             organization_id=invitation_data.organization_id,
             email=invitation_data.email,
-            role_id=role.id if role else None,
-            role_name=role.name if role else invitation_data.role,
-            invited_by=invited_by.id,
-            message=invitation_data.message,
+            role=(role.name if role else invitation_data.role) or "member",
+            status=InvitationStatus.PENDING.value,
+            token=secrets.token_urlsafe(32),
+            created_by=invited_by.id,
             expires_at=expires_at,
         )
 
@@ -110,7 +145,7 @@ class InvitationService:
         self.db.refresh(invitation)
 
         # Send invitation email
-        await self._send_invitation_email(invitation, organization, invited_by)
+        email_sent = await self._send_invitation_email(invitation, organization, invited_by)
 
         # Log audit event
         await self.audit_logger.log(
@@ -122,19 +157,20 @@ class InvitationService:
             details={"email": invitation_data.email, "organization": organization.name},
         )
 
-        # Create response
+        # Create response. `email_sent` reports what actually happened on this
+        # request rather than reading a column that does not exist.
         response = InvitationResponse(
             id=str(invitation.id),
             organization_id=str(invitation.organization_id),
             email=invitation.email,
-            role=invitation.role_name,
+            role=invitation.role,
             status=invitation.status,
-            invited_by=str(invitation.invited_by),
-            message=invitation.message,
+            invited_by=str(invitation.created_by),
+            message=invitation_data.message,
             expires_at=invitation.expires_at,
             created_at=invitation.created_at,
-            invite_url=invitation.generate_invite_url(settings.APP_URL),
-            email_sent=invitation.email_sent,
+            invite_url=invitation.generate_invite_url(settings.FRONTEND_URL or settings.BASE_URL),
+            email_sent=email_sent,
         )
 
         return response
@@ -186,9 +222,14 @@ class InvitationService:
         token: str,
         user: Optional[User] = None,
         new_user_data: Optional[Dict[str, Any]] = None,
+        locale: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Accept an invitation.
+
+        `locale` is the language negotiated from the acceptance request. It is
+        applied only to a user created here — an existing account keeps the
+        preference it already has.
         """
         # Find invitation by token
         invitation = self.db.query(Invitation).filter(Invitation.token == token).first()
@@ -202,14 +243,25 @@ class InvitationService:
             else:
                 raise ValueError(f"Invitation is {invitation.status}")
 
-        # Create user if needed
+        # Create user if needed.
+        # `name` is a read-only property on User (derived from first/last/display),
+        # and invitations carry no tenant of their own — both kwargs used to
+        # raise before a single account could be created this way. The tenant
+        # comes from the organization being joined, which is the only place it
+        # is actually recorded.
         if not user and new_user_data:
+            organization = (
+                self.db.query(Organization)
+                .filter(Organization.id == invitation.organization_id)
+                .first()
+            )
             user = User(
                 email=invitation.email,
-                name=new_user_data.get("name", invitation.email.split("@")[0]),
+                display_name=new_user_data.get("name") or invitation.email.split("@")[0],
                 password_hash=new_user_data.get("password_hash"),
-                tenant_id=invitation.tenant_id,
+                tenant_id=getattr(organization, "tenant_id", None),
                 email_verified=True,  # Auto-verify since they have the invitation
+                locale=locale,
             )
             self.db.add(user)
             self.db.flush()
@@ -220,28 +272,19 @@ class InvitationService:
         if user.email != invitation.email:
             raise ValueError("Invitation email does not match user email")
 
-        # Add user to organization
+        # Add user to organization. Membership is keyed by user_id; there is
+        # no user_email column, and passing one raised before any invitation
+        # could ever be redeemed.
         org_member = OrganizationMember(
             organization_id=invitation.organization_id,
             user_id=user.id,
-            user_email=user.email,
-            role=invitation.role_name or "member",
+            role=invitation.role or "member",
         )
         self.db.add(org_member)
 
-        # Assign role if specified
-        if invitation.role_id:
-            user_role = UserRole(
-                user_id=user.id,
-                role_id=invitation.role_id,
-                organization_id=invitation.organization_id,
-                scope="organization",
-            )
-            self.db.add(user_role)
-
-        # Update invitation status
+        # Update invitation status. There is no accepted_by column; accepted_at
+        # plus the membership row record who redeemed it.
         invitation.status = InvitationStatus.ACCEPTED.value
-        invitation.accepted_by = user.id
         invitation.accepted_at = datetime.utcnow()
 
         self.db.commit()
@@ -264,7 +307,7 @@ class InvitationService:
             "message": "Invitation accepted successfully",
             "user_id": str(user.id),
             "organization_id": str(invitation.organization_id),
-            "role": invitation.role_name,
+            "role": invitation.role,
             "redirect_url": f"/dashboard/org/{invitation.organization_id}",
         }
 
@@ -318,7 +361,7 @@ class InvitationService:
         )
 
         # Resend email
-        await self._send_invitation_email(invitation, organization, resent_by)
+        email_sent = await self._send_invitation_email(invitation, organization, resent_by)
 
         # Log audit event
         await self.audit_logger.log(
@@ -335,100 +378,56 @@ class InvitationService:
             id=str(invitation.id),
             organization_id=str(invitation.organization_id),
             email=invitation.email,
-            role=invitation.role_name,
+            role=invitation.role,
             status=invitation.status,
-            invited_by=str(invitation.invited_by),
-            message=invitation.message,
+            invited_by=str(invitation.created_by),
+            message=None,
             expires_at=invitation.expires_at,
             created_at=invitation.created_at,
-            invite_url=invitation.generate_invite_url(settings.APP_URL),
-            email_sent=invitation.email_sent,
+            invite_url=invitation.generate_invite_url(settings.FRONTEND_URL or settings.BASE_URL),
+            email_sent=email_sent,
         )
 
         return response
 
     async def _send_invitation_email(
         self, invitation: Invitation, organization: Organization, inviter: User
-    ):
+    ) -> bool:
         """
-        Send invitation email to the invitee.
+        Send invitation email to the invitee. Returns whether it was sent.
+
+        This used to compose its own HTML and hand it to
+        `EmailService.send_email`, a method that does not exist on that class,
+        so every invitation raised AttributeError into a bare `except` that
+        printed and moved on. Nothing was ever mailed and nothing ever said so.
+
+        It now renders the maintained invitation templates and reports the
+        outcome instead of swallowing it. A send failure still does not undo
+        the invitation — the row is real and the link stays redeemable — but
+        the caller can now tell the difference.
         """
         try:
-            # Update send attempts
-            invitation.email_send_attempts += 1
-
-            # Create email content
-            subject = f"You're invited to join {organization.name} on Janua"
-
-            html_content = f"""
-            <html>
-                <body style="font-family: Arial, sans-serif; line-height: 1.6;">
-                    <h2>You're invited to {organization.name}!</h2>
-                    
-                    <p>{inviter.name or inviter.email} has invited you to join {organization.name} on Janua.</p>
-                    
-                    {f'<p><em>"{invitation.message}"</em></p>' if invitation.message else ''}
-                    
-                    <p>Click the button below to accept this invitation:</p>
-                    
-                    <p style="margin: 30px 0;">
-                        <a href="{invitation.generate_invite_url(settings.APP_URL)}" 
-                           style="background-color: #4CAF50; color: white; padding: 14px 28px; 
-                                  text-decoration: none; border-radius: 4px; display: inline-block;">
-                            Accept Invitation
-                        </a>
-                    </p>
-                    
-                    <p style="color: #666; font-size: 14px;">
-                        This invitation will expire on {invitation.expires_at.strftime('%B %d, %Y at %I:%M %p UTC')}.
-                    </p>
-                    
-                    <p style="color: #666; font-size: 14px;">
-                        If you don't want to accept this invitation, you can safely ignore this email.
-                    </p>
-                    
-                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-                    
-                    <p style="color: #999; font-size: 12px;">
-                        This invitation was sent to {invitation.email}. 
-                        If you didn't expect this invitation, please ignore this email.
-                    </p>
-                </body>
-            </html>
-            """
-
-            text_content = f"""
-            You're invited to {organization.name}!
-            
-            {inviter.name or inviter.email} has invited you to join {organization.name} on Janua.
-            
-            {invitation.message if invitation.message else ''}
-            
-            Accept this invitation:
-            {invitation.generate_invite_url(settings.APP_URL)}
-            
-            This invitation will expire on {invitation.expires_at.strftime('%B %d, %Y at %I:%M %p UTC')}.
-            
-            If you don't want to accept this invitation, you can safely ignore this email.
-            """
-
-            # Send email
-            await self.email_service.send_email(
-                to_email=invitation.email,
-                subject=subject,
-                html_content=html_content,
-                text_content=text_content,
+            invite_url = invitation.generate_invite_url(settings.FRONTEND_URL or settings.BASE_URL)
+            sent = await self.email_service.send_invitation_email(
+                email=invitation.email,
+                invite_url=invite_url,
+                organization_name=getattr(organization, "name", None) or "your organization",
+                inviter_name=(getattr(inviter, "name", None) or inviter.email),
+                role=invitation.role or "member",
+                expires_at=invitation.expires_at,
             )
+        except Exception:
+            logger.exception(
+                "Invitation email raised", invitation_id=str(getattr(invitation, "id", ""))
+            )
+            return False
 
-            # Update invitation
-            invitation.email_sent = True
-            invitation.email_sent_at = datetime.utcnow()
-
-            self.db.commit()
-
-        except Exception as e:
-            # Log error but don't fail the invitation creation
-            print(f"Failed to send invitation email: {str(e)}")
+        if not sent:
+            logger.warning(
+                "Invitation email NOT sent — the recipient will never receive a link",
+                invitation_id=str(getattr(invitation, "id", "")),
+            )
+        return sent
 
     def get_pending_invitations(
         self, organization_id: str, skip: int = 0, limit: int = 100

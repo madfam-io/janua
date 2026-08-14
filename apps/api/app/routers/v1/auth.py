@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 import structlog
 
 from app.config import settings
+from app.core.locale import locale_from_request
 from app.core.redis import ResilientRedisClient, get_redis
 from app.core.url_security import validate_redirect_url
 from app.database import AsyncSessionLocal, get_db
@@ -59,6 +60,10 @@ class SignUpRequest(BaseModel):
     first_name: Optional[str] = Field(None, max_length=100)
     last_name: Optional[str] = Field(None, max_length=100)
     username: Optional[str] = Field(None, min_length=3, max_length=50)
+    # Optional and unvalidated by pattern on purpose: an integrating app that
+    # already knows its user's language should be able to say so, and an
+    # unsupported tag must degrade to the default rather than 422 a signup.
+    locale: Optional[str] = Field(None, max_length=35)
 
     @field_validator("username")
     @classmethod
@@ -228,7 +233,11 @@ async def sign_up(
     if not valid:
         raise HTTPException(status_code=400, detail=message)
 
-    # Create user
+    # Create user. locale is captured here because signup is the only moment
+    # we are guaranteed to hear from the client directly; leaving it NULL (the
+    # behaviour before this) meant every user fell through to the deployment
+    # default forever, since nothing else ever writes the column except an
+    # explicit PATCH /users/me that almost nobody makes.
     user = User(
         email=signup_data.email,
         password_hash=AuthService.hash_password(signup_data.password),
@@ -236,6 +245,7 @@ async def sign_up(
         last_name=signup_data.last_name,
         username=signup_data.username,
         status=UserStatus.ACTIVE,
+        locale=locale_from_request(request, signup_data.locale),
     )
     db.add(user)
     await db.commit()
@@ -1767,11 +1777,15 @@ async def send_magic_link(
     user = result.scalar_one_or_none()
 
     if not user:
-        # Create user without password for magic link only
+        # Create user without password for magic link only.
+        # This branch is a signup in everything but name — it is the first and
+        # only chance to record the requester's language, and the very next
+        # thing this endpoint does is mail them.
         user = User(
             email=magic_link_data.email,
             email_verified=True,  # Auto-verify for magic link users
             status=UserStatus.ACTIVE,
+            locale=locale_from_request(request),
         )
         db.add(user)
         await db.commit()

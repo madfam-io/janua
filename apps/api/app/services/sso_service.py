@@ -37,6 +37,7 @@ except ImportError:
     SSOProvider = None
     SSOStatus = None
 from ..config import settings
+from ..core.locale import normalize_locale
 from ..exceptions import AuthenticationError, ValidationError
 from .cache import CacheService
 from .jwt_service import JWTService
@@ -245,7 +246,9 @@ class SSOService:
             "params": {"RelayState": request_id, "SAMLRequest": saml_request},
         }
 
-    async def handle_saml_response(self, saml_response: str, relay_state: str) -> Dict[str, Any]:
+    async def handle_saml_response(
+        self, saml_response: str, relay_state: str, locale: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Handle SAML response and create user session"""
 
         # Get stored request data
@@ -282,6 +285,7 @@ class SSOService:
             attributes=user_data,
             organization_id=organization_id,
             sso_config=sso_config,
+            locale=locale,
         )
 
         # Create SSO session
@@ -344,7 +348,9 @@ class SSOService:
 
         return {"auth_url": auth_url, "state": state}
 
-    async def handle_oidc_callback(self, code: str, state: str) -> Dict[str, Any]:
+    async def handle_oidc_callback(
+        self, code: str, state: str, locale: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Handle OIDC callback and exchange code for tokens"""
 
         # Validate state
@@ -402,6 +408,7 @@ class SSOService:
             attributes=user_data,
             organization_id=organization_id,
             sso_config=sso_config,
+            locale=locale,
         )
 
         # Create SSO session
@@ -429,8 +436,13 @@ class SSOService:
         attributes: Dict[str, Any],
         organization_id: str,
         sso_config: SSOConfiguration,
+        locale: Optional[str] = None,
     ) -> User:
-        """Create or update user via JIT provisioning"""
+        """Create or update user via JIT provisioning.
+
+        `locale` is the language negotiated from the callback request, applied
+        only when the IdP did not assert one of its own.
+        """
 
         # Check if user exists
         stmt = select(User).where(User.email == email)
@@ -439,12 +451,19 @@ class SSOService:
 
         if not user and sso_config.jit_provisioning:
             # Create new user
+            # A mapped IdP attribute is the authoritative preference — the
+            # directory admin configured it deliberately. The request header is
+            # only the fallback for IdPs that assert nothing.
+            asserted_locale = normalize_locale(
+                attributes.get("locale") or attributes.get("preferred_language")
+            )
             user = User(
                 email=email,
                 email_verified=True,
                 first_name=attributes.get("first_name"),
                 last_name=attributes.get("last_name"),
                 display_name=attributes.get("display_name"),
+                locale=asserted_locale or locale,
                 user_metadata={
                     "sso": True,
                     "sso_provider": sso_config.provider.value,

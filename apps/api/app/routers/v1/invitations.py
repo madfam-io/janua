@@ -4,11 +4,12 @@ Invitation management API endpoints.
 
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.locale import locale_from_request
 from app.database import get_db
 from app.dependencies import get_current_user, require_org_admin
 from app.models.invitation import (
@@ -299,7 +300,11 @@ async def revoke_invitation(
 
 
 @router.post("/accept", response_model=InvitationAcceptResponse)
-async def accept_invitation(accept_data: InvitationAcceptRequest, db: Session = Depends(get_db)):
+async def accept_invitation(
+    accept_data: InvitationAcceptRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """
     Accept an invitation using the token.
     """
@@ -324,7 +329,10 @@ async def accept_invitation(accept_data: InvitationAcceptRequest, db: Session = 
 
         # Accept invitation
         result = await service.accept_invitation(
-            token=accept_data.token, user=user, new_user_data=new_user_data
+            token=accept_data.token,
+            user=user,
+            new_user_data=new_user_data,
+            locale=locale_from_request(request),
         )
 
         return InvitationAcceptResponse(**result)

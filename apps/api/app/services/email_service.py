@@ -359,6 +359,13 @@ class EmailService:
                 if spanish
                 else f"Welcome to Janua, {name}!"
             )
+        if "invitation" in template_name:
+            url = data.get("invitation_url", "")
+            return (
+                f"Le han invitado a unirse a Janua: {url}"
+                if spanish
+                else f"You've been invited to join Janua: {url}"
+            )
         return "Contenido no disponible" if spanish else "Email content unavailable"
 
     async def send_magic_link_email(
@@ -400,6 +407,59 @@ class EmailService:
             logger.info("Magic link email sent", email=_redact_email(email))
         else:
             logger.error("Failed to send magic link email", email=_redact_email(email))
+        return sent
+
+    async def send_invitation_email(
+        self,
+        email: str,
+        invite_url: str,
+        organization_name: str,
+        inviter_name: str,
+        role: str = "member",
+        expires_at: Optional[datetime] = None,
+        teams: Optional[list] = None,
+    ) -> bool:
+        """Send an organization invitation.
+
+        The invitation templates have existed since the templates directory
+        did, but nothing on a live path ever rendered them — the invitation
+        service hand-rolled its own HTML string and handed it to a method that
+        does not exist on this class. This is the missing seam: one place that
+        renders the maintained templates and puts them on the same transport
+        as every other transactional message.
+        """
+        template_data = {
+            "inviter_name": inviter_name,
+            "organization_name": organization_name,
+            "role": role,
+            # The template renders href="{{ invitation_url }}"; `invitation_link`
+            # mirrors the `*_link` naming the other templates use so a future
+            # rename of either name still finds a value rather than a blank href.
+            "invitation_url": invite_url,
+            "invitation_link": invite_url,
+            "expires_at": (
+                expires_at.strftime("%B %d, %Y at %I:%M %p UTC") if expires_at else ""
+            ),
+            "teams": teams or [],
+            "base_url": settings.BASE_URL,
+            "company_name": "Janua",
+            "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
+        }
+
+        subject = f"{inviter_name} invited you to join {organization_name} on Janua"
+        html_content = self._render_template("invitation.html", template_data)
+        text_content = self._render_template("invitation.txt", template_data)
+
+        sent = await self._send_email(
+            to_email=email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+        )
+        if sent:
+            logger.info("Invitation email sent", email=_redact_email(email))
+        else:
+            logger.error("Failed to send invitation email", email=_redact_email(email))
         return sent
 
     async def _send_via_resend(
