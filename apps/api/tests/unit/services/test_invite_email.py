@@ -95,7 +95,9 @@ class TestContent:
         service = _service()
         await _send(service)
         html = _payload(service)["html_content"]
-        assert "You've been invited!" in html
+        # es is the default locale, so the Spanish template is what ships;
+        # this marker exists only in es/invitation.html.
+        assert "Le invitaron a colaborar" in html
         assert "Acme Corp" in html
         assert "Ada Lovelace" in html
         assert "admin" in html
