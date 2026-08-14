@@ -14,9 +14,12 @@ the schema is populated but the version is stale, then upgrade again. Against
 the migrations as they stood, step three failed with
 `DuplicateTableError: relation "guest_invites" already exists`.
 
-The alembic invocations are subprocesses because alembic/env.py resolves the
-URL from `settings` at import time; a subprocess gets a clean read of the
-scratch DATABASE_URL without mutating this process's settings.
+EVERY database interaction here is a subprocess, for two independent reasons.
+alembic/env.py resolves its URL from `settings` at import time, so only a fresh
+process reads the scratch DATABASE_URL. And `tests/fixtures/external_mocks.py`
+installs an autouse, session-scoped `patch.dict("sys.modules", ...)` that
+replaces `psycopg2` with a `Mock` for the whole run -- an in-process
+`import psycopg2` here yields that Mock and dies on `with conn.cursor()`.
 
 This lives in tests/unit/ because CI passes `--ignore=tests/integration`, so a
 file there would never run. It skips when no PostgreSQL is reachable, which is
@@ -54,6 +57,31 @@ def _with_database(url: str, name: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, f"/{name}", "", ""))
 
 
+def _psql(sql: str, url: str, autocommit: bool = False) -> subprocess.CompletedProcess[str]:
+    """Run SQL in a subprocess, printing each result row tab-separated.
+
+    A subprocess because psycopg2 is a Mock inside this process (see module
+    docstring); the driver is only real on the other side of a fork+exec.
+    """
+    prog = (
+        "import os,sys,psycopg2\n"
+        "c=psycopg2.connect(os.environ['U'])\n"
+        f"c.autocommit={autocommit!r}\n"
+        "cur=c.cursor()\n"
+        "cur.execute(os.environ['Q'])\n"
+        "rows=cur.fetchall() if cur.description else []\n"
+        "c.commit() if not c.autocommit else None\n"
+        "print('\\n'.join('\\t'.join(map(str,r)) for r in rows))\n"
+    )
+    return subprocess.run(
+        [sys.executable, "-c", prog],
+        env={**os.environ, "U": _sync_url(url), "Q": sql},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
 def _postgres_url() -> str | None:
     """The scratch server's URL, or None when this environment has no PostgreSQL.
 
@@ -67,13 +95,7 @@ def _postgres_url() -> str | None:
     url = os.environ.get(URL_ENV_VAR, "")
     if "postgresql" not in url:
         return None
-    try:
-        import psycopg2
-    except ImportError:  # pragma: no cover - driver absent locally
-        return None
-    try:
-        psycopg2.connect(_sync_url(url)).close()
-    except Exception:  # pragma: no cover - no server reachable
+    if _psql("SELECT 1", url).returncode != 0:  # pragma: no cover - no server
         return None
     return url
 
@@ -112,27 +134,15 @@ def scratch_database() -> str:
             )
         pytest.skip(f"{URL_ENV_VAR} not set to a reachable PostgreSQL")
 
-    import psycopg2
-
     name = f"janua_reentrancy_{uuid.uuid4().hex[:12]}"
-    admin = psycopg2.connect(_sync_url(base))
-    admin.autocommit = True
-    try:
-        with admin.cursor() as cur:
-            cur.execute(f'CREATE DATABASE "{name}"')
-    finally:
-        admin.close()
+    # CREATE/DROP DATABASE cannot run inside a transaction, hence autocommit.
+    created = _psql(f'CREATE DATABASE "{name}"', base, autocommit=True)
+    assert created.returncode == 0, f"could not create scratch database:\n{created.stderr}"
 
     try:
         yield _with_database(base, name)
     finally:
-        admin = psycopg2.connect(_sync_url(base))
-        admin.autocommit = True
-        try:
-            with admin.cursor() as cur:
-                cur.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
-        finally:
-            admin.close()
+        _psql(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)', base, autocommit=True)
 
 
 def test_upgrade_is_reentrant_over_an_already_populated_schema(scratch_database: str) -> None:
@@ -151,25 +161,23 @@ def test_upgrade_is_reentrant_over_an_already_populated_schema(scratch_database:
         f"{second.stdout}\n{second.stderr}"
     )
 
-    import psycopg2
+    # Head must actually be *recorded*, not merely reached: a revision id longer
+    # than alembic_version.version_num's VARCHAR(32) raises on write and rolls
+    # the upgrade back, which is how 006 stayed dead for months.
+    version = _psql("SELECT version_num FROM alembic_version", scratch_database)
+    assert version.returncode == 0, version.stderr
+    recorded = version.stdout.strip()
+    assert recorded and recorded != STALE_REVISION, (
+        f"upgrade recorded no progress past {STALE_REVISION!r} (read {recorded!r})"
+    )
 
-    conn = psycopg2.connect(_sync_url(scratch_database))
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT version_num FROM alembic_version")
-            recorded = cur.fetchone()[0]
-            # Head must actually be *recorded*, not merely reached: a revision id
-            # longer than alembic_version.version_num's VARCHAR(32) raises on write
-            # and rolls the upgrade back, which is how 006 was dead for months.
-            assert recorded != STALE_REVISION, "upgrade recorded no progress past the stale revision"
-
-            # The last migration's columns must be present, so a chain that
-            # "succeeded" without applying anything cannot pass this test.
-            cur.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_schema = 'public' AND table_name = 'invitations' "
-                "AND column_name IN ('message', 'email_sent')"
-            )
-            assert {r[0] for r in cur.fetchall()} == {"message", "email_sent"}
-    finally:
-        conn.close()
+    # The last migration's columns must be present, so a chain that "succeeded"
+    # without applying anything cannot pass this test.
+    cols = _psql(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'invitations' "
+        "AND column_name IN ('message', 'email_sent')",
+        scratch_database,
+    )
+    assert cols.returncode == 0, cols.stderr
+    assert set(cols.stdout.split()) == {"message", "email_sent"}
