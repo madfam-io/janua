@@ -1,15 +1,13 @@
 Hola {{ user_name }}:
 
-Inicie sesión en su portal con este enlace:
+{{ t('magic_link.txt_intro') }}
 {{ magic_url }}
 
 Este enlace funciona una sola vez y expira en 15 minutos.
 
-Si usted no solicitó iniciar sesión, puede ignorar este correo electrónico. Nunca
-reenvíe este enlace: cualquier persona que lo tenga podría entrar a su cuenta hasta
-que expire.
+{{ t('magic_link.txt_security_notice') }}
 
-¿Necesita ayuda? Escríbanos a {{ support_email }}
+{{ t('common.need_help') }} {{ support_email }}
 
 ---
 Equipo Janua

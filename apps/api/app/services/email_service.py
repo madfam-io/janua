@@ -20,7 +20,10 @@ import structlog
 from app.config import settings
 from app.services.email_i18n import (
     FALLBACK_LOCALE,
+    FORMALITY_TU,
+    FORMALITY_USTED,
     build_email_environment,
+    resolve_formality,
     resolve_locale,
     subject_for,
     template_candidates,
@@ -42,8 +45,10 @@ def _redact_email(email: str) -> str:
 def resolve_sender(redirect_url: str | None = None) -> tuple[str, str]:
     """The (display name, address) every message comes FROM.
 
-    ALWAYS `MADFAM <noreply@madfam.io>`. Deliberately not per-tenant, and not
-    per-platform.
+    ALWAYS `MADFAM <hola@madfam.io>`. Deliberately not per-tenant, and not
+    per-platform. The address is the one a client can simply reply to, which
+    is also why it is the `support` link in the footer; `config.py` defaults
+    EMAIL_FROM_ADDRESS to it.
 
     WHY IT USED TO BE `Janua <noreply@janua.dev>` AND WHY THAT WAS WRONG. The
     first message a fractional-CTO client ever receives is a sign-in link. It
@@ -53,7 +58,7 @@ def resolve_sender(redirect_url: str | None = None) -> tuple[str, str]:
     from a careful person.
 
     WHY NOT THE CLIENT'S OWN NAME EITHER. An earlier version of this function
-    put the tenant on the From line (`Crea Tu Mundo <noreply@madfam.io>`).
+    put the tenant on the From line (`Crea Tu Mundo <hola@madfam.io>`).
     That optimises the wrong thing. Bespoke clients meet several MADFAM
     platforms over an engagement — Janua for identity, Nauta for the
     workspace, Karafiel for documents — and a sender that changes per tenant
@@ -110,11 +115,13 @@ class EmailService:
         user_name: str = None,
         user_id: str = None,
         locale: Optional[str] = None,
+        formality: Optional[str] = None,
         user: Any = None,
     ) -> str:
         """Send email verification email and return verification token"""
 
         recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
+        recipient_formality = resolve_formality(formality, user=user)
 
         # Generate verification token
         verification_token = self._generate_verification_token()
@@ -151,9 +158,13 @@ class EmailService:
         }
 
         # Render email template
-        subject = subject_for("verification", recipient_locale)
-        html_content = self._render_template("verification.html", template_data, recipient_locale)
-        text_content = self._render_template("verification.txt", template_data, recipient_locale)
+        subject = subject_for("verification", recipient_locale, recipient_formality)
+        html_content = self._render_template(
+            "verification.html", template_data, recipient_locale, recipient_formality
+        )
+        text_content = self._render_template(
+            "verification.txt", template_data, recipient_locale, recipient_formality
+        )
 
         # Send email
         success = await self._send_email(
@@ -215,6 +226,7 @@ class EmailService:
         user_name: str = None,
         redirect_base: str = None,
         locale: Optional[str] = None,
+        formality: Optional[str] = None,
         user: Any = None,
     ) -> str:
         """Send password reset email for an already-issued token.
@@ -226,6 +238,7 @@ class EmailService:
         """
 
         recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
+        recipient_formality = resolve_formality(formality, user=user)
 
         # Mirror to Redis for observability (audit 2026-04-23 M2: JSON).
         if self.redis_client:
@@ -260,9 +273,13 @@ class EmailService:
         }
 
         # Render email template
-        subject = subject_for("password_reset", recipient_locale)
-        html_content = self._render_template("password_reset.html", template_data, recipient_locale)
-        text_content = self._render_template("password_reset.txt", template_data, recipient_locale)
+        subject = subject_for("password_reset", recipient_locale, recipient_formality)
+        html_content = self._render_template(
+            "password_reset.html", template_data, recipient_locale, recipient_formality
+        )
+        text_content = self._render_template(
+            "password_reset.txt", template_data, recipient_locale, recipient_formality
+        )
 
         # Send email
         success = await self._send_email(
@@ -281,11 +298,13 @@ class EmailService:
         email: str,
         user_name: str = None,
         locale: Optional[str] = None,
+        formality: Optional[str] = None,
         user: Any = None,
     ) -> bool:
         """Send welcome email to new user"""
 
         recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
+        recipient_formality = resolve_formality(formality, user=user)
 
         template_data = {
             "user_name": user_name or email.split("@")[0],
@@ -297,9 +316,13 @@ class EmailService:
         }
 
         # Render email template
-        subject = subject_for("welcome", recipient_locale)
-        html_content = self._render_template("welcome.html", template_data, recipient_locale)
-        text_content = self._render_template("welcome.txt", template_data, recipient_locale)
+        subject = subject_for("welcome", recipient_locale, recipient_formality)
+        html_content = self._render_template(
+            "welcome.html", template_data, recipient_locale, recipient_formality
+        )
+        text_content = self._render_template(
+            "welcome.txt", template_data, recipient_locale, recipient_formality
+        )
 
         # Send email
         success = await self._send_email(
@@ -322,7 +345,11 @@ class EmailService:
         return token_hash[:64]  # 64-char hex string
 
     def _render_template(
-        self, template_name: str, data: Dict[str, Any], locale: Optional[str] = None
+        self,
+        template_name: str,
+        data: Dict[str, Any],
+        locale: Optional[str] = None,
+        formality: Optional[str] = None,
     ) -> str:
         """Render email template with data, in the recipient's language.
 
@@ -337,8 +364,14 @@ class EmailService:
         takes the first that exists, so a language with no translation for
         this particular message still sends — in English — rather than
         raising into the fallback text below.
+
+        `formality` is the Spanish register (`tu` / `usted`). It goes into the
+        context rather than into the template name, so it costs zero extra
+        template files: `t()` resolves each key against it. An absent or
+        unrecognized value renders `usted`.
         """
         resolved_locale = resolve_locale(locale, default=self._default_locale())
+        resolved_formality = resolve_formality(formality)
         try:
             template = self.jinja_env.select_template(
                 template_candidates(template_name, resolved_locale)
@@ -366,6 +399,9 @@ class EmailService:
                 # Anything unknown falls to `en`, which exists, rather than
                 # producing a 404 that asserts a notice we then do not show.
                 "legal_locale": "es" if str(body_locale).lower().startswith("es") else "en",
+                # `t()` reads this off the context, which is why base.html and
+                # every es/ template pick up the register without naming it.
+                "formality": resolved_formality,
                 **data,
             }
             return template.render(**context)
@@ -376,7 +412,7 @@ class EmailService:
                 locale=resolved_locale,
                 error_type=type(e).__name__,
             )
-            return self._fallback_body(template_name, data, resolved_locale)
+            return self._fallback_body(template_name, data, resolved_locale, resolved_formality)
 
     @staticmethod
     def _default_locale() -> Optional[str]:
@@ -385,15 +421,25 @@ class EmailService:
         return getattr(settings, "DEFAULT_EMAIL_LOCALE", None)
 
     @staticmethod
-    def _fallback_body(template_name: str, data: Dict[str, Any], locale: str) -> str:
+    def _fallback_body(
+        template_name: str,
+        data: Dict[str, Any],
+        locale: str,
+        formality: str = FORMALITY_USTED,
+    ) -> str:
         """Last-resort plain text when the template itself failed to render.
 
         Localized too: a recipient hitting the degraded path is no more
-        likely to read English than one hitting the happy path.
+        likely to read English than one hitting the happy path — and no more
+        likely to have changed their mind about being addressed as `tú`. The
+        degraded path is still an email someone reads.
         """
         spanish = locale == "es"
+        informal = spanish and formality == FORMALITY_TU
         if "verification" in template_name:
             url = data.get("verification_url", "")
+            if informal:
+                return f"Verifica tu correo electrónico aquí: {url}"
             return (
                 f"Verifique su correo electrónico aquí: {url}"
                 if spanish
@@ -401,6 +447,8 @@ class EmailService:
             )
         if "magic_link" in template_name:
             url = data.get("magic_url", "")
+            if informal:
+                return f"Inicia sesión en tu portal aquí: {url}"
             return (
                 f"Inicie sesión en su portal aquí: {url}"
                 if spanish
@@ -408,6 +456,8 @@ class EmailService:
             )
         if "password_reset" in template_name:
             url = data.get("reset_url", "")
+            if informal:
+                return f"Restablece tu contraseña aquí: {url}"
             return (
                 f"Restablezca su contraseña aquí: {url}"
                 if spanish
@@ -415,6 +465,8 @@ class EmailService:
             )
         if "welcome" in template_name:
             name = data.get("user_name", "there")
+            if informal:
+                return f"Te damos la bienvenida a Janua, {name}."
             return (
                 f"Le damos la bienvenida a Janua, {name}."
                 if spanish
@@ -422,11 +474,14 @@ class EmailService:
             )
         if "invitation" in template_name:
             url = data.get("invitation_url", "")
+            if informal:
+                return f"Te han invitado a unirte a Janua: {url}"
             return (
                 f"Le han invitado a unirse a Janua: {url}"
                 if spanish
                 else f"You've been invited to join Janua: {url}"
             )
+        # Register-neutral: names a state, does not address the reader.
         return "Contenido no disponible" if spanish else "Email content unavailable"
 
     async def send_magic_link_email(
@@ -435,6 +490,7 @@ class EmailService:
         magic_token: str,
         redirect_url: Optional[str] = None,
         locale: Optional[str] = None,
+        formality: Optional[str] = None,
         user: Any = None,
     ) -> bool:
         """Send a passwordless sign-in link.
@@ -445,6 +501,7 @@ class EmailService:
         (already allowlist-validated when the link was requested).
         """
         recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
+        recipient_formality = resolve_formality(formality, user=user)
         callback = f"{settings.API_BASE_URL or settings.BASE_URL}/api/v1/auth/magic-link/callback"
         magic_url = f"{callback}?token={magic_token}"
 
@@ -457,9 +514,13 @@ class EmailService:
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
         }
 
-        subject = subject_for("magic_link", recipient_locale)
-        html_content = self._render_template("magic_link.html", template_data, recipient_locale)
-        text_content = self._render_template("magic_link.txt", template_data, recipient_locale)
+        subject = subject_for("magic_link", recipient_locale, recipient_formality)
+        html_content = self._render_template(
+            "magic_link.html", template_data, recipient_locale, recipient_formality
+        )
+        text_content = self._render_template(
+            "magic_link.txt", template_data, recipient_locale, recipient_formality
+        )
 
         # `redirect_url` travels through so the From line can carry the CLIENT'S
         # name. This is the one flow where it matters most: a magic link is the
@@ -658,6 +719,7 @@ async def send_password_reset_email_task(
     reset_token: str,
     redirect_base: Optional[str] = None,
     locale: Optional[str] = None,
+    formality: Optional[str] = None,
 ) -> None:
     """Background-task entrypoint for the forgot-password flow.
 
@@ -673,7 +735,11 @@ async def send_password_reset_email_task(
     try:
         service = EmailService()
         sent = await service.send_password_reset_email(
-            email, reset_token, redirect_base=redirect_base, locale=locale
+            email,
+            reset_token,
+            redirect_base=redirect_base,
+            locale=locale,
+            formality=formality,
         )
         if not sent:
             logger.warning(
@@ -689,6 +755,7 @@ async def send_magic_link_email_task(
     magic_token: str,
     redirect_url: Optional[str] = None,
     locale: Optional[str] = None,
+    formality: Optional[str] = None,
 ) -> None:
     """Background-task entrypoint for the magic-link flow.
 
@@ -701,7 +768,9 @@ async def send_magic_link_email_task(
     """
     try:
         service = EmailService()
-        sent = await service.send_magic_link_email(email, magic_token, redirect_url, locale=locale)
+        sent = await service.send_magic_link_email(
+            email, magic_token, redirect_url, locale=locale, formality=formality
+        )
         if not sent:
             logger.warning(
                 "Magic link email NOT sent — the recipient will never receive a sign-in link",
@@ -716,6 +785,7 @@ async def send_verification_email_task(
     verification_token: str,
     user_name: Optional[str] = None,
     locale: Optional[str] = None,
+    formality: Optional[str] = None,
 ) -> None:
     """Background-task entrypoint for email verification.
 
@@ -727,6 +797,7 @@ async def send_verification_email_task(
     try:
         service = EmailService()
         recipient_locale = resolve_locale(locale, default=service._default_locale())
+        recipient_formality = resolve_formality(formality)
         verification_url = f"{settings.FRONTEND_URL}/auth/verify-email?token={verification_token}"
         template_data = {
             "user_name": user_name or email.split("@")[0],
@@ -741,12 +812,12 @@ async def send_verification_email_task(
         }
         sent = await service._send_email(
             to_email=email,
-            subject=subject_for("verification", recipient_locale),
+            subject=subject_for("verification", recipient_locale, recipient_formality),
             html_content=service._render_template(
-                "verification.html", template_data, recipient_locale
+                "verification.html", template_data, recipient_locale, recipient_formality
             ),
             text_content=service._render_template(
-                "verification.txt", template_data, recipient_locale
+                "verification.txt", template_data, recipient_locale, recipient_formality
             ),
         )
         if not sent:

@@ -66,6 +66,19 @@ class User(Base):
     phone_verified = Column(Boolean, default=False)
     timezone = Column(String(50))
     locale = Column(String(10))
+    # How Spanish should address this person: "tu" (informal) or "usted"
+    # (formal). NULL means "has not chosen" and renders as `usted` — the safe
+    # register for a first contact. Deliberately NOT a DB enum: the value set
+    # is owned by app.services.email_i18n (SPANISH_FORMALITIES), and an enum
+    # would make widening it a migration on a hot table. `vosotros` is not a
+    # supported value and is not coming; see email_i18n for why.
+    #
+    # Intended as the source of truth for EVERY surface, not just mail. Today
+    # only janua's transactional email reads it; nauta's client portal still
+    # hardcodes `tú` while this service's email is `usted`, so the same person
+    # is addressed two ways in one journey. Whoever fixes the portal side
+    # should read this column rather than introduce a second preference.
+    spanish_formality = Column(String(10))
     email_verified_at = Column(DateTime)
 
     # Timestamps

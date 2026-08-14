@@ -1,19 +1,19 @@
 Hola {{ user_name }}:
 
-Le damos la bienvenida a Janua. Su cuenta se creó y se verificó correctamente.
+{{ t('welcome.txt_intro') }}
 
-Comience por su panel:
+{{ t('welcome.txt_dashboard_cta') }}
 {{ dashboard_url }}
 
-Lo que puede hacer con Janua:
-• Administrar su identidad digital
+{{ t('welcome.txt_capabilities') }}
+• {{ t('welcome.txt_capability_identity') }}
 • Conectarse con aplicaciones de forma segura
-• Controlar sus datos y su privacidad
+• {{ t('welcome.txt_capability_privacy') }}
 
-¿Necesita ayuda para empezar? Consulte nuestra documentación o escríbanos a
+{{ t('welcome.txt_help') }}
 {{ support_email }}
 
-Nos da mucho gusto tenerle con nosotros.
+{{ t('welcome.txt_closing') }}
 
 ---
 Equipo Janua
