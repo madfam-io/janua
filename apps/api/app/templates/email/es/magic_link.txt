@@ -10,5 +10,5 @@ Este enlace funciona una sola vez y expira en 15 minutos.
 {{ t('common.need_help') }} {{ support_email }}
 
 ---
-Equipo Janua
+{{ t('signoff') }}
 {{ base_url }}

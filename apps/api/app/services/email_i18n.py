@@ -269,9 +269,19 @@ CHROME: Dict[str, Dict[str, str]] = {
         "support": "Support",
         "why_received": "You received this email because you have an account with MADFAM.",
         "location": "Innovaciones MADFAM S.A.S. de C.V. • Cuernavaca, Morelos, Mexico",
+        # The name the message signs off with. It is MADFAM for the same reason
+        # the header and the From address are: the reader has a relationship
+        # with MADFAM and has never heard of the platform underneath. Ten
+        # plain-text and HTML templates hard-coded "the Janua Team", so a
+        # message arrived under a MADFAM header, from hola@madfam.io, and then
+        # signed off as a company the reader does not know — which is the exact
+        # confusion the sender work existed to remove, surviving in the part of
+        # the email people actually read last.
+        "signoff": "The MADFAM Team",
     },
     "es": {
         "tagline": "Tecnología, diseñada para su operación",
+        "signoff": "Equipo MADFAM",
         "rights": "Todos los derechos reservados.",
         # "Con tecnología de" is the standard es-MX rendering of "Powered by".
         # "Impulsado por" reads as marketing; this reads as an attribution.
@@ -610,6 +620,9 @@ ES_REGISTER_NEUTRAL: Set[str] = {
     "terms",  # "Términos del servicio" — the name of a document
     "support",  # "Soporte" — a noun
     "location",  # a postal address
+    # "Equipo MADFAM" — the sender's own name. It has no addressee, so it is
+    # byte-identical in `tú` and `usted` and must NOT be duplicated into ES_TU.
+    "signoff",
 }
 
 
