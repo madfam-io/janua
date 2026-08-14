@@ -613,6 +613,15 @@ class Invitation(Base):
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # `message` is offered by InvitationCreate, returned by InvitationResponse
+    # and updatable through InvitationUpdate, but was never a column. Reads
+    # raised AttributeError and PATCH's write landed on a plain Python
+    # attribute that no commit could persist. `email_sent` is the same story
+    # for the delivery flag the list/get responses report: a row read back
+    # from the database has no request-scoped send outcome to borrow, so the
+    # outcome has to live on the row.
+    message = Column(Text)
+    email_sent = Column(Boolean, nullable=False, default=False, server_default="false")
     # The three helpers below are called from the invitation service and
     # router but were never defined anywhere, so every reference raised
     # AttributeError. They are pure functions of columns that already exist,
@@ -1024,8 +1033,8 @@ class Translation(Base):
 
 
 # Import enterprise models
-from app.models.enterprise import SSOConfiguration, SSOProvider, SSOStatus  # noqa: E402
 from app.models.connected_account import ConnectedAccount, ProviderType  # noqa: E402,F401
+from app.models.enterprise import SSOConfiguration, SSOProvider, SSOStatus  # noqa: E402
 
 # Import compliance models
 

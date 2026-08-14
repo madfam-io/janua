@@ -2,16 +2,19 @@
 Invitation management API endpoints.
 """
 
+import uuid
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from sqlalchemy import and_, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.locale import locale_from_request
 from app.database import get_db
 from app.dependencies import get_current_user, require_org_admin
+from app.models import Organization, OrganizationMember
 from app.models.invitation import (
     BulkInvitationCreate,
     BulkInvitationResponse,
@@ -31,12 +34,108 @@ from app.services.invitation_service import InvitationService
 router = APIRouter(prefix="/v1/invitations", tags=["invitations"])
 
 
+def _invite_base_url() -> str:
+    """Root for acceptance links.
+
+    The handlers below used to pass `settings.APP_URL`, which is not a setting
+    on this application at all -- reading it raised AttributeError before the
+    URL could be built.
+    """
+    return settings.FRONTEND_URL or settings.BASE_URL
+
+
+def _as_uuid(value: str) -> Optional[uuid.UUID]:
+    """Parse an id from the path, or None when it is not a UUID at all.
+
+    The columns being compared are `uuid`, so handing Postgres an arbitrary
+    string is a 500 rather than the 404 the caller should see.
+    """
+    try:
+        return uuid.UUID(str(value))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+async def _accessible_org_ids(db: AsyncSession, user: User) -> set:
+    """Organizations whose invitations this user may see.
+
+    Scoping is by `organization_id`, the only tenancy this table records.
+    The previous filter -- `Invitation.tenant_id == current_user.tenant_id` --
+    named a column that does not exist on `invitations`, and the fallback
+    branch called `current_user.get_organizations()`, a method `User` does not
+    define. Either one raised before a single row could be scoped.
+    """
+    member_rows = await db.execute(
+        select(OrganizationMember.organization_id).where(OrganizationMember.user_id == user.id)
+    )
+    org_ids = set(member_rows.scalars().all())
+
+    owned_rows = await db.execute(select(Organization.id).where(Organization.owner_id == user.id))
+    org_ids.update(owned_rows.scalars().all())
+
+    return org_ids
+
+
+async def _require_org_admin_for(db: AsyncSession, user: User, organization_id) -> None:
+    """Assert the caller administers *this* organization.
+
+    `require_org_admin` only proves the caller is an admin or owner of SOME
+    organization. Without a per-organization check, an admin of org A could
+    mutate org B's invitations. Raises 404 rather than 403 so the endpoint
+    does not confirm that an invitation the caller cannot reach exists.
+    """
+    org = (
+        await db.execute(select(Organization).where(Organization.id == organization_id))
+    ).scalar_one_or_none()
+
+    owner_id = getattr(org, "owner_id", None)
+    # Both ids must be present before they can match, so that an ownerless
+    # organization and an id-less caller do not compare equal as "None".
+    if owner_id and user.id and str(owner_id) == str(user.id):
+        return
+
+    membership = (
+        await db.execute(
+            select(OrganizationMember).where(
+                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.user_id == user.id,
+                OrganizationMember.role.in_(["admin", "owner"]),
+            )
+        )
+    ).scalar_one_or_none()
+
+    if membership is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+
+
+def _to_response(invitation: Invitation) -> InvitationResponse:
+    """Build the API response from columns that exist.
+
+    `role_name`, `invited_by`, `message` and `email_sent` were read here; the
+    first two are spelled `role` and `created_by` on the table and the last
+    two were not columns at all until this change.
+    """
+    return InvitationResponse(
+        id=str(invitation.id),
+        organization_id=str(invitation.organization_id),
+        email=invitation.email,
+        role=invitation.role or "member",
+        status=invitation.status,
+        invited_by=str(invitation.created_by),
+        message=invitation.message,
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+        invite_url=invitation.generate_invite_url(_invite_base_url()),
+        email_sent=bool(invitation.email_sent),
+    )
+
+
 @router.post("/", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
 async def create_invitation(
     invitation_data: InvitationCreate,
     background_tasks: BackgroundTasks,
     current_user=Depends(require_org_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Create a new invitation for an organization (org admin only).
@@ -61,7 +160,7 @@ async def create_bulk_invitations(
     bulk_data: BulkInvitationCreate,
     background_tasks: BackgroundTasks,
     current_user=Depends(require_org_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Create multiple invitations at once (org admin only).
@@ -89,82 +188,51 @@ async def list_invitations(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List invitations for organizations the user has access to.
     """
-    stmt = select(Invitation).where(Invitation.tenant_id == current_user.tenant_id)
+    org_ids = await _accessible_org_ids(db, current_user)
 
-    # Filter by organization if specified
+    # An explicit organization narrows the scope; it never widens it.
     if organization_id:
-        stmt = stmt.where(Invitation.organization_id == organization_id)
-    else:
-        # Get user's organizations
-        user_orgs = current_user.get_organizations()
-        org_ids = [org.id for org in user_orgs]
-        if org_ids:
-            stmt = stmt.where(Invitation.organization_id.in_(org_ids))
+        requested = _as_uuid(organization_id)
+        org_ids = {requested} & org_ids if requested else set()
 
-    # Filter by status
-    if status:
-        stmt = stmt.where(Invitation.status == status.value)
+    if not org_ids:
+        return InvitationListResponse(invitations=[], total=0)
 
-    # Filter by email
+    scoped = select(Invitation).where(Invitation.organization_id.in_(org_ids))
+
     if email:
-        stmt = stmt.where(Invitation.email.ilike(f"%{email}%"))
+        scoped = scoped.where(Invitation.email.ilike(f"%{email}%"))
 
-    # Get total count
-    count_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
-    total = count_result.scalar()
+    # The status breakdown describes the whole scoped set, so it is counted
+    # before the status filter narrows the listing itself.
+    async def _count(stmt) -> int:
+        result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+        return result.scalar() or 0
 
-    # Get status counts
-    pending_result = await db.execute(
-        select(func.count()).select_from(
-            stmt.where(Invitation.status == InvitationStatus.PENDING.value).subquery()
-        )
+    pending_count = await _count(scoped.where(Invitation.status == InvitationStatus.PENDING.value))
+    accepted_count = await _count(
+        scoped.where(Invitation.status == InvitationStatus.ACCEPTED.value)
     )
-    pending_count = pending_result.scalar()
+    expired_count = await _count(scoped.where(Invitation.status == InvitationStatus.EXPIRED.value))
 
-    accepted_result = await db.execute(
-        select(func.count()).select_from(
-            stmt.where(Invitation.status == InvitationStatus.ACCEPTED.value).subquery()
-        )
+    listing = scoped
+    if status:
+        listing = listing.where(Invitation.status == status.value)
+
+    total = await _count(listing)
+
+    result = await db.execute(
+        listing.order_by(Invitation.created_at.desc()).offset(skip).limit(limit)
     )
-    accepted_count = accepted_result.scalar()
-
-    expired_result = await db.execute(
-        select(func.count()).select_from(
-            stmt.where(Invitation.status == InvitationStatus.EXPIRED.value).subquery()
-        )
-    )
-    expired_count = expired_result.scalar()
-
-    # Get paginated results
-    result = await db.execute(stmt.order_by(Invitation.created_at.desc()).offset(skip).limit(limit))
     invitations = result.scalars().all()
 
-    # Convert to response models
-    invitation_responses = []
-    for inv in invitations:
-        invitation_responses.append(
-            InvitationResponse(
-                id=str(inv.id),
-                organization_id=str(inv.organization_id),
-                email=inv.email,
-                role=inv.role_name,
-                status=inv.status,
-                invited_by=str(inv.invited_by),
-                message=inv.message,
-                expires_at=inv.expires_at,
-                created_at=inv.created_at,
-                invite_url=inv.generate_invite_url(settings.APP_URL),
-                email_sent=inv.email_sent,
-            )
-        )
-
     return InvitationListResponse(
-        invitations=invitation_responses,
+        invitations=[_to_response(inv) for inv in invitations],
         total=total,
         pending_count=pending_count,
         accepted_count=accepted_count,
@@ -172,36 +240,31 @@ async def list_invitations(
     )
 
 
+async def _load_scoped(db: AsyncSession, invitation_id: str, user: User) -> Invitation:
+    """Fetch an invitation the caller is allowed to see, or 404."""
+    parsed = _as_uuid(invitation_id)
+    if parsed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+
+    invitation = (
+        await db.execute(select(Invitation).where(Invitation.id == parsed))
+    ).scalar_one_or_none()
+
+    if invitation is None or invitation.organization_id not in await _accessible_org_ids(db, user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+
+    return invitation
+
+
 @router.get("/{invitation_id}", response_model=InvitationResponse)
 async def get_invitation(
-    invitation_id: str, current_user=Depends(get_current_user), db: Session = Depends(get_db)
+    invitation_id: str, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     Get a specific invitation by ID.
     """
-    result = await db.execute(
-        select(Invitation).where(
-            and_(Invitation.id == invitation_id, Invitation.tenant_id == current_user.tenant_id)
-        )
-    )
-    invitation = result.scalar_one_or_none()
-
-    if not invitation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
-
-    return InvitationResponse(
-        id=str(invitation.id),
-        organization_id=str(invitation.organization_id),
-        email=invitation.email,
-        role=invitation.role_name,
-        status=invitation.status,
-        invited_by=str(invitation.invited_by),
-        message=invitation.message,
-        expires_at=invitation.expires_at,
-        created_at=invitation.created_at,
-        invite_url=invitation.generate_invite_url(settings.APP_URL),
-        email_sent=invitation.email_sent,
-    )
+    invitation = await _load_scoped(db, invitation_id, current_user)
+    return _to_response(invitation)
 
 
 @router.patch("/{invitation_id}", response_model=InvitationResponse)
@@ -209,20 +272,13 @@ async def update_invitation(
     invitation_id: str,
     update_data: InvitationUpdate,
     current_user=Depends(require_org_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Update a pending invitation (org admin only).
     """
-    result = await db.execute(
-        select(Invitation).where(
-            and_(Invitation.id == invitation_id, Invitation.tenant_id == current_user.tenant_id)
-        )
-    )
-    invitation = result.scalar_one_or_none()
-
-    if not invitation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+    invitation = await _load_scoped(db, invitation_id, current_user)
+    await _require_org_admin_for(db, current_user, invitation.organization_id)
 
     if invitation.status != InvitationStatus.PENDING.value:
         raise HTTPException(
@@ -230,9 +286,11 @@ async def update_invitation(
             detail=f"Cannot update invitation with status: {invitation.status}",
         )
 
-    # Update fields
+    # Update fields. `role` was written as `role_name` and `message` was not a
+    # column, so both assignments used to land on plain Python attributes: the
+    # response echoed the new values back and the database kept the old ones.
     if update_data.role is not None:
-        invitation.role_name = update_data.role
+        invitation.role = update_data.role
 
     if update_data.message is not None:
         invitation.message = update_data.message
@@ -243,19 +301,7 @@ async def update_invitation(
     await db.commit()
     await db.refresh(invitation)
 
-    return InvitationResponse(
-        id=str(invitation.id),
-        organization_id=str(invitation.organization_id),
-        email=invitation.email,
-        role=invitation.role_name,
-        status=invitation.status,
-        invited_by=str(invitation.invited_by),
-        message=invitation.message,
-        expires_at=invitation.expires_at,
-        created_at=invitation.created_at,
-        invite_url=invitation.generate_invite_url(settings.APP_URL),
-        email_sent=invitation.email_sent,
-    )
+    return _to_response(invitation)
 
 
 @router.post("/{invitation_id}/resend", response_model=InvitationResponse)
@@ -263,11 +309,17 @@ async def resend_invitation(
     invitation_id: str,
     background_tasks: BackgroundTasks,
     current_user=Depends(require_org_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Resend an invitation email (org admin only).
     """
+    # Neither this endpoint nor the service it delegates to checked which
+    # organization the invitation belongs to, so any organization admin could
+    # act on any organization's invitations by id.
+    invitation = await _load_scoped(db, invitation_id, current_user)
+    await _require_org_admin_for(db, current_user, invitation.organization_id)
+
     service = InvitationService(db)
 
     try:
@@ -283,11 +335,16 @@ async def resend_invitation(
 
 @router.delete("/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_invitation(
-    invitation_id: str, current_user=Depends(require_org_admin), db: Session = Depends(get_db)
+    invitation_id: str,
+    current_user=Depends(require_org_admin),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Revoke a pending invitation (org admin only).
     """
+    invitation = await _load_scoped(db, invitation_id, current_user)
+    await _require_org_admin_for(db, current_user, invitation.organization_id)
+
     service = InvitationService(db)
 
     try:
@@ -303,7 +360,7 @@ async def revoke_invitation(
 async def accept_invitation(
     accept_data: InvitationAcceptRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Accept an invitation using the token.
@@ -342,7 +399,7 @@ async def accept_invitation(
 
 
 @router.get("/validate/{token}")
-async def validate_invitation_token(token: str, db: Session = Depends(get_db)):
+async def validate_invitation_token(token: str, db: AsyncSession = Depends(get_db)):
     """
     Validate an invitation token and get details.
     """
@@ -382,8 +439,6 @@ async def validate_invitation_token(token: str, db: Session = Depends(get_db)):
         }
 
     # Get organization details
-    from app.models.organization import Organization
-
     org_result = await db.execute(
         select(Organization).where(Organization.id == invitation.organization_id)
     )
@@ -394,7 +449,7 @@ async def validate_invitation_token(token: str, db: Session = Depends(get_db)):
         "email": invitation.email,
         "organization_id": str(invitation.organization_id),
         "organization_name": org.name if org else None,
-        "role": invitation.role_name,
+        "role": invitation.role,
         "expires_at": invitation.expires_at.isoformat(),
         "message": invitation.message,
     }
@@ -402,13 +457,32 @@ async def validate_invitation_token(token: str, db: Session = Depends(get_db)):
 
 @router.post("/cleanup")
 async def cleanup_expired_invitations(
-    current_user=Depends(require_org_admin), db: Session = Depends(get_db)
+    current_user=Depends(require_org_admin), db: AsyncSession = Depends(get_db)
 ):
     """
     Clean up expired invitations (org admin only).
     """
-    service = InvitationService(db)
+    # This used to call `InvitationService.cleanup_expired_invitations`, a
+    # synchronous method built on `Session.query`. The session injected here
+    # is an AsyncSession, which has no `.query`, so the call raised before it
+    # could mark anything -- and it swept every organization's invitations,
+    # not just those of the admin making the request. Both are fixed by
+    # expiring within the caller's own organizations, in one statement.
+    org_ids = await _accessible_org_ids(db, current_user)
+    if not org_ids:
+        return {"message": "Marked 0 invitations as expired", "count": 0}
 
-    count = service.cleanup_expired_invitations()
+    result = await db.execute(
+        update(Invitation)
+        .where(
+            Invitation.organization_id.in_(org_ids),
+            Invitation.status == InvitationStatus.PENDING.value,
+            Invitation.expires_at < datetime.utcnow(),
+        )
+        .values(status=InvitationStatus.EXPIRED.value)
+    )
+    await db.commit()
+
+    count = result.rowcount or 0
 
     return {"message": f"Marked {count} invitations as expired", "count": count}
