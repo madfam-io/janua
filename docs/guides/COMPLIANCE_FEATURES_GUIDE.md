@@ -946,7 +946,7 @@ async function handleDataSubjectRequest(
 ## Support & Resources
 
 - **Documentation**: https://docs.janua.dev/compliance
-- **Privacy Policy**: https://janua.dev/privacy
+- **Privacy Policy**: https://madfam.io/en/privacy
 - **GDPR Guide**: https://docs.janua.dev/gdpr
 - **CCPA Guide**: https://docs.janua.dev/ccpa
 - **Email Support**: compliance@janua.dev
