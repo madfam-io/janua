@@ -1,14 +1,21 @@
 {% extends "base.html" %}
 
+{# Prose that ADDRESSES THE READER goes through t(), so it follows the
+   recipient's tú/usted choice. Register-neutral text — the greeting, the
+   button label, a sentence about the link rather than about the reader —
+   stays inline on purpose: it is byte-identical in both registers, and
+   lifting it into the catalog would create two strings to keep in sync for
+   no reader-visible difference. See app/services/email_i18n.py. #}
+
 {% block content %}
-<h2 style="color: #1f2937; margin: 0 0 20px 0;">Inicie sesión en Janua</h2>
+<h2 style="color: #1f2937; margin: 0 0 20px 0;">{{ t('magic_link.heading') }}</h2>
 
 <p style="margin: 0 0 20px 0;">
     Hola {{ user_name }}:
 </p>
 
 <p style="margin: 0 0 20px 0;">
-    Use el siguiente botón para iniciar sesión. No necesita contraseña: el enlace le da acceso directo.
+    {{ t('magic_link.intro') }}
 </p>
 
 <div style="text-align: center;">
@@ -21,13 +28,11 @@
 
 <div class="warning">
     <strong>⚠️ Aviso de seguridad</strong><br>
-    Si usted no solicitó iniciar sesión, puede ignorar este correo electrónico: el enlace
-    está ligado a su dirección y no hace nada hasta que se abre. Nunca lo reenvíe, ya que
-    cualquier persona que lo tenga podría entrar a su cuenta hasta que el enlace expire.
+    {{ t('magic_link.security_notice') }}
 </div>
 
 <p style="margin: 20px 0 0 0; color: #6b7280; font-size: 12px;">
-    Si el botón no funciona, copie esta dirección en su navegador:<br>
+    {{ t('magic_link.button_fallback') }}<br>
     {{ magic_link }}
 </p>
 {% endblock %}

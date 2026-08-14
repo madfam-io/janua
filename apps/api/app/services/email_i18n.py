@@ -16,9 +16,14 @@ Three moving parts live here so the email service stays about *sending*:
 Locale tags are normalized to a bare language subtag (`es-MX`, `es_419`,
 `ES-mx` all mean `es`), because a translation set is per-language; regional
 variants share it. The Spanish copy is written for es-MX specifically.
+
+Spanish additionally carries a *register* — how the reader is addressed. See
+the "Spanish formality" section below; `t()` resolves every Spanish string
+against the recipient's chosen register, so a template author picks a key and
+never picks a register.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from jinja2 import Environment, FileSystemLoader, pass_context
 
@@ -103,10 +108,79 @@ def template_candidates(template_name: str, locale: str) -> List[str]:
 
 
 # --------------------------------------------------------------------------
+# Spanish formality (register)
+#
+# Spanish forces a choice English does not: every sentence addressed at the
+# reader is either `tú` (informal) or `usted` (formal). There is no neutral
+# second person, so mail written in one register and read by someone who
+# expects the other lands as either presumptuous or cold — and that judgement
+# belongs to the reader, not to us.
+#
+# ONLY TWO REGISTERS ARE SUPPORTED, AND `vosotros` IS DELIBERATELY NOT ONE OF
+# THEM. `vosotros` is Peninsular Spanish; in Mexico it is not merely unused,
+# it reads as either foreign or comic — the register of a dubbed cartoon, not
+# of a clinic writing to its patients. The client this exists for is Mexican.
+# Please do not re-propose it: adding it would mean maintaining a third copy
+# of every string for an audience this platform does not have.
+# --------------------------------------------------------------------------
+FORMALITY_TU = "tu"
+FORMALITY_USTED = "usted"
+SPANISH_FORMALITIES: tuple = (FORMALITY_TU, FORMALITY_USTED)
+
+# `usted` is the default, and NULL on the user row means "has not chosen".
+# A first contact is with someone who has told us nothing about themselves;
+# `usted` is the register that is merely formal if wrong, where `tú` is
+# familiar if wrong. Formal-if-wrong is the cheaper error.
+DEFAULT_FORMALITY = FORMALITY_USTED
+
+
+def normalize_formality(raw: Any) -> Optional[str]:
+    """Reduce a stored/received formality value to a supported register.
+
+    Accepts the shapes that show up in practice: `tu`, `tú` (accented, as a
+    human would type it), `USTED`, surrounding whitespace. Returns None for
+    anything else — including `vosotros` — so callers fall through to the
+    next precedence tier instead of rendering a register nobody supports.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    value = raw.strip().lower().replace("ú", "u")
+    if value in SPANISH_FORMALITIES:
+        return value
+    return None
+
+
+def resolve_formality(explicit: Any = None, user: Any = None) -> str:
+    """Resolve the Spanish register for one recipient, highest precedence first.
+
+    1. `explicit` — what the caller passed. A caller that knows the audience
+       (an operator resending on someone's behalf) always wins.
+    2. `user.spanish_formality` — the recipient's stored choice. Nullable;
+       NULL means "has not chosen" and falls through rather than meaning `tú`.
+    3. `DEFAULT_FORMALITY` — `usted`.
+
+    Deliberately has no deployment-wide tier the way `resolve_locale` does:
+    register is a property of the reader, not of the installation.
+    """
+    for candidate in (
+        explicit,
+        getattr(user, "spanish_formality", None) if user is not None else None,
+    ):
+        normalized = normalize_formality(candidate)
+        if normalized:
+            return normalized
+    return DEFAULT_FORMALITY
+
+
+# --------------------------------------------------------------------------
 # Subjects
 #
 # Keyed by message so the call sites stop carrying English string literals.
 # es-MX business register: usted-form, "correo electrónico", "iniciar sesión".
+#
+# The `es` entries here are the USTED register. Their `tú` counterparts live
+# in SUBJECTS_ES_TU below; every one of these five subjects addresses the
+# reader, so every one of them has a counterpart.
 # --------------------------------------------------------------------------
 SUBJECTS: Dict[str, Dict[str, str]] = {
     "verification": {
@@ -131,20 +205,43 @@ SUBJECTS: Dict[str, Dict[str, str]] = {
     },
 }
 
+# `tú` subjects. Keyed identically to SUBJECTS; a message missing from here
+# falls back to its usted subject rather than to English.
+# tests/unit/services/test_email_formality.py fails if a key here has no
+# Spanish counterpart in SUBJECTS, or if a Spanish subject has no entry here.
+SUBJECTS_ES_TU: Dict[str, str] = {
+    "verification": "Verifica tu cuenta de Janua",
+    "password_reset": "Restablece tu contraseña de Janua",
+    "magic_link": "Tu enlace de acceso a Janua",
+    "welcome": "Te damos la bienvenida a Janua",
+    "invitation": "Te invitaron a unirse a {organization_name} en Janua",
+}
 
-def subject_for(message_key: str, locale: Optional[str] = None, **fields: Any) -> str:
-    """Return the localized subject for a message.
+
+def subject_for(
+    message_key: str,
+    locale: Optional[str] = None,
+    formality: Optional[str] = None,
+    **fields: Any,
+) -> str:
+    """Return the localized subject for a message, in the reader's register.
 
     Falls back to English when the locale has no translation for this
     message, and to the message key itself only if the key is unknown — an
     unknown key is a programming error, and a visible one beats an email with
     an empty subject line.
+
+    `formality` applies to Spanish only and is ignored for every other
+    language; an absent `tú` variant falls back to the usted subject, never
+    to English.
     """
     per_locale = SUBJECTS.get(message_key)
     if not per_locale:
         return message_key
     resolved = normalize_locale(locale) or FALLBACK_LOCALE
     template = per_locale.get(resolved) or per_locale[FALLBACK_LOCALE]
+    if resolved == "es" and normalize_formality(formality) == FORMALITY_TU:
+        template = SUBJECTS_ES_TU.get(message_key, template)
     if fields:
         try:
             return template.format(**fields)
@@ -182,15 +279,344 @@ CHROME: Dict[str, Dict[str, str]] = {
 }
 
 
-def chrome_string(key: str, locale: Optional[str] = None) -> str:
-    """Look up a shared header/footer string.
+# --------------------------------------------------------------------------
+# Spanish body copy
+#
+# Prose that ADDRESSES THE READER lives here rather than inline in the `es/`
+# templates, because that is the only prose whose wording changes with the
+# register. Register-neutral text — a button that reads "Iniciar sesión", a
+# field label, a sentence about the product in the third person — stays inline
+# in the template on purpose: lifting it here would create two entries to keep
+# in sync for a string that is byte-identical in both registers.
+#
+# The split is enforced, not conventional:
+# tests/unit/services/test_email_formality.py scans the visible text of every
+# `es/` template for second-person-formal markers and fails if any survive
+# outside a `t()` call.
+#
+# Keys are `<message>.<slot>`; `<message>.txt_<slot>` where the plain-text
+# part words or wraps something differently from the HTML part. Embedded "\n"
+# reproduces the hand-wrapping the .txt templates already had.
+# --------------------------------------------------------------------------
+ES_BODY: Dict[str, str] = {
+    # -- shared across messages ------------------------------------------
+    "common.need_help": "¿Necesita ayuda? Escríbanos a",
+    # -- magic_link -------------------------------------------------------
+    "magic_link.heading": "Inicie sesión en Janua",
+    "magic_link.intro": (
+        "Use el siguiente botón para iniciar sesión. No necesita contraseña: "
+        "el enlace le da acceso directo."
+    ),
+    "magic_link.security_notice": (
+        "Si usted no solicitó iniciar sesión, puede ignorar este correo electrónico: "
+        "el enlace está ligado a su dirección y no hace nada hasta que se abre. "
+        "Nunca lo reenvíe, ya que cualquier persona que lo tenga podría entrar a su "
+        "cuenta hasta que el enlace expire."
+    ),
+    "magic_link.button_fallback": "Si el botón no funciona, copie esta dirección en su navegador:",
+    "magic_link.txt_intro": "Inicie sesión en Janua con este enlace:",
+    "magic_link.txt_security_notice": (
+        "Si usted no solicitó iniciar sesión, puede ignorar este correo electrónico. Nunca\n"
+        "reenvíe este enlace: cualquier persona que lo tenga podría entrar a su cuenta hasta\n"
+        "que expire."
+    ),
+    # -- password_reset ---------------------------------------------------
+    "password_reset.heading": "Restablezca su contraseña",
+    "password_reset.intro": (
+        "Recibimos una solicitud para restablecer la contraseña de su cuenta de Janua. "
+        "Si usted hizo esta solicitud, use el código que aparece abajo o haga clic en el "
+        "botón para crear una contraseña nueva."
+    ),
+    "password_reset.code_label": "Su código para restablecer la contraseña:",
+    "password_reset.security_notice": (
+        "Si usted no solicitó restablecer su contraseña, es posible que alguien esté "
+        "intentando acceder a su cuenta. Le recomendamos:"
+    ),
+    "password_reset.tip_change_password": "Cambiar su contraseña de inmediato",
+    "password_reset.tip_review_activity": "Revisar la actividad reciente de su cuenta",
+    "password_reset.link_lifetime": (
+        "Por seguridad, este enlace expira en 30 minutos. Si necesita un enlace nuevo, "
+        "puede solicitarlo desde la página de inicio de sesión."
+    ),
+    "password_reset.txt_intro": (
+        "Recibimos una solicitud para restablecer la contraseña de su cuenta de Janua."
+    ),
+    "password_reset.txt_cta": "Restablezca su contraseña con este enlace:",
+    "password_reset.txt_ignore": (
+        "Si usted no solicitó restablecer su contraseña, puede ignorar este correo\n"
+        "electrónico. Su contraseña no se modificará."
+    ),
+    # -- verification -----------------------------------------------------
+    "verification.heading": "Verifique su correo electrónico",
+    "verification.intro": (
+        "Le damos la bienvenida a Janua. Verifique su dirección de correo electrónico "
+        "para terminar de configurar su cuenta y acceder a todas las funciones."
+    ),
+    "verification.code_label": "Su código de verificación:",
+    "verification.or_click": (
+        "O haga clic en el siguiente botón para verificar su correo electrónico:"
+    ),
+    "verification.why_title": "¿Por qué verificar su correo electrónico?",
+    "verification.why_body": (
+        "La verificación nos ayuda a proteger su cuenta y habilita funciones importantes "
+        "como la recuperación de contraseña y las notificaciones de seguridad."
+    ),
+    "verification.not_you": (
+        "Si usted no creó una cuenta en Janua, puede ignorar este correo electrónico."
+    ),
+    "verification.txt_intro": (
+        "Le damos la bienvenida a Janua. Verifique su dirección de correo electrónico para\n"
+        "terminar de configurar su cuenta y acceder a todas las funciones."
+    ),
+    "verification.txt_cta": "Verifique su correo electrónico con este enlace:",
+    "verification.txt_why_body": (
+        "La verificación nos ayuda a proteger su cuenta y habilita funciones importantes\n"
+        "como la recuperación de contraseña y las notificaciones de seguridad."
+    ),
+    # -- welcome ----------------------------------------------------------
+    "welcome.heading": "Le damos la bienvenida a Janua 🎉",
+    "welcome.intro": (
+        "Su cuenta de Janua se creó correctamente. Ya forma parte de una plataforma de "
+        "identidad segura en la que confían organizaciones de todo el mundo."
+    ),
+    "welcome.account_details": "Datos de su cuenta:",
+    "welcome.steps_intro": "Le sugerimos empezar por aquí para aprovechar Janua al máximo:",
+    "welcome.step_mfa_title": "Active la autenticación de dos factores",
+    "welcome.step_mfa_body": "Añada una capa adicional de seguridad a su cuenta",
+    "welcome.step_org_title": "Configure su organización",
+    "welcome.step_org_body": "Invite a su equipo y defina roles y permisos",
+    "welcome.step_integrate_title": "Intégrelo con su aplicación",
+    "welcome.step_integrate_body": (
+        "Use nuestros SDK para añadir autenticación a sus aplicaciones"
+    ),
+    "welcome.step_passkeys_title": "Habilite las llaves de acceso",
+    "welcome.step_passkeys_body": "Configure el acceso sin contraseña para mayor seguridad",
+    "welcome.help_title": "¿Necesita ayuda?",
+    "welcome.help_body": "Nuestro equipo está a sus órdenes:",
+    "welcome.help_support": "Reciba ayuda de nuestro equipo",
+    "welcome.thanks": (
+        "Gracias por elegir Janua. Nos da gusto acompañarle en la seguridad de su plataforma."
+    ),
+    "welcome.txt_intro": (
+        "Le damos la bienvenida a Janua. Su cuenta se creó y se verificó correctamente."
+    ),
+    "welcome.txt_dashboard_cta": "Comience por su panel:",
+    "welcome.txt_capabilities": "Lo que puede hacer con Janua:",
+    "welcome.txt_capability_identity": "Administrar su identidad digital",
+    "welcome.txt_capability_privacy": "Controlar sus datos y su privacidad",
+    "welcome.txt_help": (
+        "¿Necesita ayuda para empezar? Consulte nuestra documentación o escríbanos a"
+    ),
+    "welcome.txt_closing": "Nos da mucho gusto tenerle con nosotros.",
+    # -- invitation -------------------------------------------------------
+    "invitation.heading": "Le invitaron a colaborar",
+    # Sentence fragment on purpose: the inviter and organization names are
+    # wrapped in <strong> in the HTML, so the sentence cannot be one string
+    # without either escaping the markup or marking user-supplied names
+    # |safe. The fragment is grammatically stable in both registers.
+    "invitation.invited_to_join": "le invitó a unirse a",
+    "invitation.txt_invited_to_join": "Le invitaron a unirse a",
+    "invitation.accept_before": "Le pedimos aceptarla antes de esa fecha.",
+    "invitation.button_fallback": (
+        "Si el botón anterior no funciona, copie y pegue esta dirección en su navegador:"
+    ),
+    "invitation.questions": "¿Tiene alguna duda? Escriba a",
+    "invitation.txt_open_link": "Abra el siguiente enlace para aceptar su invitación:",
+    "invitation.txt_questions": "¿Tiene alguna duda? Escríbanos a",
+}
+
+# Every Spanish string a template can ask for, in the USTED register. Built
+# from CHROME so the shared frame and the body copy resolve through one map.
+ES_STRINGS: Dict[str, str] = {**CHROME["es"], **ES_BODY}
+
+# --------------------------------------------------------------------------
+# `tú` variants.
+#
+# ONLY the keys whose wording actually differs. A key absent from here falls
+# back to its usted string at render time, so a missing variant degrades to
+# the safe register rather than to a blank paragraph — but it cannot be
+# missing by accident: ES_STRINGS must partition exactly into
+# `set(ES_TU) | ES_REGISTER_NEUTRAL`, and the test fails on any key that is
+# in neither.
+#
+# NOTE ON PRONOUN DROPPING. Where the usted copy spells out the subject
+# pronoun ("Si USTED no solicitó..."), the tú copy drops it ("Si no
+# solicitaste..."). This is not an oversight. In usted the pronoun does real
+# work — "solicitó" alone is also third person, so without it the sentence
+# could be read as being about someone else. "Solicitaste" is unambiguous, and
+# an explicit "tú" there reads contrastive/emphatic, as if arguing with the
+# reader. Dropping it is what a Mexican writer would do.
+# --------------------------------------------------------------------------
+ES_TU: Dict[str, str] = {
+    # -- chrome -----------------------------------------------------------
+    "why_received": "Recibiste este correo electrónico porque tienes una cuenta en Janua.",
+    # -- shared -----------------------------------------------------------
+    "common.need_help": "¿Necesitas ayuda? Escríbenos a",
+    # -- magic_link -------------------------------------------------------
+    "magic_link.heading": "Inicia sesión en Janua",
+    "magic_link.intro": (
+        "Usa el siguiente botón para iniciar sesión. No necesitas contraseña: "
+        "el enlace te da acceso directo."
+    ),
+    "magic_link.security_notice": (
+        "Si no solicitaste iniciar sesión, puedes ignorar este correo electrónico: "
+        "el enlace está ligado a tu dirección y no hace nada hasta que se abre. "
+        "Nunca lo reenvíes, ya que cualquier persona que lo tenga podría entrar a tu "
+        "cuenta hasta que el enlace expire."
+    ),
+    "magic_link.button_fallback": "Si el botón no funciona, copia esta dirección en tu navegador:",
+    "magic_link.txt_intro": "Inicia sesión en Janua con este enlace:",
+    "magic_link.txt_security_notice": (
+        "Si no solicitaste iniciar sesión, puedes ignorar este correo electrónico. Nunca\n"
+        "reenvíes este enlace: cualquier persona que lo tenga podría entrar a tu cuenta hasta\n"
+        "que expire."
+    ),
+    # -- password_reset ---------------------------------------------------
+    "password_reset.heading": "Restablece tu contraseña",
+    "password_reset.intro": (
+        "Recibimos una solicitud para restablecer la contraseña de tu cuenta de Janua. "
+        "Si hiciste esta solicitud, usa el código que aparece abajo o haz clic en el "
+        "botón para crear una contraseña nueva."
+    ),
+    "password_reset.code_label": "Tu código para restablecer la contraseña:",
+    "password_reset.security_notice": (
+        "Si no solicitaste restablecer tu contraseña, es posible que alguien esté "
+        "intentando acceder a tu cuenta. Te recomendamos:"
+    ),
+    "password_reset.tip_change_password": "Cambiar tu contraseña de inmediato",
+    "password_reset.tip_review_activity": "Revisar la actividad reciente de tu cuenta",
+    "password_reset.link_lifetime": (
+        "Por seguridad, este enlace expira en 30 minutos. Si necesitas un enlace nuevo, "
+        "puedes solicitarlo desde la página de inicio de sesión."
+    ),
+    "password_reset.txt_intro": (
+        "Recibimos una solicitud para restablecer la contraseña de tu cuenta de Janua."
+    ),
+    "password_reset.txt_cta": "Restablece tu contraseña con este enlace:",
+    "password_reset.txt_ignore": (
+        "Si no solicitaste restablecer tu contraseña, puedes ignorar este correo\n"
+        "electrónico. Tu contraseña no se modificará."
+    ),
+    # -- verification -----------------------------------------------------
+    "verification.heading": "Verifica tu correo electrónico",
+    "verification.intro": (
+        "Te damos la bienvenida a Janua. Verifica tu dirección de correo electrónico "
+        "para terminar de configurar tu cuenta y acceder a todas las funciones."
+    ),
+    "verification.code_label": "Tu código de verificación:",
+    "verification.or_click": (
+        "O haz clic en el siguiente botón para verificar tu correo electrónico:"
+    ),
+    "verification.why_title": "¿Por qué verificar tu correo electrónico?",
+    "verification.why_body": (
+        "La verificación nos ayuda a proteger tu cuenta y habilita funciones importantes "
+        "como la recuperación de contraseña y las notificaciones de seguridad."
+    ),
+    "verification.not_you": (
+        "Si no creaste una cuenta en Janua, puedes ignorar este correo electrónico."
+    ),
+    "verification.txt_intro": (
+        "Te damos la bienvenida a Janua. Verifica tu dirección de correo electrónico para\n"
+        "terminar de configurar tu cuenta y acceder a todas las funciones."
+    ),
+    "verification.txt_cta": "Verifica tu correo electrónico con este enlace:",
+    "verification.txt_why_body": (
+        "La verificación nos ayuda a proteger tu cuenta y habilita funciones importantes\n"
+        "como la recuperación de contraseña y las notificaciones de seguridad."
+    ),
+    # -- welcome ----------------------------------------------------------
+    "welcome.heading": "Te damos la bienvenida a Janua 🎉",
+    "welcome.intro": (
+        "Tu cuenta de Janua se creó correctamente. Ya formas parte de una plataforma de "
+        "identidad segura en la que confían organizaciones de todo el mundo."
+    ),
+    "welcome.account_details": "Datos de tu cuenta:",
+    "welcome.steps_intro": "Te sugerimos empezar por aquí para aprovechar Janua al máximo:",
+    "welcome.step_mfa_title": "Activa la autenticación de dos factores",
+    "welcome.step_mfa_body": "Añade una capa adicional de seguridad a tu cuenta",
+    "welcome.step_org_title": "Configura tu organización",
+    "welcome.step_org_body": "Invita a tu equipo y define roles y permisos",
+    "welcome.step_integrate_title": "Intégralo con tu aplicación",
+    "welcome.step_integrate_body": "Usa nuestros SDK para añadir autenticación a tus aplicaciones",
+    "welcome.step_passkeys_title": "Habilita las llaves de acceso",
+    "welcome.step_passkeys_body": "Configura el acceso sin contraseña para mayor seguridad",
+    "welcome.help_title": "¿Necesitas ayuda?",
+    # "a tus órdenes" is idiomatic in Mexico in exactly the same courtesy
+    # slot as "a sus órdenes"; it is not a literal-but-odd calque.
+    "welcome.help_body": "Nuestro equipo está a tus órdenes:",
+    "welcome.help_support": "Recibe ayuda de nuestro equipo",
+    "welcome.thanks": (
+        "Gracias por elegir Janua. Nos da gusto acompañarte en la seguridad de tu plataforma."
+    ),
+    "welcome.txt_intro": (
+        "Te damos la bienvenida a Janua. Tu cuenta se creó y se verificó correctamente."
+    ),
+    "welcome.txt_dashboard_cta": "Comienza por tu panel:",
+    "welcome.txt_capabilities": "Lo que puedes hacer con Janua:",
+    "welcome.txt_capability_identity": "Administrar tu identidad digital",
+    "welcome.txt_capability_privacy": "Controlar tus datos y tu privacidad",
+    "welcome.txt_help": (
+        "¿Necesitas ayuda para empezar? Consulta nuestra documentación o escríbenos a"
+    ),
+    "welcome.txt_closing": "Nos da mucho gusto tenerte con nosotros.",
+    # -- invitation -------------------------------------------------------
+    "invitation.heading": "Te invitaron a colaborar",
+    "invitation.invited_to_join": "te invitó a unirse a",
+    "invitation.txt_invited_to_join": "Te invitaron a unirse a",
+    "invitation.accept_before": "Te pedimos aceptarla antes de esa fecha.",
+    "invitation.button_fallback": (
+        "Si el botón anterior no funciona, copia y pega esta dirección en tu navegador:"
+    ),
+    "invitation.questions": "¿Tienes alguna duda? Escribe a",
+    "invitation.txt_open_link": "Abre el siguiente enlace para aceptar tu invitación:",
+    "invitation.txt_questions": "¿Tienes alguna duda? Escríbenos a",
+}
+
+# --------------------------------------------------------------------------
+# Register-neutral Spanish keys.
+#
+# These are byte-identical in `tú` and `usted` — they name a thing rather than
+# address the reader — so they are DELIBERATELY NOT duplicated into ES_TU.
+# Duplicating them would mean two strings to keep in sync with no
+# reader-visible difference between them.
+#
+# This set is not documentation: it is half of the partition the tests check.
+# Adding a Spanish key without either a `tú` variant or a line here fails
+# tests/unit/services/test_email_formality.py, which is the point — a
+# register-sensitive string cannot reach a reader unreviewed.
+# --------------------------------------------------------------------------
+ES_REGISTER_NEUTRAL: Set[str] = {
+    "tagline",  # "Plataforma de identidad segura" — names the product
+    "rights",  # "Todos los derechos reservados." — boilerplate, no addressee
+    "privacy",  # "Aviso de privacidad" — the name of a document
+    "terms",  # "Términos del servicio" — the name of a document
+    "support",  # "Soporte" — a noun
+    "location",  # a postal address
+}
+
+
+def chrome_string(key: str, locale: Optional[str] = None, formality: Optional[str] = None) -> str:
+    """Look up a localized string by key: shared chrome or Spanish body copy.
 
     Defaults to English when no locale is in scope so that rendering a
     template directly — without going through the service, as the template
     guards in the test suite do — produces exactly the frame it produced
     before localization existed.
+
+    For Spanish, `formality` selects the register. An absent `tú` variant
+    falls back to the usted string, NEVER to English: a Spanish reader who
+    asked for `tú` and hits an untranslated key should get slightly formal
+    Spanish, not a language they did not ask for.
     """
     resolved = normalize_locale(locale) or FALLBACK_LOCALE
+    if resolved == "es":
+        if normalize_formality(formality) == FORMALITY_TU:
+            informal = ES_TU.get(key)
+            if informal is not None:
+                return informal
+        formal = ES_STRINGS.get(key)
+        if formal is not None:
+            return formal
     return CHROME.get(resolved, CHROME[FALLBACK_LOCALE]).get(
         key, CHROME[FALLBACK_LOCALE].get(key, "")
     )
@@ -205,14 +631,17 @@ def html_lang(locale: Optional[str] = None) -> str:
 
 @pass_context
 def _chrome_global(ctx, key: str) -> str:
-    """`t('key')` inside a template: the shared header/footer strings.
+    """`t('key')` inside a template: any localized string, by key.
 
     Context-aware so base.html renders in the same language as the body
     without every template forwarding the locale explicitly. With no locale in
     context — a template rendered directly rather than through a service —
     this yields the English frame the templates had before localization.
+
+    The register is read from context the same way, so a template author picks
+    a key and never picks a register; `formality` absent means `usted`.
     """
-    return chrome_string(key, ctx.get("locale"))
+    return chrome_string(key, ctx.get("locale"), ctx.get("formality"))
 
 
 @pass_context

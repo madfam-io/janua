@@ -1,20 +1,23 @@
 {% extends "base.html" %}
 
+{# Prose that addresses the reader goes through t() and follows the tú/usted
+   choice; register-neutral text stays inline. See es/magic_link.html. #}
+
 {% block content %}
-<h2 style="color: #1f2937; margin: 0 0 20px 0;">Verifique su correo electrónico</h2>
+<h2 style="color: #1f2937; margin: 0 0 20px 0;">{{ t('verification.heading') }}</h2>
 
 <p style="margin: 0 0 20px 0;">
     Hola {{ user_name }}:
 </p>
 
 <p style="margin: 0 0 20px 0;">
-    Le damos la bienvenida a Janua. Verifique su dirección de correo electrónico para terminar de configurar su cuenta y acceder a todas las funciones.
+    {{ t('verification.intro') }}
 </p>
 
 {% if verification_code %}
 <div class="code-box">
     <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">
-        Su código de verificación:
+        {{ t('verification.code_label') }}
     </p>
     <div class="code">{{ verification_code }}</div>
     <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 12px;">
@@ -24,7 +27,7 @@
 {% endif %}
 
 <p style="margin: 0 0 20px 0; text-align: center;">
-    O haga clic en el siguiente botón para verificar su correo electrónico:
+    {{ t('verification.or_click') }}
 </p>
 
 <div style="text-align: center;">
@@ -32,11 +35,11 @@
 </div>
 
 <div class="info">
-    <strong>¿Por qué verificar su correo electrónico?</strong><br>
-    La verificación nos ayuda a proteger su cuenta y habilita funciones importantes como la recuperación de contraseña y las notificaciones de seguridad.
+    <strong>{{ t('verification.why_title') }}</strong><br>
+    {{ t('verification.why_body') }}
 </div>
 
 <p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px;">
-    Si usted no creó una cuenta en Janua, puede ignorar este correo electrónico.
+    {{ t('verification.not_you') }}
 </p>
 {% endblock %}
