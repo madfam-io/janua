@@ -1,6 +1,6 @@
 Hola {{ user_name }}:
 
-Inicie sesión en Janua con este enlace:
+Inicie sesión en su portal con este enlace:
 {{ magic_url }}
 
 Este enlace funciona una sola vez y expira en 15 minutos.

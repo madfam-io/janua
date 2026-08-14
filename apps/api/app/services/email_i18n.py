@@ -118,8 +118,8 @@ SUBJECTS: Dict[str, Dict[str, str]] = {
         "es": "Restablezca su contraseña de Janua",
     },
     "magic_link": {
-        "en": "Your Janua sign-in link",
-        "es": "Su enlace de acceso a Janua",
+        "en": "Your sign-in link",
+        "es": "Su enlace de acceso",
     },
     "welcome": {
         "en": "Welcome to Janua!",
@@ -174,7 +174,7 @@ CHROME: Dict[str, Dict[str, str]] = {
         "location": "Innovaciones MADFAM S.A.S. de C.V. • Cuernavaca, Morelos, Mexico",
     },
     "es": {
-        "tagline": "Tecnología, diseñada para tu operación",
+        "tagline": "Tecnología, diseñada para su operación",
         "rights": "Todos los derechos reservados.",
         # "Con tecnología de" is the standard es-MX rendering of "Powered by".
         # "Impulsado por" reads as marketing; this reads as an attribution.

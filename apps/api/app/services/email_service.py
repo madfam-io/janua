@@ -402,9 +402,9 @@ class EmailService:
         if "magic_link" in template_name:
             url = data.get("magic_url", "")
             return (
-                f"Inicie sesión en Janua aquí: {url}"
+                f"Inicie sesión en su portal aquí: {url}"
                 if spanish
-                else f"Sign in to Janua by clicking: {url}"
+                else f"Sign in to your portal by clicking: {url}"
             )
         if "password_reset" in template_name:
             url = data.get("reset_url", "")
