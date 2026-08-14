@@ -59,8 +59,12 @@ class InvitationService:
             raise ValueError("Organization not found")
 
         # The caller must administer THIS organization — as its owner, or via
-        # an admin/owner membership row.
-        is_owner = str(getattr(organization, "owner_id", "")) == str(invited_by.id)
+        # an admin/owner membership row. Both ids must be present before they
+        # can match: an ownerless organization and an id-less caller would
+        # otherwise compare equal as "None" and grant access to neither party's
+        # organization.
+        owner_id = getattr(organization, "owner_id", None)
+        is_owner = bool(owner_id) and bool(invited_by.id) and str(owner_id) == str(invited_by.id)
         if not is_owner:
             admin_membership = (
                 self.db.query(OrganizationMember)

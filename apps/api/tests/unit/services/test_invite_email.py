@@ -282,3 +282,33 @@ class TestCreate:
         with pytest.raises(ValueError):
             await self._create(service, inviter_id="u-1")
         service.email_service._send_email.assert_not_awaited()
+
+    async def test_ownerless_org_refused(self):
+        # An ownerless organization and an id-less caller must not compare
+        # equal as "None" and grant each other access.
+        service = self._service(owner_id=None)
+        organization = MagicMock()
+        organization.id = "22222222-2222-2222-2222-222222222222"
+        organization.owner_id = None
+        service.db.query.return_value.filter.return_value.first.side_effect = [
+            organization,
+            None,  # no admin membership
+        ]
+        inviter = MagicMock()
+        inviter.id = None
+        inviter.email = "ada@example.com"
+        inviter.name = "Ada Lovelace"
+        from app.models.invitation import InvitationCreate
+
+        with pytest.raises(ValueError):
+            await service.create_invitation(
+                InvitationCreate(
+                    organization_id="22222222-2222-2222-2222-222222222222",
+                    email="invitee@example.com",
+                    role="admin",
+                    expires_in=7,
+                ),
+                inviter,
+                "tenant-1",
+            )
+        service.email_service._send_email.assert_not_awaited()
