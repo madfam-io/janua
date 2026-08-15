@@ -47,8 +47,11 @@ async def test_redirect_host_with_existing_query_appends_with_ampersand():
             "tok",
             redirect_url="https://ensayo.madfam.io/portal/verify?next=%2Ffacturas",
         )
+    # HTML entity-escapes the ampersand; the plain-text body carries it raw.
     html = send.await_args.kwargs["html_content"]
-    assert "https://ensayo.madfam.io/portal/verify?next=%2Ffacturas&token=tok" in html
+    text = send.await_args.kwargs["text_content"]
+    assert "https://ensayo.madfam.io/portal/verify?next=%2Ffacturas&amp;token=tok" in html
+    assert "https://ensayo.madfam.io/portal/verify?next=%2Ffacturas&token=tok" in text
 
 
 @pytest.mark.asyncio
