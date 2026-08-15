@@ -1872,8 +1872,18 @@ async def _session_audience_for_redirect(db: Session, redirect_url: Optional[str
         )
     )
     for client in result.scalars():
-        for uri in client.redirect_uris or []:
-            if urlparse(uri).hostname == host:
+        uris = client.redirect_uris or []
+        # Some prod rows store the array double-encoded — a JSON string
+        # CONTAINING the array — and iterating a string yields characters,
+        # which would make this resolver silently match nothing. Same
+        # tolerance the OAuth recovery path above applies.
+        if isinstance(uris, str):
+            try:
+                uris = json.loads(uris)
+            except json.JSONDecodeError:
+                uris = []
+        for uri in uris:
+            if isinstance(uri, str) and urlparse(uri).hostname == host:
                 return client.audience
     return None
 

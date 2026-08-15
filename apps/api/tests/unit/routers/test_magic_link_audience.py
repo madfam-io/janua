@@ -44,6 +44,20 @@ async def test_resolves_audience_by_redirect_host_not_full_uri():
 
 
 @pytest.mark.asyncio
+async def test_double_encoded_redirect_uris_still_resolve():
+    """Some prod rows store redirect_uris as a JSON string CONTAINING the
+    array (both nauta clients did, 2026-08-15). Iterating that string yields
+    characters; the resolver must decode it or silently match nothing."""
+    db = _db_returning(
+        [_client("nauta-portal", '["https://crea.madfam.io/api/auth/callback/janua"]')]
+    )
+    audience = await _session_audience_for_redirect(
+        db, "https://crea.madfam.io/portal/verify"
+    )
+    assert audience == "nauta-portal"
+
+
+@pytest.mark.asyncio
 async def test_unknown_host_keeps_the_platform_default():
     db = _db_returning([_client("nauta-portal", ["https://crea.madfam.io/cb"])])
     assert await _session_audience_for_redirect(db, "https://other.example.com/x") is None
