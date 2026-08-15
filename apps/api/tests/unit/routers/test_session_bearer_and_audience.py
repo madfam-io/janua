@@ -10,11 +10,23 @@ Two halves of the same 2026-08-15 rehearsal finding:
 """
 
 import inspect
+from contextlib import contextmanager
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.routers.v1 import auth
 from app.services.auth_service import AuthService
+
+
+@contextmanager
+def _no_blacklist():
+    """verify_token consults redis for the JTI blacklist; unit tests have no
+    redis, and an unmocked call dies on `None.get` before the verdict."""
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    with patch("app.services.auth_service.get_redis", AsyncMock(return_value=redis)):
+        yield
 
 
 def test_session_endpoint_reads_bearer_when_no_cookie():
@@ -32,7 +44,8 @@ async def test_verify_token_accepts_a_per_client_audience():
         email="a@b.test",
         audience="nauta-portal",
     )
-    payload = await AuthService.verify_token(token, token_type="access")
+    with _no_blacklist():
+        payload = await AuthService.verify_token(token, token_type="access")
     assert payload is not None
     assert payload["aud"] == "nauta-portal"
 
@@ -46,7 +59,8 @@ async def test_verify_token_still_accepts_the_platform_audience():
         tenant_id="00000000-0000-0000-0000-000000000002",
         email="a@b.test",
     )
-    payload = await AuthService.verify_token(token, token_type="access")
+    with _no_blacklist():
+        payload = await AuthService.verify_token(token, token_type="access")
     assert payload is not None
     assert payload["aud"] == settings.JWT_AUDIENCE
 
