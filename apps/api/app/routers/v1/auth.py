@@ -470,11 +470,19 @@ async def check_session(
         - 200 with user info if session is valid
         - 401 if no session or invalid token
     """
-    # Try to get access token from cookies
+    # Cookie first (browser SSO), then the Authorization header: products ask
+    # this endpoint about a token they hold server-side — nauta's invitation
+    # redemption did, and every such call 401'd here for want of a cookie the
+    # server never had (found live 2026-08-15). The bearer token answers for
+    # itself exactly as the cookie does; nothing else changes.
     access_token = request.cookies.get("access_token")
+    if not access_token:
+        authorization = request.headers.get("authorization", "")
+        if authorization.lower().startswith("bearer "):
+            access_token = authorization[7:].strip()
 
     if not access_token:
-        raise HTTPException(status_code=401, detail="No session cookie found")
+        raise HTTPException(status_code=401, detail="No session cookie or bearer token found")
 
     # Validate access token
     payload = AuthService.verify_token(access_token, token_type="access")

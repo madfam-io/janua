@@ -471,13 +471,32 @@ class AuthService:
                 # RS256 requested but no public key, fall back to HS256
                 algorithm = "HS256"
 
-            payload = jwt.decode(
-                token,
-                verify_key,
-                algorithms=[algorithm],
-                audience=settings.JWT_AUDIENCE,
-                issuer=settings.JWT_ISSUER,
-            )
+            try:
+                payload = jwt.decode(
+                    token,
+                    verify_key,
+                    algorithms=[algorithm],
+                    audience=settings.JWT_AUDIENCE,
+                    issuer=settings.JWT_ISSUER,
+                )
+            except jwt.InvalidAudienceError:
+                # Janua is the ISSUER validating its own tokens here, and it
+                # mints more than one audience: magic-link sessions carry the
+                # audience of the product they forward to (per-client, e.g.
+                # nauta-portal) — see _session_audience_for_redirect. Audience
+                # restriction exists for RESOURCE SERVERS deciding which
+                # tokens to accept; the issuer accepts every audience it
+                # minted, still enforcing signature, issuer, expiry and type.
+                payload = jwt.decode(
+                    token,
+                    verify_key,
+                    algorithms=[algorithm],
+                    issuer=settings.JWT_ISSUER,
+                    options={"verify_aud": False},
+                )
+                if not isinstance(payload.get("aud"), str) or not payload.get("aud"):
+                    logger.warning("Token carries no usable audience claim")
+                    return None
 
             if payload.get("type") != token_type:
                 logger.warning("Token type mismatch", expected=token_type, got=payload.get("type"))
