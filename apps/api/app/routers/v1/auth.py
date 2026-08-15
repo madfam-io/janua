@@ -1843,6 +1843,51 @@ async def send_magic_link(
     return {"message": "Magic link sent to email"}
 
 
+async def _session_audience_for_redirect(db: Session, redirect_url: Optional[str]) -> Optional[str]:
+    """The per-client audience for a magic-link session, from the redirect host.
+
+    A magic link that forwards to a product should mint a session that
+    product's verifier accepts — the audience registered on the OAuth client
+    whose redirect_uris share the destination's host. Matching is by HOST, not
+    full URI: the magic-link redirect (`/portal/verify`) is not an OAuth
+    callback path, but the host names the same product. The redirect_url was
+    already allowlist-validated when the link was requested; this only decides
+    which registered audience the session carries.
+
+    None (no redirect, no host match, or client without an audience) keeps the
+    platform default — exactly what every session minted before this existed.
+    """
+    if not redirect_url:
+        return None
+    host = urlparse(redirect_url).hostname
+    if not host:
+        return None
+
+    from ...models import OAuthClient as _OAuthClient
+
+    result = await db.execute(
+        select(_OAuthClient).where(
+            _OAuthClient.is_active == True,  # noqa: E712 — SQLAlchemy comparator
+            _OAuthClient.audience.isnot(None),
+        )
+    )
+    for client in result.scalars():
+        uris = client.redirect_uris or []
+        # Some prod rows store the array double-encoded — a JSON string
+        # CONTAINING the array — and iterating a string yields characters,
+        # which would make this resolver silently match nothing. Same
+        # tolerance the OAuth recovery path above applies.
+        if isinstance(uris, str):
+            try:
+                uris = json.loads(uris)
+            except json.JSONDecodeError:
+                uris = []
+        for uri in uris:
+            if isinstance(uri, str) and urlparse(uri).hostname == host:
+                return client.audience
+    return None
+
+
 @router.get("/magic-link/callback")
 async def magic_link_callback(
     token: Optional[str] = None,
@@ -1898,6 +1943,7 @@ async def magic_link_callback(
     access_token, _refresh_token, _session = await AuthService.create_session(
         db, user, ip_address=req.client.host if req and req.client else None,
         user_agent=req.headers.get("user-agent") if req else None,
+        audience=await _session_audience_for_redirect(db, magic_link.redirect_url),
     )
 
     # Signing in by emailed link proves control of the mailbox.
@@ -1955,9 +2001,10 @@ async def verify_magic_link(
     # Mark magic link as used
     magic_link.used_at = datetime.utcnow()
 
-    # Create session
+    # Create session, with the audience of the product the link forwards to.
     access_token, refresh_token, session = await AuthService.create_session(
-        db, user, ip_address=req.client.host, user_agent=req.headers.get("user-agent")
+        db, user, ip_address=req.client.host, user_agent=req.headers.get("user-agent"),
+        audience=await _session_audience_for_redirect(db, magic_link.redirect_url),
     )
 
     # Log activity

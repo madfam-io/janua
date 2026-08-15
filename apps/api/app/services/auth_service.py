@@ -168,8 +168,16 @@ class AuthService:
         tenant_id: str,
         organization_id: Optional[str] = None,
         email: Optional[str] = None,
+        audience: Optional[str] = None,
     ) -> Tuple[str, str, datetime]:
-        """Create JWT access token"""
+        """Create JWT access token.
+
+        `audience` overrides the platform default `aud` claim. The OIDC path
+        has always minted per-client audiences; passing it here lets the
+        magic-link flow do the same, so a session created for a product's
+        redirect host carries THAT product's audience instead of the platform
+        default the product's verifier has no reason to accept.
+        """
         jti = secrets.token_urlsafe(32)
         expires_at = datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
 
@@ -181,7 +189,7 @@ class AuthService:
             "exp": expires_at,
             "iat": datetime.utcnow(),
             "iss": settings.JWT_ISSUER,
-            "aud": settings.JWT_AUDIENCE,
+            "aud": audience or settings.JWT_AUDIENCE,
         }
 
         if organization_id:
@@ -337,6 +345,7 @@ class AuthService:
         device_name: Optional[str] = None,
         invalidate_existing: bool = False,
         enforce_session_limit: bool = True,
+        audience: Optional[str] = None,
     ) -> Tuple[str, str, Session]:
         """Create a new session with tokens.
 
@@ -401,7 +410,10 @@ class AuthService:
 
         # Create tokens
         access_token, access_jti, access_expires = AuthService.create_access_token(
-            user_id=str(user.id), tenant_id=str(user.tenant_id), email=user.email
+            user_id=str(user.id),
+            tenant_id=str(user.tenant_id),
+            email=user.email,
+            audience=audience,
         )
 
         refresh_token, refresh_jti, family, refresh_expires = AuthService.create_refresh_token(
