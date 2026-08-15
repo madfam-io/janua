@@ -25,7 +25,7 @@ never picks a register.
 
 from typing import Any, Dict, List, Optional, Set
 
-from jinja2 import Environment, FileSystemLoader, pass_context
+from jinja2 import Environment, FileSystemLoader, pass_context, select_autoescape
 
 # Languages that have a full translation set. Order is not significant.
 SUPPORTED_LOCALES: tuple = ("es", "en")
@@ -696,7 +696,20 @@ def install_template_globals(env: Environment) -> Environment:
 
 
 def build_email_environment(template_dir: Any) -> Environment:
-    """The Jinja environment for `templates/email`, globals included."""
+    """The Jinja environment for `templates/email`, globals included.
+
+    Autoescape by EXTENSION, not unconditionally: `autoescape=True` was
+    HTML-escaping the plain-text bodies too, so the .txt part of every email
+    carried `&amp;` inside its URLs — and a recipient copying the "if the
+    button doesn't work" address out of a text-mode client pasted a link
+    whose query string literally began `amp;token=` (found 2026-08-15 by the
+    magic-link destination tests). Entities belong in markup only.
+    """
     return install_template_globals(
-        Environment(loader=FileSystemLoader(template_dir), autoescape=True)
+        Environment(
+            loader=FileSystemLoader(template_dir),
+            autoescape=select_autoescape(
+                enabled_extensions=("html", "htm", "xml"), default=False
+            ),
+        )
     )
