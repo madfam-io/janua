@@ -1801,6 +1801,16 @@ async def send_magic_link(
     magic_token = secrets.token_urlsafe(32)
     magic_link = MagicLink(
         user_id=user.id,
+        # The model declares email NOT NULL and this constructor never set it,
+        # so the moment migration backlog 003-011 landed in production
+        # (2026-08-15) every plain magic-link send 503'd with a
+        # NotNullViolation — found live, mid-rehearsal, on the first send of
+        # the CTM ceremony walkthrough. The stored, verified address is the
+        # right value: the request's raw input may differ in case or alias
+        # form, and the row is an audit record of who was actually mailed.
+        # (Prod's NOT NULL was dropped as the same-day unblock; restore it in
+        # a later migration once this code is promoted and NULLs backfilled.)
+        email=user.email,
         token=magic_token,
         redirect_url=safe_redirect_url,  # Use validated URL
         expires_at=datetime.utcnow() + timedelta(minutes=15),
