@@ -495,15 +495,27 @@ class EmailService:
     ) -> bool:
         """Send a passwordless sign-in link.
 
-        The link points at Janua's own GET callback rather than at the product
-        page: a clicked link is a GET, and only Janua can trade the one-time
-        magic token for a session. The callback then forwards to redirect_url
-        (already allowlist-validated when the link was requested).
+        When the request named a redirect_url (allowlist-validated at request
+        time), the emailed link lives on THAT host: the recipient clicks a URL
+        on the product's own domain and the product exchanges the one-time
+        token via POST /api/v1/auth/magic-link/verify. A first-contact email
+        whose link points at api.janua.dev reads as phishing next to the
+        product the client was just told to trust; the sender, the link, and
+        the destination must all agree.
+
+        Without a redirect_url the link falls back to Janua's own GET callback
+        — a clicked link is a GET, and only Janua can trade the token then.
         """
         recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
         recipient_formality = resolve_formality(formality, user=user)
-        callback = f"{settings.API_BASE_URL or settings.BASE_URL}/api/v1/auth/magic-link/callback"
-        magic_url = f"{callback}?token={magic_token}"
+        if redirect_url:
+            separator = "&" if "?" in redirect_url else "?"
+            magic_url = f"{redirect_url}{separator}token={magic_token}"
+        else:
+            callback = (
+                f"{settings.API_BASE_URL or settings.BASE_URL}/api/v1/auth/magic-link/callback"
+            )
+            magic_url = f"{callback}?token={magic_token}"
 
         template_data = {
             "user_name": email.split("@")[0],
