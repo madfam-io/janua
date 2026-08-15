@@ -1791,11 +1791,24 @@ async def send_magic_link(
         await db.commit()
         await db.refresh(user)
 
-    # SECURITY: Validate the redirect URL to prevent open redirect attacks
+    # SECURITY: Validate the redirect URL to prevent open redirect attacks.
+    # A supplied-but-disallowed destination is a 400 HERE, not a silent None:
+    # the emailed link is built ON the destination host, so nulling it would
+    # mail a link that signs the user in and then dead-ends — a failure the
+    # requesting product cannot see and the recipient cannot fix. (Found live
+    # 2026-08-15: the rehearsal host was missing from CORS_ORIGINS and the
+    # first client-ceremony walkthrough ended on the recovery page.)
     safe_redirect_url = None
     if magic_link_data.redirect_url:
         safe_redirect_url = validate_redirect_url(magic_link_data.redirect_url, default_url=None)
-        # If validation failed (returned None), we simply won't include a redirect
+        if safe_redirect_url is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "redirect_url host is not on the allowed list; "
+                    "add it to CORS_ORIGINS before requesting links for it"
+                ),
+            )
 
     # Create magic link token
     magic_token = secrets.token_urlsafe(32)
