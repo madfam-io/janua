@@ -184,6 +184,30 @@ EMAIL_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "optional": ["app_name", "next_steps", "dashboard_url"],
         "subject": "You're all set up!",
     },
+    # Engagement lifecycle (Nauta). The client-facing template takes fully
+    # composed Spanish lines: Nauta owns the tú/usted register system, and
+    # this renderer is plain string substitution — no conditionals here.
+    "transactional/agreement-accepted": {
+        "description": "Service agreement accepted — operator notification (Nauta)",
+        "required": ["workspace_name", "accepted_by", "accepted_at", "checksum", "cockpit_url"],
+        "optional": [],
+        "subject": "Agreement accepted — {workspace_name}",
+    },
+    "transactional/workspace-activated": {
+        "description": "Workspace activated — client notification (Nauta, register-composed)",
+        "required": [
+            "heading",
+            "greeting",
+            "line_deposit",
+            "line_next",
+            "workspace_url",
+            "cta_label",
+            "line_support",
+            "workspace_host",
+        ],
+        "optional": [],
+        "subject": "Espacio de trabajo activo — {workspace_host}",
+    },
 }
 
 # ==========================================
@@ -209,6 +233,8 @@ TEMPLATE_FILENAMES: Dict[str, str] = {
     "invitation/team-invite": "invitation_team-invite.html",
     "invitation/creator-invite": "invitation_creator-invite.html",
     "onboarding/complete": "onboarding_complete.html",
+    "transactional/agreement-accepted": "transactional_agreement-accepted.html",
+    "transactional/workspace-activated": "transactional_workspace-activated.html",
 }
 
 
