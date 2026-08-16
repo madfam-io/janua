@@ -73,6 +73,18 @@ spec:
                   name: janua-secrets
                   key: direct-database-url
                   optional: true
+            # The internal service-to-service door (email send-template et al).
+            # The vault value has been synced into janua-secrets all along —
+            # nothing ever mapped it into the env, so settings.INTERNAL_API_KEY
+            # was empty and the door answered 503 (found 2026-08-16 wiring the
+            # Nauta lifecycle notifications). Optional: environments without
+            # the key must still boot; the endpoints refuse per-request.
+            - name: INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: internal-api-key
+                  optional: true
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
