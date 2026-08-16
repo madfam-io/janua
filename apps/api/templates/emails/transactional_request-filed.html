@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client priority filed</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .container { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .header { background: #005293; color: white; padding: 28px 30px; }
+        .header h1 { margin: 0; font-size: 22px; }
+        .content { padding: 36px 30px; }
+        .fact-box { background: #f0f6fb; border: 1px solid #cfe3f2; border-radius: 10px; padding: 20px 24px; margin: 18px 0; }
+        .fact { margin: 4px 0; font-size: 14px; }
+        .fact .label { color: #6b7280; }
+        .body-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px 20px; margin: 18px 0; font-size: 14px; white-space: pre-wrap; }
+        .btn { display: inline-block; background: #005293; color: white; padding: 13px 26px; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0; }
+        .footer { text-align: center; padding: 18px 30px; background: #f9fafb; color: #6b7280; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Priority filed — {{workspace_name}}</h1>
+        </div>
+        <div class="content">
+            <p>{{submitted_by}} filed a priority. The SLA clock is running against the target
+            snapshotted at submission; moving it out of Submitted in the cockpit is what stamps
+            the first response.</p>
+            <div class="fact-box">
+                <p class="fact"><span class="label">Title:</span> {{title}}</p>
+                <p class="fact"><span class="label">Kind:</span> {{kind}} · <span class="label">Severity:</span> {{severity}}</p>
+                <p class="fact"><span class="label">Response target:</span> {{sla_line}}</p>
+                <p class="fact"><span class="label">Filed at:</span> {{filed_at}}</p>
+            </div>
+            <div class="body-box">{{body_excerpt}}</div>
+            <p><a href="{{cockpit_url}}" class="btn">Open the triage panel</a></p>
+        </div>
+        <div class="footer">
+            <p>Nauta cockpit notification · MADFAM</p>
+        </div>
+    </div>
+</body>
+</html>
