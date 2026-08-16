@@ -45,6 +45,14 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY apps/api/app ./app
 
+# Email templates. NEVER SHIPPED until 2026-08-16: this file copied only
+# app/ + alembic/, so every registered template resolved to a missing file in
+# production and send-template silently degraded to the bare-key-dump
+# fallback — repo tests pass because they check the repo, not the image. The
+# registry resolves Path(__file__).parents[3]/templates/emails == /app/
+# templates/emails, which this line is what makes true.
+COPY apps/api/templates ./templates
+
 # Copy alembic for database migrations
 COPY apps/api/alembic ./alembic
 COPY apps/api/alembic.ini ./alembic.ini
