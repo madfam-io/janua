@@ -193,6 +193,22 @@ EMAIL_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "optional": [],
         "subject": "Agreement accepted — {workspace_name}",
     },
+    "transactional/request-filed": {
+        "description": "Client priority filed — operator notification (Nauta)",
+        "required": [
+            "workspace_name",
+            "submitted_by",
+            "title",
+            "kind",
+            "severity",
+            "sla_line",
+            "filed_at",
+            "body_excerpt",
+            "cockpit_url",
+        ],
+        "optional": [],
+        "subject": "Priority filed — {workspace_name}: {title}",
+    },
     "transactional/workspace-activated": {
         "description": "Workspace activated — client notification (Nauta, register-composed)",
         "required": [
@@ -235,6 +251,7 @@ TEMPLATE_FILENAMES: Dict[str, str] = {
     "onboarding/complete": "onboarding_complete.html",
     "transactional/agreement-accepted": "transactional_agreement-accepted.html",
     "transactional/workspace-activated": "transactional_workspace-activated.html",
+    "transactional/request-filed": "transactional_request-filed.html",
 }
 
 

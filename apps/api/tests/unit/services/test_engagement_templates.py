@@ -13,6 +13,7 @@ from app.routers.v1.email import EMAIL_TEMPLATES, TEMPLATE_FILENAMES, _get_safe_
 ENGAGEMENT_IDS = [
     "transactional/agreement-accepted",
     "transactional/workspace-activated",
+    "transactional/request-filed",
 ]
 
 
