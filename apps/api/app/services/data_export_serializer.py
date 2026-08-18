@@ -44,7 +44,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence
-from xml.sax.saxutils import escape as _xml_escape
+# nosec B406 — we import ONLY saxutils.escape, and use it solely to ENCODE our
+# own export values into XML output (see _to_xml); we never parse untrusted XML,
+# which is what B406/defusedxml guards against. Escaping on output is the correct,
+# injection-safe use of this helper.
+from xml.sax.saxutils import escape as _xml_escape  # nosec B406
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

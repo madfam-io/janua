@@ -313,12 +313,34 @@ class TestDataSubjectRightsService:
         mock_privacy_result = MagicMock()
         mock_privacy_result.scalar_one_or_none.return_value = None
 
-        mock_db.execute.side_effect = [
-            mock_request_result,
-            mock_user_result,
-            mock_consent_result,
-            mock_privacy_result,
-        ]
+        # process_access_request now enriches the export via the data-export
+        # serializer, which issues additional queries (sessions, MFA/passkeys,
+        # OAuth grants, audit log, org memberships). The first four results feed
+        # the request/user/consent/privacy lookups the assertions below depend
+        # on; any further execute() returns an empty result so the serializer's
+        # extra queries resolve to empty collections rather than exhausting a
+        # fixed side_effect list (which previously raised StopAsyncIteration).
+        specific_results = iter(
+            [
+                mock_request_result,
+                mock_user_result,
+                mock_consent_result,
+                mock_privacy_result,
+            ]
+        )
+
+        def _empty_result():
+            r = MagicMock()
+            r.scalar_one_or_none.return_value = None
+            empty_scalars = MagicMock()
+            empty_scalars.all.return_value = []
+            r.scalars.return_value = empty_scalars
+            return r
+
+        def _execute_side_effect(*_args, **_kwargs):
+            return next(specific_results, _empty_result())
+
+        mock_db.execute.side_effect = _execute_side_effect
 
         mock_db.commit = AsyncMock()
 
