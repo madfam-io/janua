@@ -309,9 +309,26 @@ POST   /api/v1/auth/mfa/setup      # Setup MFA
 POST   /api/v1/auth/passkey/register # Register passkey
 
 GET    /api/v1/users               # List users (admin)
+POST   /api/v1/admin/users         # Create user directly (admin; Supabase createUser parity)
 GET    /api/v1/organizations       # List organizations
 POST   /api/v1/organizations       # Create organization
 ```
+
+**Admin create-user** (`POST /api/v1/admin/users`): platform-admin-gated
+(`check_admin_permission`). Body: `email`, optional `name`, optional `password`,
+`is_admin`, `email_verified`, optional `organization_id` + `organization_role`
+(member|admin|owner). When `password` is omitted the user is created without a
+usable password and the response carries a one-time `set_password_token` (a
+`PasswordReset` token, 24h) that the new user redeems at
+`POST /api/v1/auth/password/reset` — no guessable default is ever set. The
+platform `is_admin` flag and org-scoped `organization_role` are disjoint (an org
+role never grants platform admin). The response never returns the password/hash.
+
+**Runtime signup switch**: `auth.allow_signups` (system setting) now overrides the
+`ENABLE_SIGNUPS` env default at signup time, so an operator can enable/disable
+self-signup without a redeploy. Precedence: DB `auth.allow_signups` if set, else
+`ENABLE_SIGNUPS`. `EMAIL_PROVIDER` accepts only `resend|smtp` (SendGrid was never
+wired on the auth path and its dep is not installed).
 
 ### Dhanam Billing Integration
 

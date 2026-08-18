@@ -211,7 +211,13 @@ class Settings(BaseSettings):
 
     # Email
     EMAIL_ENABLED: bool = Field(default=False)
-    EMAIL_PROVIDER: str = Field(default="resend", pattern="^(resend|smtp|sendgrid)$")
+    # `sendgrid` intentionally NOT accepted: there is no installed SendGrid dep
+    # (it is absent from requirements.txt) and no live SendGrid sender on the
+    # auth email path — only the dead enhanced_email_service.py referenced it, and
+    # that module imports the missing `sendgrid` package at top level so it cannot
+    # even load. Selecting "sendgrid" therefore did nothing silently; failing
+    # validation here surfaces the misconfiguration at config-load instead.
+    EMAIL_PROVIDER: str = Field(default="resend", pattern="^(resend|smtp)$")
     # madfam.io, not janua.dev. A client's first message is a sign-in link;
     # arriving from a brand they have never heard of, on an unrelated domain,
     # it is indistinguishable from phishing. madfam.io is Resend-verified.

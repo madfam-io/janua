@@ -33,6 +33,8 @@ from app.services.email_service import (
     send_password_reset_email_task,
     send_verification_email_task,
 )
+from app.models.system_settings import SettingKeys
+from app.services.system_settings_service import SystemSettingsService
 from app.services.webhooks import WebhookEventType, trigger_user_webhook
 
 from ...models import ActivityLog, EmailVerification, MagicLink, PasswordReset, User, UserStatus
@@ -179,6 +181,37 @@ _AUDIT_EVENT_MAP = {
 }
 
 
+async def signups_enabled(db: Session) -> bool:
+    """Resolve whether self-service signup is currently allowed.
+
+    Precedence (most specific wins):
+      1. `auth.allow_signups` system setting (DB-backed runtime switch) — lets an
+         operator flip signups on/off via the admin settings API WITHOUT a
+         redeploy. This is the live switch the `SettingKeys.AUTH_ALLOW_SIGNUPS`
+         key was always meant to be but previously was read nowhere.
+      2. `settings.ENABLE_SIGNUPS` (env/config) — the deploy-time default and the
+         fallback used whenever the DB toggle is unset.
+
+    The DB value is coerced from its stored form (SystemSettingsService persists
+    scalars as strings), so "false"/"0"/"no"/"off"/"" all read as False. A failure
+    reading the settings table must never silently harden the gate shut, so any
+    error defers to the config default rather than inventing a decision.
+    """
+    try:
+        service = SystemSettingsService(db)
+        raw = await service.get_setting(SettingKeys.AUTH_ALLOW_SIGNUPS, default=None)
+    except Exception:
+        return settings.ENABLE_SIGNUPS
+
+    if raw is None:
+        return settings.ENABLE_SIGNUPS
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    return str(raw).strip().lower() not in {"false", "0", "no", "off", ""}
+
+
 async def log_audit_event(
     db: Session, user_id: str, action: str, details: Dict = None, request: Request = None
 ):
@@ -212,7 +245,9 @@ async def sign_up(
     db: Session = Depends(get_db),
 ):
     """Create a new user account"""
-    if not settings.ENABLE_SIGNUPS:
+    # Gate honours the DB-backed `auth.allow_signups` runtime switch first,
+    # falling back to the ENABLE_SIGNUPS config default. See signups_enabled().
+    if not await signups_enabled(db):
         raise HTTPException(status_code=403, detail="Sign ups are currently disabled")
 
     # Check if email already exists
