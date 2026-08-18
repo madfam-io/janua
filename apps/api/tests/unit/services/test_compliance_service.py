@@ -301,7 +301,14 @@ class TestDataSubjectRightsService:
         assert abs((result.response_due_date - expected_due).total_seconds()) < 60
 
     async def test_process_access_request_success(self, dsr_service):
-        """Test processing data access request successfully."""
+        """Test processing data access request successfully.
+
+        ``process_access_request`` now gathers the full identity data set via
+        the export serializer (memberships, sessions, MFA/passkey, OAuth,
+        audit logs) in addition to the historical personal_information /
+        consent / privacy sections. This test drives it with a flexible
+        execute mock instead of a fixed query-order ``side_effect``.
+        """
         service, mock_db, mock_audit_logger = dsr_service
         request_id = "DSR-20240101-ABC123"
         processor_id = uuid4()
@@ -312,8 +319,10 @@ class TestDataSubjectRightsService:
         mock_request.request_type = DataSubjectRequestType.ACCESS
         mock_request.user_id = user_id
         mock_request.status = RequestStatus.RECEIVED
+        mock_request.date_range_start = None
+        mock_request.date_range_end = None
 
-        # Mock user data
+        # Mock user data (secret fields are set but must never be exported)
         mock_user = Mock()
         mock_user.id = user_id
         mock_user.email = "test@example.com"
@@ -324,35 +333,48 @@ class TestDataSubjectRightsService:
         mock_user.created_at = datetime.utcnow()
         mock_user.last_login = datetime.utcnow()
         mock_user.user_metadata = {"preferences": "test"}
+        mock_user.mfa_enabled = False
+        mock_user.password_hash = "SENTINEL-should-not-export"
+        mock_user.mfa_secret = "SENTINEL-should-not-export"
 
-        # Mock database queries
-        mock_request_result = MagicMock()
-        mock_request_result.scalar_one_or_none.return_value = mock_request
+        def execute_side_effect(statement, *_args, **_kwargs):
+            # Entity-aware routing: the method looks up the DSR + User, and the
+            # export serializer independently queries User plus collection
+            # tables. Decide what to return from the compiled SQL text.
+            text = str(getattr(statement, "compile", lambda: statement)()).lower()
+            result = MagicMock()
+            if "data_subject_request" in text:
+                result.scalar_one_or_none.return_value = mock_request
+            elif "from users" in text:
+                result.scalar_one_or_none.return_value = mock_user
+            else:
+                # privacy settings / any other scalar lookup -> None
+                result.scalar_one_or_none.return_value = None
+            scalars = MagicMock()
+            scalars.all.return_value = []
+            result.scalars.return_value = scalars
+            return result
 
-        mock_user_result = MagicMock()
-        mock_user_result.scalar_one_or_none.return_value = mock_user
-
-        mock_consent_result = MagicMock()
-        mock_consent_scalars = MagicMock()
-        mock_consent_scalars.all.return_value = []
-        mock_consent_result.scalars.return_value = mock_consent_scalars
-
-        mock_privacy_result = MagicMock()
-        mock_privacy_result.scalar_one_or_none.return_value = None
-
-        mock_db.execute.side_effect = [
-            mock_request_result,
-            mock_user_result,
-            mock_consent_result,
-            mock_privacy_result,
-        ]
+        mock_db.execute.side_effect = execute_side_effect
         mock_db.commit = AsyncMock()
 
         result = await service.process_access_request(request_id, processor_id)
 
+        # Historical response shape preserved.
         assert "personal_information" in result
         assert result["personal_information"]["email"] == "test@example.com"
         assert result["personal_information"]["first_name"] == "John"
+        # Enriched sections present.
+        assert "profile" in result
+        assert result["profile"]["email"] == "test@example.com"
+        assert "sessions" in result
+        assert "security" in result
+        assert "audit_logs" in result
+        # No secret material leaked into the export.
+        from app.services.data_export_serializer import find_secret_fields
+
+        assert find_secret_fields(result) == []
+        assert "SENTINEL-should-not-export" not in str(result)
         assert mock_request.status == RequestStatus.COMPLETED
         assert mock_request.assigned_to == processor_id
         mock_db.commit.assert_called_once()

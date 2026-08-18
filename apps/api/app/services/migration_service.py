@@ -1,12 +1,28 @@
-# Migration service - placeholder for enterprise migration features
+# Migration service - user migration + data-portability export
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database_manager import db_manager
+from app.services.data_export_serializer import (
+    assert_no_secrets,
+    collect_organization_users,
+    serialize_export,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class MigrationService:
-    """Placeholder migration service for enterprise features"""
+    """Migration service.
+
+    User-import from external IdPs (Auth0/Okta/Firebase) remains a stub; only
+    the outbound data-portability export is implemented here. Export gathers
+    real records from the identity models and serializes them, excluding every
+    piece of secret material (password hashes, MFA seeds, tokens, credential
+    keys) by construction via the canonical export serializer.
+    """
 
     def __init__(self):
         self.providers = {
@@ -81,10 +97,47 @@ class MigrationService:
     async def _migrate_firebase(self, config: Dict[str, Any]) -> None:
         """Firebase migration handler"""
 
-    async def export_users(self, organization_id: str, format: str = "json") -> bytes:
-        """Export users for migration"""
-        # Placeholder
-        return b'{"users": []}'
+    async def export_users(
+        self,
+        organization_id: Optional[str],
+        format: str = "json",
+        export_type: str = "user_data",
+        session: Optional[AsyncSession] = None,
+    ) -> bytes:
+        """Export users (and optionally audit logs) for data portability.
+
+        Parameters
+        ----------
+        organization_id:
+            Restrict the export to members of this organization. ``None``
+            exports every user (whole-instance export).
+        format:
+            Serialization format: ``json`` (default, lossless), ``csv`` or
+            ``xml``.
+        export_type:
+            ``user_data`` (default), ``organization_data`` (users grouped
+            under their org profile) or ``audit_logs`` (audit entries only).
+        session:
+            Optional existing DB session; a new one is opened when omitted.
+
+        Returns
+        -------
+        bytes
+            The serialized export. Contains no secret material.
+        """
+        if session is not None:
+            data = await collect_organization_users(
+                session, organization_id, export_type=export_type
+            )
+        else:
+            async with db_manager.get_session() as new_session:
+                data = await collect_organization_users(
+                    new_session, organization_id, export_type=export_type
+                )
+
+        # Defensive guard before serializing to bytes.
+        assert_no_secrets(data)
+        return serialize_export(data, format)
 
     async def import_users(
         self, organization_id: str, data: bytes, format: str = "json"

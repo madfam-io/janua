@@ -1,7 +1,7 @@
 # Janua GA claim matrix
 
 Status: active claim-control document
-Last updated: 2026-05-25
+Last updated: 2026-08-17
 Owner: Janua product/platform
 
 Use this matrix before publishing sales copy, pricing pages, enterprise docs,
@@ -35,7 +35,7 @@ ownership.
 | Audit logs | Needs proof | Audit logs are beta unless retention/export proof exists. | Audit event query and retention runbook. |
 | SAML SSO | Roadmap | Enterprise SAML is roadmap/beta only unless a customer-specific proof exists. | SAML IdP integration proof and support runbook. |
 | SCIM provisioning | Roadmap | SCIM is roadmap only until implemented, tested, and monitored. | SCIM create/update/deactivate synthetic. |
-| Compliance exports | Roadmap | Compliance exports are roadmap unless export/delete evidence exists. | Data export/delete proof and retention policy. |
+| Compliance exports | Needs proof | Data-subject (GDPR Art. 15/20) and admin bulk export are implemented with real serialization and unit-test evidence (including secret-exclusion tests); GA still requires hosted export/delete synthetic proof. | Hosted data export/delete proof and retention policy. |
 | Auth0 migration | Beta | Migration assistance is available after dry-run proof for the customer scope. | Import/export dry-run with rollback and integrity evidence. |
 | SOC2 Type II | Roadmap | SOC2 Type II readiness is a future compliance program, not a current certification. | Auditor scope and observation window. |
 | HIPAA/BAA | Roadmap | HIPAA/BAA is not available unless legal/compliance explicitly approves. | Signed compliance packet and support procedures. |
