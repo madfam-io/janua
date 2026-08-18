@@ -2,13 +2,14 @@
 Admin API endpoints for system management
 """
 
+import secrets
 import time
 import uuid
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import desc, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,8 @@ from app.config import settings
 from app.database import get_db
 from app.routers.v1.auth import get_current_user
 from app.services.account_lockout_service import AccountLockoutService
+from app.services.audit_logger import AuditEventType, AuditLogger
+from app.services.auth_service import AuthService
 from app.services.system_settings_service import SystemSettingsService, invalidate_cors_cache
 
 # Application start time for uptime calculation
@@ -26,7 +29,9 @@ from ...models import (
     OAuthAccount,
     OAuthProvider,
     Organization,
+    OrganizationMember,
     Passkey,
+    PasswordReset,
     User,
     UserStatus,
     organization_members,
@@ -121,6 +126,55 @@ class AdminUserUpdateRequest(BaseModel):
     status: Optional[UserStatus] = None
     is_admin: Optional[bool] = None
     email_verified: Optional[bool] = None
+
+
+# Org roles a membership may carry. Deliberately an allowlist: these are
+# ORG-SCOPED roles (member/admin/owner) entirely separate from the platform-wide
+# User.is_admin flag. Keeping the two disjoint is the no-privilege-escalation
+# boundary — an org "admin" must never confer platform admin, and vice-versa.
+_ALLOWED_ORG_ROLES = {"member", "admin", "owner"}
+
+
+class AdminUserCreateRequest(BaseModel):
+    """Admin create-user request (parity with Supabase Auth admin.createUser)."""
+
+    email: EmailStr
+    name: Optional[str] = Field(default=None, max_length=200)
+    # Optional. When omitted, the user is created WITHOUT a usable password and a
+    # one-time set-password token is returned (AdminUserCreateResponse.
+    # set_password_token). We never invent a guessable default. When provided it
+    # must satisfy the same strength policy as self-signup.
+    password: Optional[str] = Field(default=None)
+    is_admin: bool = Field(default=False)
+    email_verified: bool = Field(
+        default=False, description="Pre-verify the email (admin vouches for the address)."
+    )
+    organization_id: Optional[str] = Field(
+        default=None, description="Optional org to add the new user to as a member."
+    )
+    organization_role: str = Field(
+        default="member", description="Org-scoped role for the membership (member|admin|owner)."
+    )
+
+
+class AdminUserCreateResponse(BaseModel):
+    """Created user. Mirrors UserAdminResponse and NEVER carries the password.
+
+    `set_password_token` is present ONLY when the caller omitted a password: it
+    is a one-time PasswordReset token the operator hands to the new user, who
+    redeems it at POST /api/v1/auth/password/reset to choose their own password.
+    """
+
+    id: str
+    email: str
+    email_verified: bool
+    name: Optional[str]
+    status: str
+    is_admin: bool
+    organization_id: Optional[str] = None
+    organization_role: Optional[str] = None
+    set_password_token: Optional[str] = None
+    created_at: datetime
 
 
 def check_admin_permission(user: User):
@@ -382,6 +436,154 @@ async def list_all_users(
         )
 
     return result
+
+
+@router.post("/users", response_model=AdminUserCreateResponse, status_code=201)
+async def create_user_admin(
+    request: AdminUserCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a user directly (admin only).
+
+    Parity with Supabase Auth's admin.createUser: janua previously had no way to
+    provision a user outside self-signup or invite acceptance.
+
+    Password handling:
+      * password provided -> validated for strength, hashed (bcrypt via
+        AuthService — hashing is NOT duplicated here); user is immediately usable.
+      * password omitted   -> user created with no usable password_hash and a
+        one-time set-password token returned. No default/guessable secret.
+
+    Privilege model: gated by check_admin_permission (platform admins only).
+    `is_admin` sets the platform flag; `organization_role` sets an org-scoped role
+    and can never grant platform admin (disjoint by construction).
+    """
+    check_admin_permission(current_user)
+
+    # Validate org role against the allowlist up front (before any writes).
+    if request.organization_role not in _ALLOWED_ORG_ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid organization_role. Allowed: {sorted(_ALLOWED_ORG_ROLES)}",
+        )
+
+    # Resolve org (if requested) before creating anything, so a bad org id fails
+    # cleanly instead of orphaning a half-created user.
+    org: Optional[Organization] = None
+    if request.organization_id is not None:
+        try:
+            org_uuid = uuid.UUID(request.organization_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid organization_id")
+        org_result = await db.execute(select(Organization).where(Organization.id == org_uuid))
+        org = org_result.scalar_one_or_none()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Reject duplicates (case-sensitive email match, consistent with the rest of
+    # the codebase's User.email lookups).
+    existing = await db.execute(select(User).where(User.email == request.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="User with this email already exists")
+
+    # Password: validate + hash when provided; otherwise leave unusable and mint
+    # a set-password token afterwards.
+    password_hash: Optional[str] = None
+    set_password_token: Optional[str] = None
+    if request.password is not None:
+        valid, message = AuthService.validate_password_strength(request.password)
+        if not valid:
+            raise HTTPException(status_code=400, detail=message)
+        password_hash = AuthService.hash_password(request.password)
+
+    # A tenant_id is required on User; admin-created users get a fresh tenant,
+    # matching AuthService.create_user's behaviour for the no-tenant case.
+    tenant_id = org.id if org is not None else uuid.uuid4()
+
+    user = User(
+        email=request.email,
+        password_hash=password_hash,
+        first_name=request.name,
+        status=UserStatus.ACTIVE,
+        is_admin=request.is_admin,
+        email_verified=request.email_verified,
+        email_verified_at=datetime.utcnow() if request.email_verified else None,
+        tenant_id=tenant_id,
+    )
+    db.add(user)
+    await db.flush()  # assign user.id without ending the transaction
+
+    # Optional org membership. ORM constructor with only model-defined columns
+    # (organization_id, user_id, role, status, joined_at).
+    if org is not None:
+        member = OrganizationMember(
+            organization_id=org.id,
+            user_id=user.id,
+            role=request.organization_role,
+            status="active",
+            joined_at=datetime.utcnow(),
+        )
+        db.add(member)
+
+    # No-password path: issue a one-time PasswordReset token (same vehicle as
+    # /password/forgot). 24h window gives the operator time to relay it.
+    if password_hash is None:
+        set_password_token = secrets.token_urlsafe(32)
+        db.add(
+            PasswordReset(
+                user_id=user.id,
+                token=set_password_token,
+                expires_at=datetime.utcnow() + timedelta(hours=24),
+            )
+        )
+
+    # Audit-log the creation via the working AuditLogger hash-chain trail — the
+    # SAME mechanism the signup/signin handlers use (app.routers.v1.auth.
+    # log_audit_event). We deliberately do NOT call AuthService.create_audit_log:
+    # that helper references AuditLog columns (tenant_id/current_hash/event_type)
+    # that do not exist on the model and raises AttributeError. Records who
+    # created whom; never a secret. A failure here must not block creation.
+    try:
+        audit_logger = AuditLogger(db)
+        await audit_logger.log(
+            event_type=AuditEventType.USER_CREATE,
+            tenant_id=str(tenant_id),
+            identity_id=str(current_user.id),
+            resource_type="user",
+            resource_id=str(user.id),
+            organization_id=str(org.id) if org is not None else None,
+            details={
+                "email": request.email,
+                "created_by": str(current_user.id),
+                "is_admin": request.is_admin,
+                "email_verified": request.email_verified,
+                "password_set": password_hash is not None,
+                "organization_id": str(org.id) if org is not None else None,
+                "organization_role": request.organization_role if org is not None else None,
+                "via": "admin.create_user",
+            },
+            severity="info",
+        )
+    except Exception:
+        # Audit logging failure must not break user provisioning.
+        pass
+
+    await db.commit()
+    await db.refresh(user)
+
+    return AdminUserCreateResponse(
+        id=str(user.id),
+        email=user.email,
+        email_verified=bool(user.email_verified),
+        name=user.name,
+        status=user.status.value if user.status else UserStatus.ACTIVE.value,
+        is_admin=bool(user.is_admin),
+        organization_id=str(org.id) if org is not None else None,
+        organization_role=request.organization_role if org is not None else None,
+        set_password_token=set_password_token,
+        created_at=user.created_at,
+    )
 
 
 @router.patch("/users/{user_id}")
