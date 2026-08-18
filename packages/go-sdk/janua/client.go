@@ -4,11 +4,15 @@ package janua
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -307,11 +311,29 @@ type WebhookEvent struct {
 	Signature string                 `json:"signature"`
 }
 
-// VerifyWebhookSignature verifies a webhook signature
+// VerifyWebhookSignature verifies the HMAC-SHA256 signature Janua sends with a
+// webhook delivery in the `X-Webhook-Signature` header. It recomputes
+// HMAC-SHA256(secret, payload) as lowercase hex and compares it to the provided
+// signature in constant time.
+//
+// This matches the server's signing (webhook_dispatcher._calculate_signature /
+// webhooks._generate_signature): hmac.new(secret, payload, sha256).hexdigest().
+//
+// Returns false on any mismatch, and on an empty signature or empty secret — a
+// caller must never treat an unsigned or unconfigured delivery as verified.
 func VerifyWebhookSignature(payload []byte, signature string, secret string) bool {
-	// Implementation would verify HMAC signature
-	// This is a placeholder
-	return true
+	if signature == "" || secret == "" {
+		return false
+	}
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(payload)
+	expected := hex.EncodeToString(mac.Sum(nil))
+
+	// Constant-time compare (hmac.Equal). Tolerate a `sha256=` prefix in case a
+	// caller forwards the header verbatim from a proxy that adds one.
+	provided := strings.TrimPrefix(signature, "sha256=")
+	return hmac.Equal([]byte(provided), []byte(expected))
 }
 
 // GenerateState generates a random state for OAuth flows
