@@ -2,9 +2,10 @@
 Migration API endpoints for data portability and user migration
 """
 
-import asyncio
 import json
 import logging
+import os
+import tempfile
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +35,19 @@ router = APIRouter(
     tags=["Migration"],
     responses={404: {"description": "Not found"}},
 )
+
+# Directory where generated bulk-export artifacts are written. Governed by the
+# canonical ``settings.DATA_EXPORT_PATH`` config (default
+# ``/var/compliance/exports``); a ``DATA_EXPORT_DIR`` env var override is
+# honored for environments where that path is not writable (dev/test).
+try:
+    from app.config import settings as _export_settings
+
+    _DEFAULT_EXPORT_DIR = _export_settings.DATA_EXPORT_PATH
+except Exception:  # pragma: no cover - settings always import in practice
+    _DEFAULT_EXPORT_DIR = os.path.join(tempfile.gettempdir(), "janua-data-exports")
+
+_EXPORT_DIR = os.environ.get("DATA_EXPORT_DIR", _DEFAULT_EXPORT_DIR)
 
 
 # Pydantic models
@@ -158,9 +172,9 @@ async def list_migration_jobs(
                 skipped_users=job.skipped_users,
                 started_at=job.started_at.isoformat() if job.started_at else None,
                 completed_at=job.completed_at.isoformat() if job.completed_at else None,
-                estimated_completion=job.estimated_completion.isoformat()
-                if job.estimated_completion
-                else None,
+                estimated_completion=(
+                    job.estimated_completion.isoformat() if job.estimated_completion else None
+                ),
                 last_error=job.last_error,
                 created_at=job.created_at.isoformat(),
                 updated_at=job.updated_at.isoformat(),
@@ -200,9 +214,9 @@ async def get_migration_job(
             skipped_users=job.skipped_users,
             started_at=job.started_at.isoformat() if job.started_at else None,
             completed_at=job.completed_at.isoformat() if job.completed_at else None,
-            estimated_completion=job.estimated_completion.isoformat()
-            if job.estimated_completion
-            else None,
+            estimated_completion=(
+                job.estimated_completion.isoformat() if job.estimated_completion else None
+            ),
             last_error=job.last_error,
             created_at=job.created_at.isoformat(),
             updated_at=job.updated_at.isoformat(),
@@ -470,22 +484,38 @@ async def _process_data_export(
     organization_id: Optional[str],
     user_id: str,
 ):
-    """Background task to process data export"""
+    """Background task that produces a real, downloadable export artifact.
+
+    Serializes the requested users / organization data / audit logs (honoring
+    ``export_type`` and ``format``) via the migration service and writes the
+    bytes to ``_EXPORT_DIR/{export_id}.{format}``. The serializer excludes all
+    secret material (password hashes, MFA seeds, tokens, credential keys).
+
+    Returns the artifact path so callers/tests can locate it; the background
+    scheduler ignores the return value.
+    """
     try:
-        # Implementation would collect and export data
-        # This is a placeholder for the actual export logic
-        logger.info(f"Processing data export {export_id}")
+        logger.info("Processing data export %s", export_id)
 
-        # Simulate export processing
-        await asyncio.sleep(5)
+        payload = await migration_service.export_users(
+            organization_id,
+            format=export_request.format,
+            export_type=export_request.export_type,
+            session=db,
+        )
 
-        # Update export status in database
-        # In real implementation, would create DataExport record
+        os.makedirs(_EXPORT_DIR, exist_ok=True)
+        fmt = (export_request.format or "json").lower()
+        path = os.path.join(_EXPORT_DIR, f"{export_id}.{fmt}")
+        with open(path, "wb") as handle:
+            handle.write(payload)
 
-        logger.info(f"Data export {export_id} completed")
+        logger.info("Data export %s completed (%d bytes)", export_id, len(payload))
+        return path
 
     except Exception:
-        logger.exception(f"Data export {export_id} failed")
+        logger.exception("Data export %s failed", export_id)
+        return None
 
 
 @router.get("/providers")

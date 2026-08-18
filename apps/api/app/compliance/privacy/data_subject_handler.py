@@ -3,7 +3,10 @@ Data Subject Request Handler
 Handles GDPR data subject requests including access, erasure, and portability rights.
 """
 
+import json
 import logging
+import os
+import tempfile
 import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -18,10 +21,31 @@ from app.models.compliance import (
     DataSubjectRequestType,
     RequestStatus,
 )
+from app.services.data_export_serializer import (
+    assert_no_secrets,
+    build_export_archive,
+    collect_user_export_data,
+    serialize_export,
+)
 
 from ..audit import AuditEventType, AuditLogger, EvidenceType
 from .privacy_models import DataSubjectRequestResponse
 from .privacy_types import DataExportFormat
+
+# Directory where generated export artifacts are written. Governed by the
+# canonical ``settings.DATA_EXPORT_PATH`` config (default
+# ``/var/compliance/exports``); a ``DATA_EXPORT_DIR`` env var override is
+# honored for environments where that path is not writable (dev/test). The
+# request record stores the returned artifact path in ``response_data_url`` so
+# a download endpoint / secure-link issuer can serve it.
+try:
+    from app.config import settings as _settings
+
+    _DEFAULT_EXPORT_DIR = _settings.DATA_EXPORT_PATH
+except Exception:  # pragma: no cover - settings always import in practice
+    _DEFAULT_EXPORT_DIR = os.path.join(tempfile.gettempdir(), "janua-data-exports")
+
+_EXPORT_DIR = os.environ.get("DATA_EXPORT_DIR", _DEFAULT_EXPORT_DIR)
 
 logger = logging.getLogger(__name__)
 
@@ -312,25 +336,52 @@ class DataSubjectRequestHandler:
         date_range_end: Optional[datetime] = None,
         include_metadata: bool = True,
     ) -> Dict[str, Any]:
-        """Collect user data according to specified criteria"""
-        # Implementation would collect data from various sources
-        return {
-            "user_id": user_id,
-            "collection_timestamp": datetime.utcnow().isoformat(),
-            "data_categories": [cat.value for cat in (data_categories or [])],
-            "metadata_included": include_metadata,
-        }
+        """Collect the user's full data set for a GDPR Article 15 access request.
+
+        Gathers the real records across every identity model (profile, org
+        memberships, sessions, MFA/passkey metadata, OAuth grants/accounts,
+        audit logs). Secret material (password hashes, MFA seeds, tokens,
+        credential keys) is excluded by the serializer's allowlist design.
+        """
+        async with get_session() as session:
+            data = await collect_user_export_data(
+                session,
+                user_id,
+                include_audit_logs=include_metadata,
+                date_range_start=date_range_start,
+                date_range_end=date_range_end,
+            )
+        if data_categories:
+            data["export_metadata"]["requested_data_categories"] = [
+                cat.value for cat in data_categories
+            ]
+        if specific_fields:
+            data["export_metadata"]["requested_specific_fields"] = list(specific_fields)
+        assert_no_secrets(data)
+        return data
 
     async def _collect_portable_data(
         self, user_id: str, data_categories: List[DataCategory] = None
     ) -> Dict[str, Any]:
-        """Collect data that can be ported according to GDPR Article 20"""
-        # Implementation would collect only user-provided data with consent basis
-        return {
-            "user_id": user_id,
-            "portable_data": {},
-            "collection_timestamp": datetime.utcnow().isoformat(),
-        }
+        """Collect the portable subset for a GDPR Article 20 request.
+
+        Article 20 covers data the data subject provided themselves in a
+        structured, commonly used, machine-readable form: profile, org
+        memberships and OAuth grants. Server-generated telemetry (sessions,
+        audit logs) is excluded, as is all secret material.
+        """
+        async with get_session() as session:
+            data = await collect_user_export_data(
+                session,
+                user_id,
+                portable_only=True,
+            )
+        if data_categories:
+            data["export_metadata"]["requested_data_categories"] = [
+                cat.value for cat in data_categories
+            ]
+        assert_no_secrets(data)
+        return data
 
     async def _generate_data_export(
         self,
@@ -339,14 +390,49 @@ class DataSubjectRequestHandler:
         format: DataExportFormat,
         structured_format: bool = False,
     ) -> str:
-        """Generate secure data export file"""
-        # Implementation would create secure export files
-        return f"/secure/exports/{request_id}.{format.value}"
+        """Serialize ``data`` to a real artifact on disk and return its path.
+
+        JSON/CSV/XML are written as a single file. For the structured
+        portability export we additionally bundle per-section JSON files into
+        a zip archive for easier downstream consumption. The path is stored on
+        the request record (``response_data_url``) for a secure-download step.
+        """
+        # Never let a secret slip into a written artifact.
+        assert_no_secrets(data)
+
+        os.makedirs(_EXPORT_DIR, exist_ok=True)
+        fmt = format.value if hasattr(format, "value") else str(format)
+
+        if structured_format and fmt == DataExportFormat.JSON.value:
+            payload = build_export_archive(data, manifest_name=f"{request_id}.json")
+            path = os.path.join(_EXPORT_DIR, f"{request_id}.zip")
+            with open(path, "wb") as handle:
+                handle.write(payload)
+        else:
+            payload = serialize_export(data, fmt)
+            path = os.path.join(_EXPORT_DIR, f"{request_id}.{fmt}")
+            with open(path, "wb") as handle:
+                handle.write(payload)
+
+        logger.info(
+            "Generated data export artifact",
+            extra={"request_id": request_id, "format": fmt, "bytes": len(payload)},
+        )
+        return path
 
     async def _create_erasure_backup(self, request_id: str, user_data: Dict[str, Any]) -> str:
-        """Create backup before data erasure"""
-        # Implementation would create secure backup
+        """Persist a secret-free backup of the user's data before erasure.
+
+        Writes the same allowlisted, credential-free export produced for an
+        access request so an erasure can be audited / reversed within the
+        retention window without ever archiving secret material.
+        """
+        assert_no_secrets(user_data)
+        os.makedirs(_EXPORT_DIR, exist_ok=True)
         backup_ref = f"BACKUP-{request_id}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        path = os.path.join(_EXPORT_DIR, f"{backup_ref}.json")
+        with open(path, "wb") as handle:
+            handle.write(json.dumps(user_data, indent=2, ensure_ascii=False).encode("utf-8"))
         logger.info(f"Created erasure backup: {backup_ref}")
         return backup_ref
 

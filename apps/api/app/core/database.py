@@ -1,6 +1,7 @@
 import os
 import ssl
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Optional
 
 import structlog
@@ -318,6 +319,26 @@ async def bootstrap_admin_user():
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency to get database session"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+@asynccontextmanager
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Async context manager yielding a committed-on-exit DB session.
+
+    Canonical helper used across ``app.compliance.*`` as
+    ``async with get_session() as session:``. Commits on clean exit and rolls
+    back on error, mirroring :func:`get_db` (which is the FastAPI dependency
+    variant).
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session

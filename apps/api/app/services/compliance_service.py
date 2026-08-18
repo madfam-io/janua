@@ -28,6 +28,10 @@ from app.models.compliance import (
     RequestStatus,
 )
 from app.services.audit_logger import AuditEventType, AuditLogger
+from app.services.data_export_serializer import (
+    assert_no_secrets,
+    collect_user_export_data,
+)
 
 
 class ConsentService:
@@ -333,7 +337,22 @@ class DataSubjectRightsService:
         if not user:
             raise ValueError("User not found")
 
-        # Compile user data export
+        # Gather the complete, real user data set across every identity model
+        # (profile, org memberships, sessions, MFA/passkey metadata, OAuth
+        # grants/accounts, audit logs). The serializer excludes all secret
+        # material (password hashes, MFA seeds, tokens, credential keys) by
+        # construction.
+        export = await collect_user_export_data(
+            self.db,
+            str(user.id),
+            include_audit_logs=True,
+            date_range_start=request.date_range_start,
+            date_range_end=request.date_range_end,
+        )
+
+        # Preserve the historical response shape (personal_information +
+        # consent_records + privacy_settings) while layering in the full
+        # export sections produced by the serializer.
         user_data = {
             "personal_information": {
                 "id": str(user.id),
@@ -349,7 +368,14 @@ class DataSubjectRightsService:
             "consent_records": [],
             "privacy_settings": {},
             "data_subject_requests": [],
-            "audit_logs": [],
+            "export_metadata": export.get("export_metadata", {}),
+            "profile": export.get("user", {}),
+            "organization_memberships": export.get("organization_memberships", []),
+            "oauth_grants": export.get("oauth_grants", []),
+            "linked_accounts": export.get("linked_accounts", []),
+            "security": export.get("security", {}),
+            "sessions": export.get("sessions", []),
+            "audit_logs": export.get("audit_logs", []),
         }
 
         # Get consent records
@@ -395,6 +421,10 @@ class DataSubjectRightsService:
         request.response_method = "api"
 
         await self.db.commit()
+
+        # Defensive guard: never return an export that carries secret-like
+        # fields (password hashes, MFA seeds, tokens, credential keys).
+        assert_no_secrets(user_data)
 
         return user_data
 
