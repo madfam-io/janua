@@ -350,6 +350,13 @@ class Settings(BaseSettings):
     ENABLE_MAGIC_LINKS: bool = Field(default=True)
     ENABLE_OAUTH: bool = Field(default=True)
     ENABLE_MFA: bool = Field(default=True)
+    # Enforce MFA at the login paths (OAuth browser login, /authorize, magic-link)
+    # for users who have it enabled. Kept DEFAULT-OFF (2026-08-23): the audit found
+    # MFA was bypassed on every path except JSON /signin, and turning enforcement
+    # on before the MFA-challenge UI ships would lock users out. Flip to true
+    # (globally or per-deploy) once the challenge UI is live. When false, behavior
+    # is exactly as today. Per-org policy can layer on top later.
+    MFA_ENFORCE_ON_LOGIN: bool = Field(default=False)
     ENABLE_ORGANIZATIONS: bool = Field(default=True)
     ENABLE_GUEST_ACCESS: bool = Field(
         default=True, description="Enable guest access token endpoint"
