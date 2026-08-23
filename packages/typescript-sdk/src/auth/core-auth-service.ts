@@ -91,9 +91,15 @@ export class CoreAuthService {
 
     const response = await this.http.post<AuthApiResponse>('/api/v1/auth/login', request);
 
-    // Handle MFA requirement
-    if ('requires_mfa' in response.data) {
-      return response.data as unknown as AuthResponse;
+    // Handle MFA requirement. The API returns `mfa_required: true` + `mfa_token`
+    // and no tokens (apps/api/app/routers/v1/auth.py:451-452). The prior check
+    // looked for a non-existent `requires_mfa` key, so it never fired.
+    if (response.data.mfa_required) {
+      return {
+        user: response.data.user,
+        mfa_required: true,
+        mfa_token: response.data.mfa_token,
+      };
     }
 
     if (response.data.access_token && response.data.refresh_token) {

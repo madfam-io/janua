@@ -627,10 +627,23 @@ export class JanuaClient extends EventEmitter<SdkEventMap> {
   // ===================================
 
   /**
-   * Sign in a user (convenience method)
+   * Sign in a user (convenience method).
+   *
+   * If the account has a second factor, the result carries
+   * `{ mfa_required: true, mfa_token }` and NO tokens — complete it with
+   * {@link verifyMfaChallenge}.
    */
   async signIn(request: import('./types').SignInRequest): Promise<import('./types').AuthResponse> {
     return this.auth.signIn(request);
+  }
+
+  /**
+   * Complete an MFA challenge raised by {@link signIn} (convenience method).
+   * Pass the `mfa_token` from the sign-in result plus the user's TOTP or backup
+   * code; on success the session tokens are persisted.
+   */
+  async verifyMfaChallenge(mfaToken: string, code: string): Promise<import('./types').AuthResponse> {
+    return this.auth.verifyMfaChallenge(mfaToken, code);
   }
 
   /**

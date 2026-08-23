@@ -329,11 +329,15 @@ export function useMFA() {
   const error = ref<Error | null>(null);
   const isLoading = ref(false);
 
-  const enableMFA = async (type: 'totp' | 'sms') => {
+  // Begin TOTP enrollment. The /mfa/enable endpoint requires the account
+  // password (it verifies it before issuing a secret), so this takes a password,
+  // not an MFA "type" — the prior `type` argument was sent to an endpoint that
+  // ignored it. SMS/email enrollment is not implemented server-side.
+  const enableMFA = async (password: string) => {
     error.value = null;
     isLoading.value = true;
     try {
-      return await client.auth.enableMFA(type);
+      return await client.auth.enableMFA(password);
     } catch (e) {
       error.value = e instanceof Error ? e : new Error(String(e));
       throw e;

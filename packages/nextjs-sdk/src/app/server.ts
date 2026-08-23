@@ -2,7 +2,31 @@ import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { SignJWT, jwtVerify } from 'jose';
 import { JanuaClient } from '@janua/typescript-sdk';
-import type { User, Session } from '@janua/typescript-sdk';
+import type { AuthResponse, TokenResponse, User, Session } from '@janua/typescript-sdk';
+
+/**
+ * Narrow an AuthResponse to its tokens, or throw with a clear reason.
+ *
+ * `AuthResponse.tokens` is optional because sign-in can return an MFA challenge
+ * (`mfa_required: true`) with NO tokens. This server-side helper establishes a
+ * session cookie in one shot and cannot run the interactive second-factor
+ * round-trip, so it fails loudly instead of dereferencing undefined tokens.
+ * MFA-enabled accounts must use the client-side flow (client.auth.signIn →
+ * verifyMfaChallenge) which owns the code-entry UI.
+ */
+function requireTokens(response: AuthResponse): TokenResponse {
+  if (response.mfa_required) {
+    throw new Error(
+      'This account requires multi-factor authentication, which the server-side ' +
+        'signIn helper does not support. Complete sign-in on the client with ' +
+        'client.auth.signIn() followed by client.auth.verifyMfaChallenge().'
+    );
+  }
+  if (!response.tokens) {
+    throw new Error('Sign-in did not return session tokens.');
+  }
+  return response.tokens;
+}
 
 const COOKIE_NAME = 'janua-session';
 const COOKIE_OPTIONS = {
@@ -83,7 +107,8 @@ export class JanuaServerClient {
 
   async signIn(email: string, password: string): Promise<{ user: User; session: Session }> {
     const response = await this.client.auth.signIn({ email, password });
-    
+    const tokens = requireTokens(response);
+
     const sessionData: SessionData = {
       user: response.user,
       session: {
@@ -95,8 +120,8 @@ export class JanuaServerClient {
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         last_activity: new Date().toISOString()
       } as any,
-      accessToken: response.tokens.access_token,
-      refreshToken: response.tokens.refresh_token,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
     };
 
     const encryptedSession = await this.encryptSession(sessionData);
@@ -124,7 +149,8 @@ export class JanuaServerClient {
     lastName?: string;
   }): Promise<{ user: User; session: Session }> {
     const response = await this.client.auth.signUp(data);
-    
+    const tokens = requireTokens(response);
+
     const sessionData: SessionData = {
       user: response.user,
       session: {
@@ -136,8 +162,8 @@ export class JanuaServerClient {
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         last_activity: new Date().toISOString()
       } as any,
-      accessToken: response.tokens.access_token,
-      refreshToken: response.tokens.refresh_token,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
     };
 
     const encryptedSession = await this.encryptSession(sessionData);
@@ -160,6 +186,7 @@ export class JanuaServerClient {
 
   async handleOAuthCallback(code: string, codeVerifier?: string): Promise<{ user: User; session: Session }> {
     const response = await this.client.auth.handleOAuthCallback(code, codeVerifier || '');
+    const tokens = requireTokens(response as unknown as AuthResponse);
 
     const sessionData: SessionData = {
       user: response.user,
@@ -172,8 +199,8 @@ export class JanuaServerClient {
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         last_activity: new Date().toISOString()
       } as any,
-      accessToken: response.tokens.access_token,
-      refreshToken: response.tokens.refresh_token,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
     };
 
     const encryptedSession = await this.encryptSession(sessionData);

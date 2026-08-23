@@ -7,7 +7,7 @@ import { HttpClient } from '../http-client';
 import { TokenManager } from '../utils';
 import { AuthenticationError, ValidationError } from '../errors';
 import { OAuthProvider, UserStatus } from '../types';
-import type { SignUpParams, SignInParams, MFAParams, OAuthParams } from '../types';
+import type { SignUpParams, SignInParams, OAuthParams } from '../types';
 
 // Inline fixtures to replace missing imports
 const userFixtures = {
@@ -194,16 +194,20 @@ describe('Auth', () => {
       expect(mockOnSignIn).not.toHaveBeenCalled();
     });
 
-    it('should handle MFA requirement', async () => {
+    it('should surface an MFA challenge (mfa_required + mfa_token)', async () => {
       const signInParams: SignInParams = {
         email: 'test@example.com',
         password: 'Test123!@#'
       };
 
+      // Real API contract (apps/api/app/routers/v1/auth.py:451-452): on a second
+      // factor, sign-in returns the user, mfa_required=true, an mfa_token, and NO
+      // tokens.
       const mockResponse = {
-        requires_mfa: true,
-        mfa_challenge_id: 'challenge-123',
-        mfa_methods: ['totp', 'sms']
+        user: userFixtures.validUser,
+        tokens: null,
+        mfa_required: true,
+        mfa_token: 'mfa-token-abc'
       };
 
       mockHttpClient.post.mockResolvedValue({ data: mockResponse });
@@ -211,10 +215,11 @@ describe('Auth', () => {
       const result = await auth.signIn(signInParams);
 
       expect(result).toEqual({
-        requires_mfa: true,
-        mfa_challenge_id: 'challenge-123',
-        mfa_methods: ['totp', 'sms']
+        user: userFixtures.validUser,
+        mfa_required: true,
+        mfa_token: 'mfa-token-abc'
       });
+      // No tokens are issued until verifyMfaChallenge completes the second factor.
       expect(mockTokenManager.setTokens).not.toHaveBeenCalled();
       expect(mockOnSignIn).not.toHaveBeenCalled();
     });
@@ -381,60 +386,70 @@ describe('Auth', () => {
   });
 
   describe('MFA operations', () => {
-    describe('verifyMFA', () => {
-      it('should verify MFA code successfully', async () => {
-        const mfaParams: MFAParams = {
-          challenge_id: 'challenge-123',
-          code: '123456',
-          method: 'totp'
-        };
+    describe('verifyMFA (enrollment)', () => {
+      it('should confirm enrollment and return a message', async () => {
+        const mockResponse = { message: 'MFA successfully enabled' };
 
+        mockHttpClient.post.mockResolvedValue({ data: mockResponse });
+
+        const result = await auth.verifyMFA({ code: '123456' });
+
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/verify', { code: '123456' });
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('verifyMfaChallenge (sign-in)', () => {
+      it('should complete the challenge and issue tokens', async () => {
         const mockResponse = {
           user: userFixtures.verifiedUser,
-          access_token: tokenFixtures.validAccessToken,
-          refresh_token: tokenFixtures.validRefreshToken,
-          expires_in: 3600,
-          token_type: 'bearer' as const
+          tokens: {
+            access_token: tokenFixtures.validAccessToken,
+            refresh_token: tokenFixtures.validRefreshToken,
+            expires_in: 3600,
+            token_type: 'bearer' as const
+          }
         };
 
         mockHttpClient.post.mockResolvedValue({ data: mockResponse });
 
-        const result = await auth.verifyMFA(mfaParams);
+        const result = await auth.verifyMfaChallenge('mfa-token-abc', '123456');
 
-        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/mfa/verify', mfaParams);
+        expect(mockHttpClient.post).toHaveBeenCalledWith(
+          '/api/v1/mfa/challenge/verify',
+          { mfa_token: 'mfa-token-abc', code: '123456' },
+          { skipAuth: true }
+        );
         expect(mockTokenManager.setTokens).toHaveBeenCalled();
         expect(mockOnSignIn).toHaveBeenCalled();
         expect(result).toEqual({
           user: mockResponse.user,
-          tokens: {
-            access_token: mockResponse.access_token,
-            refresh_token: mockResponse.refresh_token,
-            expires_in: mockResponse.expires_in,
-            token_type: mockResponse.token_type
-          }
+          tokens: mockResponse.tokens
         });
       });
     });
 
     describe('enableMFA', () => {
-      it('should enable MFA successfully', async () => {
-        const method = 'totp';
+      it('should begin enrollment with the account password', async () => {
+        const password = 'CurrentPassword123!';
 
         mockHttpClient.post.mockResolvedValue({
           data: {
             secret: 'MFASECRET123',
             qr_code: 'data:image/png;base64,...',
-            backup_codes: ['code1', 'code2', 'code3']
+            backup_codes: ['code1', 'code2', 'code3'],
+            provisioning_uri: 'otpauth://totp/Janua:test'
           }
         });
 
-        const result = await auth.enableMFA(method);
+        const result = await auth.enableMFA(password);
 
-        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/mfa/enable', { method });
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/enable', { password });
         expect(result).toEqual({
           secret: 'MFASECRET123',
           qr_code: 'data:image/png;base64,...',
-          backup_codes: ['code1', 'code2', 'code3']
+          backup_codes: ['code1', 'code2', 'code3'],
+          provisioning_uri: 'otpauth://totp/Janua:test'
         });
       });
     });
@@ -445,17 +460,15 @@ describe('Auth', () => {
 
         mockHttpClient.post.mockResolvedValue({
           data: {
-            success: true,
-            message: 'MFA disabled successfully'
+            message: 'MFA successfully disabled'
           }
         });
 
         const result = await auth.disableMFA(password);
 
-        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/mfa/disable', { password });
+        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/disable', { password });
         expect(result).toEqual({
-          success: true,
-          message: 'MFA disabled successfully'
+          message: 'MFA successfully disabled'
         });
       });
     });
@@ -676,9 +689,12 @@ describe('Auth', () => {
 
         const result = await auth.regenerateMFABackupCodes(password);
 
-        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/regenerate-backup-codes', {
-          password: password
-        });
+        // `password` is a QUERY parameter on the handler, sent via `params`.
+        expect(mockHttpClient.post).toHaveBeenCalledWith(
+          '/api/v1/mfa/regenerate-backup-codes',
+          undefined,
+          { params: { password } }
+        );
         expect(result).toEqual(mockResponse);
       });
     });
@@ -694,9 +710,12 @@ describe('Auth', () => {
 
         const result = await auth.validateMFACode(code);
 
-        expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/validate-code', {
-          code: code
-        });
+        // `code` is a QUERY parameter on the handler, sent via `params`.
+        expect(mockHttpClient.post).toHaveBeenCalledWith(
+          '/api/v1/mfa/validate-code',
+          undefined,
+          { params: { code } }
+        );
         expect(result).toEqual(mockResponse);
       });
     });
@@ -998,12 +1017,15 @@ describe('Auth', () => {
       it('should get passkey authentication options successfully', async () => {
         const email = 'user@example.com';
         const mockResponse = {
+          sessionId: 'sess_abc123',
           challenge: 'auth_challenge_123',
+          rpId: 'app.example.com',
+          timeout: 60000,
+          userVerification: 'preferred',
           allowCredentials: [
             {
               id: 'credential_id_123',
-              type: 'public-key',
-              transports: ['usb', 'nfc']
+              type: 'public-key'
             }
           ]
         };
@@ -1035,27 +1057,35 @@ describe('Auth', () => {
             signature: 'signature'
           }
         };
+        // Flat token response + partial user, and session_id as a query param.
         const mockResponse = {
-          user: userFixtures.validUser,
-          tokens: tokenFixtures.validTokens,
-          message: 'Passkey authentication successful'
+          verified: true,
+          access_token: tokenFixtures.validAccessToken,
+          refresh_token: tokenFixtures.validRefreshToken,
+          token_type: 'bearer' as const,
+          expires_in: 3600,
+          user: {
+            id: userFixtures.validUser.id,
+            email: userFixtures.validUser.email,
+            first_name: userFixtures.validUser.first_name,
+            last_name: userFixtures.validUser.last_name
+          }
         };
 
         mockHttpClient.post.mockResolvedValue({
           data: mockResponse
         });
 
-        const result = await auth.verifyPasskeyAuthentication(credential, 'auth_challenge_123', 'user@example.com');
+        const result = await auth.verifyPasskeyAuthentication(credential, 'sess_abc123', 'user@example.com');
 
         expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/passkeys/authenticate/verify', {
           credential: credential,
-          challenge: 'auth_challenge_123',
           email: 'user@example.com'
-        }, { skipAuth: true });
+        }, { skipAuth: true, params: { session_id: 'sess_abc123' } });
         expect(result).toEqual(mockResponse);
         expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
-          access_token: mockResponse.tokens.access_token,
-          refresh_token: mockResponse.tokens.refresh_token,
+          access_token: mockResponse.access_token,
+          refresh_token: mockResponse.refresh_token,
           expires_at: expect.any(Number)
         });
         expect(mockOnSignIn).toHaveBeenCalled();

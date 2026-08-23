@@ -320,10 +320,13 @@ describe('SignIn', () => {
       const user = userEvent.setup()
       const mockOnMFARequired = vi.fn()
 
+      // The API returns the MFA challenge as a 200 with mfa_required + mfa_token
+      // (SignInResponse), NOT a 403. The component branches on response.ok &&
+      // data.mfa_required.
       global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 403,
-        json: async () => ({ mfa_required: true, session_id: 'abc123' }),
+        ok: true,
+        status: 200,
+        json: async () => ({ mfa_required: true, mfa_token: 'mfa-token-abc' }),
       })
 
       render(<SignIn onMFARequired={mockOnMFARequired} />)
@@ -340,6 +343,43 @@ describe('SignIn', () => {
         expect(mockOnMFARequired).toHaveBeenCalledWith(
           expect.objectContaining({ mfa_required: true })
         )
+      })
+    })
+
+    it('should render the built-in MFA code step when no onMFARequired handler is given', async () => {
+      const user = userEvent.setup()
+
+      // SDK path: signIn resolves with the MFA challenge; verifyMfaChallenge
+      // completes it and returns the user.
+      const afterSignIn = vi.fn()
+      const mockClient = {
+        auth: {
+          signIn: vi.fn().mockResolvedValue({
+            user: { id: 'u1', email: 'test@example.com' },
+            mfa_required: true,
+            mfa_token: 'mfa-token-abc',
+          }),
+          verifyMfaChallenge: vi.fn().mockResolvedValue({
+            user: { id: 'u1', email: 'test@example.com' },
+            tokens: { access_token: 'a', refresh_token: 'r', expires_in: 3600, token_type: 'bearer' },
+          }),
+        },
+      }
+
+      render(<SignIn januaClient={mockClient} afterSignIn={afterSignIn} />)
+
+      await user.type(screen.getByRole('textbox', { name: /email/i }), 'test@example.com')
+      await user.type(screen.getByLabelText('Password'), 'password123')
+      await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+      // The code-entry step appears.
+      const codeInput = await screen.findByLabelText(/verification code/i)
+      await user.type(codeInput, '123456')
+      await user.click(screen.getByRole('button', { name: /^verify$/i }))
+
+      await waitFor(() => {
+        expect(mockClient.auth.verifyMfaChallenge).toHaveBeenCalledWith('mfa-token-abc', '123456')
+        expect(afterSignIn).toHaveBeenCalled()
       })
     })
   })

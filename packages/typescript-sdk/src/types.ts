@@ -332,12 +332,28 @@ export interface AuthApiResponse {
   refresh_token?: string;
   expires_in?: number;
   token_type?: 'bearer';
+  // MFA challenge fields — when the user has a second factor configured, the
+  // sign-in endpoints (/signin, /login, /magic-link/verify) return no tokens and
+  // instead set mfa_required=true plus a short-lived mfa_token. The caller must
+  // then complete verifyMfaChallenge(mfa_token, code) to obtain real tokens.
+  // (apps/api/app/routers/v1/auth.py:451-452, SignInResponse at :148-152)
+  mfa_required?: boolean;
+  mfa_token?: string;
 }
 
 // Client Response interfaces (what the SDK returns)
 export interface AuthResponse {
   user: User;
-  tokens: TokenResponse;
+  // Absent on an MFA challenge (mfa_required=true) — the tokens are only issued
+  // after verifyMfaChallenge completes the second factor.
+  tokens?: TokenResponse;
+  /** True when a second factor is required before tokens are issued. */
+  mfa_required?: boolean;
+  /**
+   * Short-lived (5min) challenge token to pass to verifyMfaChallenge together
+   * with the user's TOTP or backup code. Only present when mfa_required is true.
+   */
+  mfa_token?: string;
 }
 
 export interface MFAEnableResponse {
