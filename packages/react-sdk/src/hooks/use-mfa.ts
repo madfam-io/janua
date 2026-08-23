@@ -2,11 +2,15 @@ import { useState, useCallback } from 'react'
 import { useJanua } from '../provider'
 
 export interface UseMFAReturn {
-  /** Enable MFA for the current user. Returns the secret, QR code URI, and backup codes. */
-  enable: (type?: string) => Promise<{ secret: string; qr_code: string; backup_codes: string[]; provisioning_uri: string }>
-  /** Verify an MFA code */
+  /**
+   * Begin MFA enrollment for the current user. Requires the account password
+   * (the /mfa/enable endpoint verifies it before issuing a secret). Returns the
+   * TOTP secret, provisioning URI, QR code, and one-time backup codes.
+   */
+  enable: (password: string) => Promise<{ secret: string; qr_code: string; backup_codes: string[]; provisioning_uri: string }>
+  /** Confirm MFA enrollment with a TOTP code from the authenticator app. */
   verify: (code: string) => Promise<void>
-  /** Disable MFA for the current user */
+  /** Disable MFA for the current user (requires the account password). */
   disable: (password: string) => Promise<void>
   /** Whether an MFA operation is in progress */
   isLoading: boolean
@@ -26,7 +30,7 @@ export interface UseMFAReturn {
  *   const { enable, verify, disable, isLoading, error } = useMFA();
  *
  *   const handleEnable = async () => {
- *     const { secret, qrCode } = await enable('totp');
+ *     const { secret, qr_code } = await enable(userPassword);
  *     // Display QR code for user to scan
  *   };
  *
@@ -45,11 +49,11 @@ export function useMFA(): UseMFAReturn {
   const [error, setError] = useState<Error | null>(null)
 
   const enable = useCallback(
-    async (type: string = 'totp') => {
+    async (password: string) => {
       setIsLoading(true)
       setError(null)
       try {
-        const response = await client.auth.enableMFA(type)
+        const response = await client.auth.enableMFA(password)
         return response
       } catch (err) {
         const mfaError = err instanceof Error ? err : new Error('Failed to enable MFA')

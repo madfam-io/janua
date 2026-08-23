@@ -25,7 +25,7 @@ import {
   validateState,
   buildAuthorizationUrl,
 } from './utils/pkce';
-import { mapErrorToState, ReactJanuaError } from './utils/errors';
+import { createErrorState, mapErrorToState, ReactJanuaError } from './utils/errors';
 
 /**
  * Context value interface with full authentication capabilities
@@ -352,6 +352,27 @@ export function JanuaProvider({ children, config, appearance }: JanuaProviderPro
       try {
         const response = await client.signIn({ email, password });
 
+        // A second factor is required: sign-in returned mfa_required + mfa_token
+        // and NO tokens. Surface it as an MFA_REQUIRED error carrying the
+        // mfa_token so the caller can complete it (e.g. with the MFAChallenge
+        // component + client.auth.verifyMfaChallenge). Previously this method
+        // dereferenced response.tokens unconditionally, which is now typed as
+        // possibly-undefined precisely because of this case.
+        if (response.mfa_required) {
+          const mfaState = createErrorState(
+            'MFA_REQUIRED',
+            'Multi-factor authentication is required.',
+            undefined,
+            { mfa_token: response.mfa_token }
+          );
+          setError(mfaState);
+          throw ReactJanuaError.fromState(mfaState);
+        }
+
+        if (!response.tokens) {
+          throw new ReactJanuaError('UNKNOWN_ERROR', 'Sign-in did not return session tokens.');
+        }
+
         storeTokens(response.tokens.access_token, response.tokens.refresh_token);
 
         // Set user from token immediately so isAuthenticated becomes true
@@ -398,6 +419,9 @@ export function JanuaProvider({ children, config, appearance }: JanuaProviderPro
           username: options?.username,
         });
 
+        if (!response.tokens) {
+          throw new ReactJanuaError('UNKNOWN_ERROR', 'Sign-up did not return session tokens.');
+        }
         storeTokens(response.tokens.access_token, response.tokens.refresh_token);
 
         // Security: User data stored in React state only, not localStorage (CWE-312)
