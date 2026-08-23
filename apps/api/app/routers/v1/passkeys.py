@@ -275,7 +275,7 @@ async def verify_registration(
     activity = ActivityLog(
         user_id=current_user.id,
         action="passkey_registered",
-        details={"passkey_id": str(passkey.id), "name": passkey.name},
+        activity_metadata={"passkey_id": str(passkey.id), "name": passkey.name},
     )
     db.add(activity)
 
@@ -419,7 +419,7 @@ async def verify_authentication(
                 ActivityLog(
                     user_id=user.id,
                     action="passkey_clone_suspected",
-                    details={
+                    activity_metadata={
                         "passkey_id": str(passkey.id),
                         "stored_sign_count": passkey.sign_count,
                         "presented_sign_count": verification.new_sign_count,
@@ -463,7 +463,7 @@ async def verify_authentication(
     activity = ActivityLog(
         user_id=user.id,
         action="passkey_authentication",
-        details={"passkey_id": str(passkey.id), "session_id": str(user_session.id)},
+        activity_metadata={"passkey_id": str(passkey.id), "session_id": str(user_session.id)},
     )
     db.add(activity)
 
@@ -571,7 +571,9 @@ async def delete_passkey(
 
     # Log activity
     activity = ActivityLog(
-        user_id=current_user.id, action="passkey_deleted", details={"passkey_name": passkey.name}
+        user_id=current_user.id,
+        action="passkey_deleted",
+        activity_metadata={"passkey_name": passkey.name},
     )
     db.add(activity)
 

@@ -33,7 +33,11 @@ class MFAChallengeVerifyRequest(BaseModel):
     """MFA challenge verification request (during sign-in)"""
 
     mfa_token: str
-    code: str = Field(..., min_length=6, max_length=8)  # TOTP (6) or backup code (9 with dash)
+    # TOTP is 6 digits; a formatted backup code is XXXX-XXXX (9 chars). max_length
+    # was 8, which rejected every formatted backup code at validation before it
+    # reached consume_backup_code — so backup codes could never complete a sign-in
+    # challenge. Allow up to 9 (the normalizer strips the dash on compare).
+    code: str = Field(..., min_length=6, max_length=9)
 
 
 class MFAEnableRequest(BaseModel):
@@ -277,7 +281,7 @@ async def enable_mfa(
 
     # Log activity
     activity = ActivityLog(
-        user_id=current_user.id, action="mfa_setup_initiated", details={"method": "totp"}
+        user_id=current_user.id, action="mfa_setup_initiated", activity_metadata={"method": "totp"}
     )
     db.add(activity)
 
@@ -309,7 +313,7 @@ async def verify_mfa(
 
     # Log activity
     activity = ActivityLog(
-        user_id=current_user.id, action="mfa_enabled", details={"method": "totp"}
+        user_id=current_user.id, action="mfa_enabled", activity_metadata={"method": "totp"}
     )
     db.add(activity)
 
@@ -352,7 +356,7 @@ async def disable_mfa(
     current_user.mfa_backup_codes = []
 
     # Log activity
-    activity = ActivityLog(user_id=current_user.id, action="mfa_disabled", details={})
+    activity = ActivityLog(user_id=current_user.id, action="mfa_disabled", activity_metadata={})
     db.add(activity)
 
     await db.commit()
@@ -388,7 +392,7 @@ async def regenerate_backup_codes(
     activity = ActivityLog(
         user_id=current_user.id,
         action="mfa_backup_codes_regenerated",
-        details={"count": len(backup_codes)},
+        activity_metadata={"count": len(backup_codes)},
     )
     db.add(activity)
 
@@ -411,7 +415,7 @@ async def validate_mfa_code(
     if totp.verify(code, valid_window=1):
         # Log successful validation
         activity = ActivityLog(
-            user_id=current_user.id, action="mfa_verify", details={"method": "totp"}
+            user_id=current_user.id, action="mfa_verify", activity_metadata={"method": "totp"}
         )
         db.add(activity)
         await db.commit()
@@ -423,7 +427,7 @@ async def validate_mfa_code(
         activity = ActivityLog(
             user_id=current_user.id,
             action="mfa_backup_code_used",
-            details={"context": "validate-code"},
+            activity_metadata={"context": "validate-code"},
         )
         db.add(activity)
         await db.commit()
@@ -518,7 +522,7 @@ async def initiate_mfa_recovery(email: str, db: Session = Depends(get_db)):
 
     # Log recovery attempt
     activity = ActivityLog(
-        user_id=user.id, action="mfa_recovery_initiated", details={"method": "email"}
+        user_id=user.id, action="mfa_recovery_initiated", activity_metadata={"method": "email"}
     )
     db.add(activity)
     await db.commit()
@@ -612,7 +616,7 @@ async def verify_mfa_challenge(
         activity = ActivityLog(
             user_id=user.id,
             action="mfa_backup_code_used",
-            details={"context": "signin"},
+            activity_metadata={"context": "signin"},
         )
         db.add(activity)
         code_valid = True
@@ -627,7 +631,9 @@ async def verify_mfa_challenge(
 
     # Log successful MFA sign-in
     activity = ActivityLog(
-        user_id=user.id, action="mfa_verify", details={"method": "totp", "context": "signin"}
+        user_id=user.id,
+        action="mfa_verify",
+        activity_metadata={"method": "totp", "context": "signin"},
     )
     db.add(activity)
     await db.commit()

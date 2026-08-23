@@ -627,6 +627,226 @@ async def _recover_authorize_url_from_client(client_id: str, db) -> Optional[str
     return f"{parsed.scheme}://{parsed.netloc}/"
 
 
+def _render_mfa_challenge_page(
+    *,
+    mfa_token: str,
+    app_name: str,
+    auth_request_id: Optional[str],
+    client_id: Optional[str],
+    client_name: Optional[str],
+    next_url: Optional[str],
+    error_message: Optional[str] = None,
+    status_code: int = 200,
+):
+    """Render the hosted second-factor screen for the OAuth browser-login flow.
+
+    This replaces the previous dead-end interstitial (a static "you need a second
+    factor" message with no way to enter a code — auth's P1 #3). It POSTs the code
+    plus the short-lived `mfa_token` to `/api/v1/auth/login-form/mfa`, which
+    verifies the factor, sets the session cookies, and resumes the OAuth redirect.
+
+    The OAuth context (`auth_request_id`/`client_id`/`client_name`/`next`) is
+    carried as hidden fields so the verify step can rebuild the same authorize
+    URL — the `oauth:pre_login:<auth_request_id>` Redis key is NOT consumed on the
+    MFA branch (login_form only deletes it after a session is actually created),
+    so it is still available when the second factor completes.
+    """
+    import html
+
+    from fastapi.responses import HTMLResponse
+
+    safe_app_name = html.escape(app_name or "Application")
+    hidden_fields = _oauth_context_hidden_fields_html(
+        auth_request_id=auth_request_id,
+        client_id=client_id,
+        client_name=client_name,
+        next_url=next_url,
+    )
+    error_html = (
+        f'<div class="error">{html.escape(error_message)}</div>' if error_message else ""
+    )
+
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Two-factor authentication - Janua</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .login-container {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }}
+        .logo {{ text-align: center; margin-bottom: 24px; }}
+        .logo h1 {{ font-size: 28px; color: #333; margin-bottom: 8px; }}
+        .logo p {{ color: #666; font-size: 14px; }}
+        .app-info {{
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 24px;
+            text-align: center;
+        }}
+        .app-info span {{ color: #666; font-size: 13px; }}
+        .app-info strong {{ color: #333; }}
+        .form-group {{ margin-bottom: 20px; }}
+        label {{ display: block; margin-bottom: 6px; color: #333; font-weight: 500; font-size: 14px; }}
+        input[type="text"] {{
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5eb;
+            border-radius: 8px;
+            font-size: 20px;
+            letter-spacing: 4px;
+            text-align: center;
+        }}
+        input:focus {{
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }}
+        button {{
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }}
+        .hint {{ color: #666; font-size: 13px; text-align: center; margin-top: 12px; }}
+        .error {{
+            background: #fee;
+            color: #c00;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }}
+        .footer {{ text-align: center; margin-top: 24px; color: #666; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>&#128274; Janua</h1>
+            <p>Two-factor authentication</p>
+        </div>
+
+        <div class="app-info">
+            <span>Signing in to <strong>{safe_app_name}</strong></span>
+        </div>
+
+        {error_html}
+
+        <form method="POST" action="/api/v1/auth/login-form/mfa">
+            <input type="hidden" name="mfa_token" value="{html.escape(mfa_token)}">
+            {hidden_fields}
+            <div class="form-group">
+                <label for="code">Verification code</label>
+                <input type="text" id="code" name="code" inputmode="text"
+                       autocomplete="one-time-code" placeholder="123456"
+                       required autofocus>
+            </div>
+            <button type="submit">Verify</button>
+            <div class="hint">Enter the 6-digit code from your authenticator app, or a backup code.</div>
+        </form>
+
+        <div class="footer">Powered by Janua &bull; Secure Authentication</div>
+    </div>
+</body>
+</html>
+"""
+    return HTMLResponse(content=html_content, status_code=status_code)
+
+
+def _set_session_cookies(response, access_token: str, refresh_token: str) -> None:
+    """Set the hosted-flow session cookies on a response.
+
+    Extracted so the password path (login_form) and the second-factor path
+    (login_form_mfa) set identical cookies — same names, flags, TTLs, and
+    optional cross-subdomain domain — instead of drifting between two copies.
+    The access cookie is intentionally non-HttpOnly (the browser SDK reads it for
+    API calls); the refresh cookie is HttpOnly.
+    """
+    access_cookie_kwargs: dict = {
+        "httponly": False,
+        "samesite": "lax",
+        "secure": True,
+        "max_age": 3600,  # 1 hour
+    }
+    refresh_cookie_kwargs: dict = {
+        "httponly": True,
+        "samesite": "lax",
+        "secure": True,
+        "max_age": 604800,  # 7 days
+    }
+    if settings.COOKIE_DOMAIN:
+        access_cookie_kwargs["domain"] = settings.COOKIE_DOMAIN
+        refresh_cookie_kwargs["domain"] = settings.COOKIE_DOMAIN
+
+    response.set_cookie(key="janua_access_token", value=access_token, **access_cookie_kwargs)
+    response.set_cookie(key="janua_refresh_token", value=refresh_token, **refresh_cookie_kwargs)
+
+
+async def _resolve_oauth_redirect_target(
+    *,
+    auth_request_id: Optional[str],
+    client_id: Optional[str],
+    next_url: str,
+    redis: ResilientRedisClient,
+    db,
+) -> str:
+    """Resolve where to send the browser after a hosted login completes.
+
+    Mirrors login_form's redirect logic for the second-factor path: prefer the
+    OAuth authorize URL rebuilt from the Redis-stored params (keyed by
+    auth_request_id), fall back to the client's registered origin, and otherwise
+    use the validated `next` URL. Does NOT delete the Redis key (the caller does,
+    after a session is created), matching login_form's single-use semantics.
+    """
+    if auth_request_id:
+        stored_data = await redis.get(f"oauth:pre_login:{auth_request_id}")
+        if stored_data:
+            try:
+                auth_params = json.loads(stored_data)
+                query_params = {}
+                for key in [
+                    "response_type", "client_id", "redirect_uri", "scope",
+                    "state", "nonce", "code_challenge", "code_challenge_method",
+                ]:
+                    if auth_params.get(key) is not None:
+                        query_params[key] = auth_params[key]
+                return f"/api/v1/oauth/authorize?{urlencode(query_params)}"
+            except (json.JSONDecodeError, KeyError):
+                pass
+        # Redis lost the params — try the client's registered origin.
+        if client_id:
+            recovered = await _recover_authorize_url_from_client(client_id, db)
+            if recovered:
+                return recovered
+        return "/"
+    # Non-OAuth login: validate the caller-supplied next URL (CWE-601).
+    return validate_redirect_url(next_url, default_url="/")
+
+
 # GET /login - Render login form for OAuth flows
 @router.get("/login")
 async def login_page(
@@ -1110,9 +1330,23 @@ async def login_form(
         await log_activity(
             db, str(user.id), "signin", {"method": "oauth_form", "mfa_required": True}, request
         )
-        return make_error_page(
-            "This account requires a second factor to sign in. Complete the "
-            "additional verification step to continue.",
+        # Render the real second-factor screen (P1 #3). We mint a short-lived
+        # challenge token here and hand the user a code-entry form that POSTs to
+        # /login-form/mfa; that endpoint verifies the factor, sets the session
+        # cookies, and completes the OAuth redirect. The OAuth context is carried
+        # in hidden fields so the redirect can be rebuilt after verification.
+        from app.auth.mfa_enforcement import mint_mfa_challenge_token
+
+        return _render_mfa_challenge_page(
+            mfa_token=mint_mfa_challenge_token(user),
+            app_name=client_name or "Application",
+            auth_request_id=auth_request_id,
+            client_id=client_id,
+            client_name=client_name,
+            # For non-OAuth logins the redirect target is `next`; for OAuth it is
+            # rebuilt from auth_request_id, so only pass next when there is no
+            # auth_request_id (matches _oauth_context_hidden_fields_html's rule).
+            next_url=safe_next if not auth_request_id else None,
         )
 
     # Create session and tokens
@@ -1181,28 +1415,132 @@ async def login_form(
         # For non-OAuth flows, safe_next was validated against the redirect allowlist.
         response = RedirectResponse(url=safe_next, status_code=302)
 
-    # Build cookie kwargs — include domain for cross-subdomain SSO when configured
-    access_cookie_kwargs: dict = {
-        "httponly": False,  # Allow JS access for API calls
-        "samesite": "lax",
-        "secure": True,  # HTTPS only
-        "max_age": 3600,  # 1 hour
-    }
-    if settings.COOKIE_DOMAIN:
-        access_cookie_kwargs["domain"] = settings.COOKIE_DOMAIN
+    # Set session cookies (shared with the second-factor path — see helper).
+    _set_session_cookies(response, access_token, refresh_token)
 
-    refresh_cookie_kwargs: dict = {
-        "httponly": True,  # HttpOnly for security
-        "samesite": "lax",
-        "secure": True,
-        "max_age": 604800,  # 7 days
-    }
-    if settings.COOKIE_DOMAIN:
-        refresh_cookie_kwargs["domain"] = settings.COOKIE_DOMAIN
+    return response
 
-    response.set_cookie(key="janua_access_token", value=access_token, **access_cookie_kwargs)
-    response.set_cookie(key="janua_refresh_token", value=refresh_token, **refresh_cookie_kwargs)
 
+@router.post("/login-form/mfa")
+@limiter.limit("5/minute")
+async def login_form_mfa(
+    request: Request,
+    mfa_token: str = Form(...),
+    code: str = Form(...),
+    next: str = Form("/"),
+    auth_request_id: Optional[str] = Form(None),
+    client_id: Optional[str] = Form(None),
+    client_name: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    redis: ResilientRedisClient = Depends(get_redis),
+):
+    """Complete the second factor for the hosted OAuth browser-login flow (P1 #3).
+
+    The GET /login → POST /login-form path renders the MFA challenge screen (via
+    _render_mfa_challenge_page) when MFA is required; that screen POSTs here with
+    the short-lived `mfa_token` and the user's code, plus the OAuth context. This
+    endpoint verifies the factor, establishes the session cookies, and resumes
+    the OAuth redirect — the browser equivalent of POST /mfa/challenge/verify
+    (which returns JSON tokens and cannot set cookies or redirect).
+
+    On an invalid code it re-renders the challenge screen (401) with a freshly
+    minted challenge token so the user can retry without restarting sign-in.
+    """
+    from uuid import UUID
+
+    import jwt as pyjwt
+
+    # Decode + validate the challenge token (same contract as
+    # /mfa/challenge/verify: HS256 over JWT_SECRET_KEY, type == "mfa_challenge").
+    def _reject(msg: str, *, remint_for=None):
+        token_for_retry = mfa_token
+        if remint_for is not None:
+            from app.auth.mfa_enforcement import mint_mfa_challenge_token
+
+            token_for_retry = mint_mfa_challenge_token(remint_for)
+        return _render_mfa_challenge_page(
+            mfa_token=token_for_retry,
+            app_name=client_name or "Application",
+            auth_request_id=auth_request_id,
+            client_id=client_id,
+            client_name=client_name,
+            next_url=next if not auth_request_id else None,
+            error_message=msg,
+            status_code=401,
+        )
+
+    try:
+        payload = pyjwt.decode(
+            mfa_token,
+            settings.JWT_SECRET_KEY or "development-secret-key",
+            algorithms=["HS256"],
+            options={"require": ["sub", "type", "exp"]},
+        )
+    except pyjwt.ExpiredSignatureError:
+        # Can't re-mint (no user yet) — the challenge is stale, restart sign-in.
+        return _reject("Your verification session expired. Please sign in again.")
+    except pyjwt.InvalidTokenError:
+        return _reject("Invalid verification session. Please sign in again.")
+
+    if payload.get("type") != "mfa_challenge":
+        return _reject("Invalid verification session. Please sign in again.")
+
+    result = await db.execute(
+        select(User).where(User.id == UUID(payload.get("sub")), User.status == UserStatus.ACTIVE)
+    )
+    user = result.scalar_one_or_none()
+    if not user or not user.mfa_enabled or not user.mfa_secret:
+        return _reject("Invalid verification session. Please sign in again.")
+
+    # Verify TOTP, then fall back to a single-use backup code (shared helper).
+    import pyotp
+
+    from app.routers.v1.mfa import consume_backup_code
+
+    code_valid = pyotp.TOTP(user.mfa_secret).verify(code, valid_window=1)
+    if not code_valid and consume_backup_code(user, code):
+        db.add(
+            ActivityLog(
+                user_id=user.id,
+                action="mfa_backup_code_used",
+                activity_metadata={"context": "oauth_form"},
+            )
+        )
+        code_valid = True
+
+    if not code_valid:
+        # Wrong code — re-render with a fresh challenge token so retry works even
+        # if the original is close to expiry.
+        return _reject("Invalid verification code. Please try again.", remint_for=user)
+
+    # Second factor cleared — create the session and resume the OAuth redirect.
+    access_token, refresh_token, _session = await AuthService.create_session(
+        db, user, ip_address=request.client.host, user_agent=request.headers.get("user-agent")
+    )
+    await log_activity(
+        db, str(user.id), "signin", {"method": "oauth_form", "mfa": "totp"}, request
+    )
+
+    safe_next = await _resolve_oauth_redirect_target(
+        auth_request_id=auth_request_id,
+        client_id=client_id,
+        next_url=next,
+        redis=redis,
+        db=db,
+    )
+
+    # Single-use: drop the pre-login Redis key now that the session exists
+    # (matches login_form). Best-effort — the key also has a TTL.
+    if auth_request_id:
+        try:
+            await redis.delete(f"oauth:pre_login:{auth_request_id}")
+        except Exception:
+            pass
+
+    from fastapi.responses import RedirectResponse
+
+    response = RedirectResponse(url=safe_next, status_code=302)
+    _set_session_cookies(response, access_token, refresh_token)
     return response
 
 
