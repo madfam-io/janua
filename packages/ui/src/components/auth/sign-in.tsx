@@ -137,6 +137,30 @@ export function SignIn({
   const [isLoading, setIsLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
+  // MFA challenge state. When sign-in returns `mfa_required`, we hold the
+  // short-lived `mfa_token` here and render a code-entry step in place of the
+  // credentials form. `null` means no challenge is in progress.
+  const [mfaToken, setMfaToken] = React.useState<string | null>(null)
+  const [mfaCode, setMfaCode] = React.useState('')
+
+  // Finalize a successful sign-in (credentials, MFA, or fetch fallback) by
+  // awaiting the consumer's afterSignIn bridge, then navigating. AWAIT matters:
+  // consumers use afterSignIn to mirror the SDK's freshly persisted tokens into
+  // an HttpOnly session cookie. If we don't await, a consumer that navigates on
+  // return races the un-awaited bridge — the edge middleware then sees no cookie
+  // and bounces the (authenticated) user back to /login with tokens stranded in
+  // localStorage. Awaiting also lets a bridge failure surface through onError
+  // instead of becoming a silent unhandled rejection.
+  const completeSignIn = React.useCallback(
+    async (user: unknown) => {
+      await afterSignIn?.(user)
+      if (redirectUrl) {
+        window.location.href = redirectUrl
+      }
+    },
+    [afterSignIn, redirectUrl]
+  )
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -150,26 +174,23 @@ export function SignIn({
           remember,
         })
 
-        // Check if MFA is required
-        if (response.mfaRequired && onMFARequired) {
-          onMFARequired(response)
+        // MFA challenge. The API/SDK use snake_case `mfa_required` + `mfa_token`
+        // (SignInResponse; apps/api/app/routers/v1/auth.py:451-452). A prior
+        // version checked camelCase `mfaRequired`, which never matched, so the
+        // MFA step never rendered. If the consumer supplied onMFARequired, defer
+        // to it; otherwise render the built-in code-entry step below.
+        if (response.mfa_required) {
+          if (onMFARequired) {
+            onMFARequired(response)
+          } else {
+            setMfaToken(response.mfa_token ?? null)
+            setMfaCode('')
+          }
           setIsLoading(false)
           return
         }
 
-        // AWAIT afterSignIn: consumers use it to mirror the SDK's freshly
-        // persisted tokens into an HttpOnly session cookie (the admin's
-        // /api/auth/session bridge). If we don't await, a consumer that
-        // navigates on return races the un-awaited bridge — the edge
-        // middleware then sees no cookie and bounces the (authenticated)
-        // user back to /login with tokens stranded in localStorage. Awaiting
-        // also lets a bridge failure surface through onError instead of
-        // becoming a silent unhandled rejection.
-        await afterSignIn?.(response.user)
-
-        if (redirectUrl) {
-          window.location.href = redirectUrl
-        }
+        await completeSignIn(response.user)
       } else {
         const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
           method: 'POST',
@@ -178,31 +199,31 @@ export function SignIn({
           body: JSON.stringify({ email, password, remember }),
         })
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
+        // The MFA challenge is a 200 with `mfa_required: true` + `mfa_token`
+        // (NOT an error status). Read the body first, then branch on it, before
+        // treating a non-OK status as a failure.
+        const data = await response.json().catch(() => ({}))
 
-          // Check for MFA challenge response
-          if (response.status === 403 && errorData.mfa_required && onMFARequired) {
-            onMFARequired(errorData)
-            setIsLoading(false)
-            return
+        if (response.ok && data.mfa_required) {
+          if (onMFARequired) {
+            onMFARequired(data)
+          } else {
+            setMfaToken(data.mfa_token ?? null)
+            setMfaCode('')
           }
+          setIsLoading(false)
+          return
+        }
 
-          const actionableError = parseApiError(errorData, { status: response.status })
+        if (!response.ok) {
+          const actionableError = parseApiError(data, { status: response.status })
           setError(formatErrorMessage(actionableError, true))
           onError?.(new Error(actionableError.message))
           setIsLoading(false)
           return
         }
 
-        const data = await response.json()
-        // Awaited for the same reason as the SDK branch above: a consumer's
-        // cookie-bridge must finish before any post-sign-in navigation.
-        await afterSignIn?.(data.user)
-
-        if (redirectUrl) {
-          window.location.href = redirectUrl
-        }
+        await completeSignIn(data.user)
       }
     } catch (err) {
       const actionableError = parseApiError(err, {
@@ -213,6 +234,57 @@ export function SignIn({
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Complete the second factor. Uses the SDK's verifyMfaChallenge when a client
+  // is present (it persists tokens and fires onSignIn); otherwise POSTs directly
+  // to /api/v1/mfa/challenge/verify for the fetch-fallback path.
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!mfaToken) return
+    setError(null)
+    setIsLoading(true)
+
+    try {
+      if (januaClient) {
+        const result = await januaClient.auth.verifyMfaChallenge(mfaToken, mfaCode)
+        setMfaToken(null)
+        await completeSignIn(result.user)
+      } else {
+        const response = await fetch(`${apiUrl}/api/v1/mfa/challenge/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ mfa_token: mfaToken, code: mfaCode }),
+        })
+
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          const actionableError = parseApiError(data, { status: response.status })
+          setError(formatErrorMessage(actionableError, true))
+          onError?.(new Error(actionableError.message))
+          setIsLoading(false)
+          return
+        }
+        setMfaToken(null)
+        await completeSignIn(data.user)
+      }
+    } catch (err) {
+      const actionableError = parseApiError(err, {
+        message: err instanceof Error ? err.message : undefined,
+      })
+      setError(formatErrorMessage(actionableError, true))
+      onError?.(new Error(actionableError.message))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleMfaCancel = () => {
+    setMfaToken(null)
+    setMfaCode('')
+    setError(null)
+    setPassword('')
   }
 
   const handleSocialLogin = async (provider: string) => {
@@ -250,6 +322,45 @@ export function SignIn({
       })
       setError(formatErrorMessage(actionableError, true))
       onError?.(new Error(actionableError.message))
+      setIsLoading(false)
+    }
+  }
+
+  // Passkey (WebAuthn) sign-in. Drives the browser assertion ceremony via the
+  // SDK's client.signInWithPasskey, which fetches options (with a server session
+  // id), calls navigator.credentials.get, and verifies — persisting tokens on
+  // success. Requires a januaClient; without one there is no ceremony to run.
+  const handlePasskeyLogin = async () => {
+    setError(null)
+    if (!januaClient) {
+      const message =
+        'Passkey sign-in requires a configured Janua client. Pass januaClient to <SignIn>.'
+      setError(message)
+      onError?.(new Error(message))
+      return
+    }
+    if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+      const message = 'Passkeys are not supported in this browser.'
+      setError(message)
+      onError?.(new Error(message))
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      // Pass the typed email (if any) so a non-discoverable credential can be
+      // matched; empty is fine for discoverable (resident) passkeys.
+      const result = await januaClient.signInWithPasskey(email || undefined)
+      await completeSignIn(result.user)
+    } catch (err) {
+      // A user cancelling the OS prompt throws — surface it gently, not as a
+      // hard failure banner shape a wrong password would use.
+      const actionableError = parseApiError(err, {
+        message: err instanceof Error ? err.message : 'Passkey sign-in failed',
+      })
+      setError(formatErrorMessage(actionableError, true))
+      onError?.(new Error(actionableError.message))
+    } finally {
       setIsLoading(false)
     }
   }
@@ -306,6 +417,78 @@ export function SignIn({
       </a>
     </p>
   ) : undefined
+
+  // ── MFA challenge step ──
+  // Rendered in place of the credentials form once sign-in returns
+  // `mfa_required`. It collects the second-factor code and completes the
+  // challenge with the held mfa_token. Only shown when the consumer did NOT
+  // supply an onMFARequired handler (that handler owns the UX otherwise).
+  if (mfaToken) {
+    const mfaHeader = (
+      <div className="text-center mb-6" style={{ animation: 'janua-fade-in 300ms ease' }}>
+        <h2 className="text-2xl font-bold">Two-factor authentication</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Enter the 6-digit code from your authenticator app, or a backup code.
+        </p>
+      </div>
+    )
+
+    return (
+      <AuthCard layout={layout} logo={logoUrl} header={mfaHeader} className={className}>
+        <form onSubmit={handleMfaSubmit} className="space-y-4">
+          {error && (
+            <div
+              className="bg-destructive/15 text-destructive text-sm p-3 rounded-md"
+              style={{ animation: 'janua-slide-up 200ms ease, janua-shake 400ms ease' }}
+            >
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="signin-mfa-code">Verification code</Label>
+            <Input
+              id="signin-mfa-code"
+              // inputMode numeric for TOTP, but allow letters/dash for backup codes.
+              inputMode="text"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value)}
+              required
+              autoFocus
+              disabled={isLoading}
+            />
+          </div>
+
+          <Button type="submit" className="w-full" disabled={isLoading || !mfaCode.trim()}>
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Verifying...
+              </>
+            ) : (
+              'Verify'
+            )}
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            disabled={isLoading}
+            onClick={handleMfaCancel}
+          >
+            Back to sign in
+          </Button>
+        </form>
+
+        <p className="text-center text-xs text-muted-foreground mt-3 opacity-60">
+          Powered by Janua
+        </p>
+      </AuthCard>
+    )
+  }
 
   return (
     <AuthCard layout={layout} logo={logoUrl} header={header} footer={footer} className={className}>
@@ -407,10 +590,7 @@ export function SignIn({
             variant="outline"
             className="w-full"
             disabled={isLoading}
-            onClick={() => {
-              // Passkey auth handled by PasskeyButton component in Phase 5
-              // Placeholder for direct integration
-            }}
+            onClick={handlePasskeyLogin}
           >
             Sign in with Passkey
           </Button>

@@ -37,12 +37,33 @@ function syncTokenCookie(token: string | null): void {
 
 // ── Auth context with dashboard-specific additions ──
 
+/**
+ * Result of {@link AuthContextType.login}. When the account has a second factor,
+ * `mfaRequired` is true and `login` does NOT complete the session — the caller
+ * must collect a code and call {@link AuthContextType.verifyMfa} with the
+ * returned `mfaToken`.
+ */
+interface LoginResult {
+  mfaRequired: boolean
+  mfaToken?: string
+}
+
 interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
-  login: (email: string, password: string) => Promise<void>
+  /**
+   * Sign in with email + password. Resolves to `{ mfaRequired: true, mfaToken }`
+   * when a second factor is needed (no session is established yet); resolves to
+   * `{ mfaRequired: false }` on a completed sign-in.
+   */
+  login: (email: string, password: string) => Promise<LoginResult>
+  /**
+   * Complete an MFA challenge raised by {@link login}. Pass the `mfaToken` from
+   * the login result plus the user's TOTP or backup code.
+   */
+  verifyMfa: (mfaToken: string, code: string) => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
   clearError: () => void
@@ -71,13 +92,34 @@ function DashboardAuthBridge({ children }: { children: ReactNode }) {
     syncCookie()
   }, [client, isAuthenticated, isLoading])
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
     setError(null)
     try {
-      await client.auth.signIn({ email, password })
-      // Cookie sync happens via the useEffect above
+      const result = await client.auth.signIn({ email, password })
+      // A second factor is required: surface the challenge instead of treating
+      // the (token-less) response as a completed sign-in. Previously this method
+      // ignored the MFA fields entirely, so an MFA-enabled user's login appeared
+      // to "succeed" with no session — the dashboard's user-visible instance of
+      // the audit's P1 #1.
+      if (result.mfa_required) {
+        return { mfaRequired: true, mfaToken: result.mfa_token }
+      }
+      // Cookie sync happens via the useEffect above.
+      return { mfaRequired: false }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Login failed'
+      setError(errorMessage)
+      throw err
+    }
+  }, [client])
+
+  const verifyMfa = useCallback(async (mfaToken: string, code: string): Promise<void> => {
+    setError(null)
+    try {
+      await client.auth.verifyMfaChallenge(mfaToken, code)
+      // Tokens are now persisted by the SDK; the useEffect above syncs the cookie.
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Verification failed'
       setError(errorMessage)
       throw err
     }
@@ -116,6 +158,7 @@ function DashboardAuthBridge({ children }: { children: ReactNode }) {
         isLoading,
         error,
         login,
+        verifyMfa,
         logout,
         refreshUser,
         clearError,

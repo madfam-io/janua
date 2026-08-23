@@ -97,6 +97,12 @@ function LoginForm() {
         redirectUrl={redirectTo}
         socialProviders={{ google: true, github: true, microsoft: true, apple: true }}
         showRememberMe={false}
+        // Renders the "Sign in with Passkey" button (WebAuthn login) and, on an
+        // MFA-enabled account, the built-in two-factor code step. Both are driven
+        // by januaClient (signInWithPasskey / verifyMfaChallenge) and persist
+        // tokens the same way password sign-in does, so handleAfterSignIn works
+        // unchanged for all three paths.
+        enablePasskey
       />
 
       <div className="text-muted-foreground text-center text-sm mt-4">
