@@ -6,7 +6,6 @@ import { Auth } from '../../auth';
 import { HttpClient } from '../../http-client';
 import { TokenManager } from '../../utils';
 import { UserStatus } from '../../types';
-import type { MFAParams } from '../../types';
 
 // Inline fixtures
 const userFixtures = {
@@ -83,60 +82,89 @@ describe('Auth - MFA Operations', () => {
     auth = new Auth(mockHttpClient, mockTokenManager, mockOnSignIn, mockOnSignOut);
   });
 
-  describe('verifyMFA', () => {
-    it('should verify MFA code successfully', async () => {
-      const mfaParams: MFAParams = {
-        challenge_id: 'challenge-123',
-        code: '123456',
-        method: 'totp'
-      };
+  describe('verifyMFA (enrollment confirmation)', () => {
+    it('should confirm MFA enrollment with a TOTP code', async () => {
+      // verifyMFA finalizes enrollment against POST /api/v1/mfa/verify and
+      // returns { message } — it does NOT issue tokens. Token-issuing MFA during
+      // sign-in is verifyMfaChallenge (tested below).
+      const request = { code: '123456' };
+      const mockResponse = { message: 'MFA successfully enabled' };
 
+      mockHttpClient.post.mockResolvedValue({ data: mockResponse });
+
+      const result = await auth.verifyMFA(request);
+
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/verify', request);
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should reject a non-6-digit code before calling the API', async () => {
+      await expect(auth.verifyMFA({ code: '12' })).rejects.toThrow();
+      expect(mockHttpClient.post).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('verifyMfaChallenge (sign-in second factor)', () => {
+    it('should complete the challenge and persist tokens', async () => {
       const mockResponse = {
         user: userFixtures.verifiedUser,
-        access_token: tokenFixtures.validAccessToken,
-        refresh_token: tokenFixtures.validRefreshToken,
-        expires_in: 3600,
-        token_type: 'bearer' as const
+        tokens: tokenFixtures.validTokens
       };
 
       mockHttpClient.post.mockResolvedValue({ data: mockResponse });
 
-      const result = await auth.verifyMFA(mfaParams);
+      const result = await auth.verifyMfaChallenge('mfa-token-abc', '123456');
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/mfa/verify', mfaParams);
-      expect(mockTokenManager.setTokens).toHaveBeenCalled();
+      expect(mockHttpClient.post).toHaveBeenCalledWith(
+        '/api/v1/mfa/challenge/verify',
+        { mfa_token: 'mfa-token-abc', code: '123456' },
+        { skipAuth: true }
+      );
+      expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
+        access_token: tokenFixtures.validTokens.access_token,
+        refresh_token: tokenFixtures.validTokens.refresh_token,
+        expires_at: expect.any(Number)
+      });
       expect(mockOnSignIn).toHaveBeenCalled();
       expect(result).toEqual({
         user: mockResponse.user,
         tokens: {
-          access_token: mockResponse.access_token,
-          refresh_token: mockResponse.refresh_token,
-          expires_in: mockResponse.expires_in,
-          token_type: mockResponse.token_type
+          access_token: tokenFixtures.validTokens.access_token,
+          refresh_token: tokenFixtures.validTokens.refresh_token,
+          expires_in: tokenFixtures.validTokens.expires_in,
+          token_type: tokenFixtures.validTokens.token_type
         }
       });
+    });
+
+    it('should require a non-empty mfa_token and code', async () => {
+      await expect(auth.verifyMfaChallenge('', '123456')).rejects.toThrow();
+      await expect(auth.verifyMfaChallenge('mfa-token', '')).rejects.toThrow();
+      expect(mockHttpClient.post).not.toHaveBeenCalled();
     });
   });
 
   describe('enableMFA', () => {
-    it('should enable MFA successfully', async () => {
-      const method = 'totp';
+    it('should begin enrollment with the account password', async () => {
+      const password = 'CurrentPassword123!';
 
       mockHttpClient.post.mockResolvedValue({
         data: {
           secret: 'MFASECRET123',
           qr_code: 'data:image/png;base64,...',
-          backup_codes: ['code1', 'code2', 'code3']
+          backup_codes: ['code1', 'code2', 'code3'],
+          provisioning_uri: 'otpauth://totp/Janua:test'
         }
       });
 
-      const result = await auth.enableMFA(method);
+      const result = await auth.enableMFA(password);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/mfa/enable', { method });
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/enable', { password });
       expect(result).toEqual({
         secret: 'MFASECRET123',
         qr_code: 'data:image/png;base64,...',
-        backup_codes: ['code1', 'code2', 'code3']
+        backup_codes: ['code1', 'code2', 'code3'],
+        provisioning_uri: 'otpauth://totp/Janua:test'
       });
     });
   });
@@ -147,17 +175,26 @@ describe('Auth - MFA Operations', () => {
 
       mockHttpClient.post.mockResolvedValue({
         data: {
-          success: true,
-          message: 'MFA disabled successfully'
+          message: 'MFA successfully disabled'
         }
       });
 
       const result = await auth.disableMFA(password);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/auth/mfa/disable', { password });
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/disable', { password });
       expect(result).toEqual({
-        success: true,
-        message: 'MFA disabled successfully'
+        message: 'MFA successfully disabled'
+      });
+    });
+
+    it('should include an optional code when provided', async () => {
+      mockHttpClient.post.mockResolvedValue({ data: { message: 'ok' } });
+
+      await auth.disableMFA('pw', '123456');
+
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/disable', {
+        password: 'pw',
+        code: '123456'
       });
     });
   });
@@ -195,9 +232,13 @@ describe('Auth - MFA Operations', () => {
 
       const result = await auth.regenerateMFABackupCodes(password);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/regenerate-backup-codes', {
-        password: password
-      });
+      // The handler binds `password` as a QUERY parameter, so it is sent via
+      // `params`, not the JSON body.
+      expect(mockHttpClient.post).toHaveBeenCalledWith(
+        '/api/v1/mfa/regenerate-backup-codes',
+        undefined,
+        { params: { password } }
+      );
       expect(result).toEqual(mockResponse);
     });
   });
@@ -213,9 +254,12 @@ describe('Auth - MFA Operations', () => {
 
       const result = await auth.validateMFACode(code);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/mfa/validate-code', {
-        code: code
-      });
+      // `code` is a QUERY parameter on the handler, sent via `params`.
+      expect(mockHttpClient.post).toHaveBeenCalledWith(
+        '/api/v1/mfa/validate-code',
+        undefined,
+        { params: { code } }
+      );
       expect(result).toEqual(mockResponse);
     });
   });

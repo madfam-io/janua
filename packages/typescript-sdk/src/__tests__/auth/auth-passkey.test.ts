@@ -194,13 +194,18 @@ describe('Auth - Passkey Operations', () => {
   describe('getPasskeyAuthenticationOptions', () => {
     it('should get passkey authentication options successfully', async () => {
       const email = 'user@example.com';
+      // The server mints a `sessionId` that keys the one-time challenge; the SDK
+      // surfaces it so verifyPasskeyAuthentication can pass it back.
       const mockResponse = {
+        sessionId: 'sess_abc123',
         challenge: 'auth_challenge_123',
+        rpId: 'app.example.com',
+        timeout: 60000,
+        userVerification: 'preferred',
         allowCredentials: [
           {
             id: 'credential_id_123',
-            type: 'public-key',
-            transports: ['usb', 'nfc']
+            type: 'public-key'
           }
         ]
       };
@@ -232,27 +237,37 @@ describe('Auth - Passkey Operations', () => {
           signature: 'signature'
         }
       };
+      // The endpoint returns FLAT tokens (not nested under `tokens`) plus a
+      // partial user object.
       const mockResponse = {
-        user: userFixtures.validUser,
-        tokens: tokenFixtures.validTokens,
-        message: 'Passkey authentication successful'
+        verified: true,
+        access_token: tokenFixtures.validAccessToken,
+        refresh_token: tokenFixtures.validRefreshToken,
+        token_type: 'bearer' as const,
+        expires_in: 3600,
+        user: {
+          id: userFixtures.validUser.id,
+          email: userFixtures.validUser.email,
+          first_name: userFixtures.validUser.first_name,
+          last_name: userFixtures.validUser.last_name
+        }
       };
 
       mockHttpClient.post.mockResolvedValue({
         data: mockResponse
       });
 
-      const result = await auth.verifyPasskeyAuthentication(credential, 'auth_challenge_123', 'user@example.com');
+      const result = await auth.verifyPasskeyAuthentication(credential, 'sess_abc123', 'user@example.com');
 
+      // credential + email go in the body; session_id is a QUERY parameter.
       expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/passkeys/authenticate/verify', {
         credential: credential,
-        challenge: 'auth_challenge_123',
         email: 'user@example.com'
-      }, { skipAuth: true });
+      }, { skipAuth: true, params: { session_id: 'sess_abc123' } });
       expect(result).toEqual(mockResponse);
       expect(mockTokenManager.setTokens).toHaveBeenCalledWith({
-        access_token: mockResponse.tokens.access_token,
-        refresh_token: mockResponse.tokens.refresh_token,
+        access_token: mockResponse.access_token,
+        refresh_token: mockResponse.refresh_token,
         expires_at: expect.any(Number)
       });
       expect(mockOnSignIn).toHaveBeenCalled();

@@ -172,16 +172,22 @@ export class WebAuthnHelper {
       }
     };
 
-    // Verify with server and get auth tokens - pass credential, challenge, and email
+    // Verify with server and get auth tokens. The verify endpoint reads the
+    // one-time challenge server-side by `sessionId` (it does NOT accept a
+    // client-supplied challenge — 2026-08-23 replay-hardening), so we pass the
+    // sessionId minted by getPasskeyAuthenticationOptions, not options.challenge.
     const result = await this.auth.verifyPasskeyAuthentication(
       verificationData,
-      options.challenge,
+      options.sessionId,
       email
     );
 
-    // Map response to AuthResponse format - cast token_type to literal 'bearer'
+    // Map response to AuthResponse format - cast token_type to literal 'bearer'.
+    // The passkey verify endpoint returns only a partial user object
+    // ({id, email, first_name, last_name}); callers that need the full profile
+    // should follow up with getCurrentUser().
     return {
-      user: result.user,
+      user: result.user as import('./types').User,
       tokens: {
         access_token: result.access_token,
         refresh_token: result.refresh_token,

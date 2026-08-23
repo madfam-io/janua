@@ -176,9 +176,19 @@ export class Auth {
 
     const response = await this.http.post<AuthApiResponse>('/api/v1/auth/login', request);
 
-    // Handle MFA requirement
-    if ('requires_mfa' in response.data) {
-      return response.data as any; // Return MFA challenge response
+    // Handle MFA requirement. The API (apps/api/app/routers/v1/auth.py:451-452)
+    // returns `mfa_required: true` + `mfa_token` and NO tokens when the user has
+    // a second factor. Surface that to the caller so it can render a code-entry
+    // step and call verifyMfaChallenge(). The prior check looked for a
+    // non-existent `requires_mfa` key, so this branch never fired and the code
+    // fell through to build an AuthResponse whose token fields were all
+    // undefined — silently "swallowing" the challenge.
+    if (response.data.mfa_required) {
+      return {
+        user: response.data.user,
+        mfa_required: true,
+        mfa_token: response.data.mfa_token,
+      };
     }
 
     // Extract tokens - support both nested (API actual) and flat (legacy) structures
@@ -199,6 +209,68 @@ export class Auth {
     }
 
     // Call onSignIn callback if it exists
+    if (this.onSignIn) {
+      this.onSignIn({ user: response.data.user });
+    }
+
+    return {
+      user: response.data.user,
+      tokens: {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_in: tokens.expires_in,
+        token_type: tokens.token_type
+      }
+    };
+  }
+
+  /**
+   * Complete an MFA challenge during sign-in.
+   *
+   * After {@link signIn} returns `{ mfa_required: true, mfa_token }`, call this
+   * with the same `mfa_token` and the user's 6-digit TOTP code (or a formatted
+   * backup code, e.g. `ABCD-1234`) to obtain real session tokens. On success the
+   * tokens are persisted and the onSignIn callback fires, exactly as a normal
+   * sign-in would.
+   *
+   * Targets `POST /api/v1/mfa/challenge/verify`
+   * (apps/api/app/routers/v1/mfa.py:565), which returns the same
+   * `SignInResponse` shape as sign-in: `{ user, tokens: { access_token,
+   * refresh_token, expires_in, token_type } }`.
+   */
+  async verifyMfaChallenge(mfaToken: string, code: string): Promise<AuthResponse> {
+    if (!mfaToken) {
+      throw new ValidationError('mfa_token is required to complete the MFA challenge');
+    }
+    // Server accepts a 6-digit TOTP code or an 8-char backup code (with or
+    // without the XXXX-XXXX dash). Keep validation permissive but non-empty.
+    if (!code || !code.trim()) {
+      throw new ValidationError('An MFA code is required');
+    }
+
+    const response = await this.http.post<AuthApiResponse>(
+      '/api/v1/mfa/challenge/verify',
+      { mfa_token: mfaToken, code: code.trim() },
+      { skipAuth: true }
+    );
+
+    // The challenge-verify endpoint returns tokens nested under `tokens`
+    // (SignInResponse). Support the flat shape too for resilience.
+    const tokens = response.data.tokens || {
+      access_token: response.data.access_token!,
+      refresh_token: response.data.refresh_token!,
+      expires_in: response.data.expires_in!,
+      token_type: response.data.token_type || 'bearer'
+    };
+
+    if (tokens.access_token && tokens.refresh_token) {
+      await this.tokenManager.setTokens({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: Date.now() + (tokens.expires_in * 1000)
+      });
+    }
+
     if (this.onSignIn) {
       this.onSignIn({ user: response.data.user });
     }
@@ -446,71 +518,73 @@ export class Auth {
   }
 
   /**
-   * Enable MFA (returns QR code and backup codes)
+   * Begin MFA enrollment for the signed-in user (returns TOTP secret, QR code,
+   * provisioning URI, and one-time backup codes). Requires the user's password.
+   *
+   * Targets `POST /api/v1/mfa/enable` (apps/api/app/routers/v1/mfa.py:236),
+   * whose body is `MFAEnableRequest = { password }`. The prior implementation
+   * POSTed `{ method }` to `/api/v1/auth/mfa/enable` — both the path (that route
+   * does not exist; the mfa router is mounted at `/mfa`, not `/auth/mfa`) and
+   * the body were wrong, so enrollment always failed.
    */
-  async enableMFA(method: string): Promise<MFAEnableResponse> {
-    const response = await this.http.post<MFAEnableResponse>('/api/v1/auth/mfa/enable', { method });
+  async enableMFA(password: string): Promise<MFAEnableResponse> {
+    const response = await this.http.post<MFAEnableResponse>('/api/v1/mfa/enable', { password });
     return response.data;
   }
 
   /**
-   * Verify MFA setup with TOTP code
+   * Verify MFA enrollment by confirming a TOTP code from the authenticator that
+   * scanned the QR from {@link enableMFA}. This finalizes enrollment; it does NOT
+   * issue session tokens (the user is already signed in during enrollment).
+   *
+   * Targets `POST /api/v1/mfa/verify` (apps/api/app/routers/v1/mfa.py:291),
+   * which requires the caller to be authenticated and returns
+   * `{ message: string }`. The prior code POSTed to `/api/v1/auth/mfa/verify`
+   * (nonexistent path) and expected tokens back.
+   *
+   * NOTE: to complete a second factor during SIGN-IN, use
+   * {@link verifyMfaChallenge} instead — that is the token-issuing path.
    */
-  async verifyMFA(request: MFAVerifyRequest): Promise<AuthResponse> {
+  async verifyMFA(request: MFAVerifyRequest): Promise<{ message: string }> {
     if (!/^\d{6}$/.test(request.code)) {
       throw new ValidationError('MFA code must be 6 digits');
     }
 
-    const response = await this.http.post<AuthApiResponse>('/api/v1/auth/mfa/verify', request);
-
-    // Extract tokens - support both nested (API actual) and flat (legacy) structures
-    const tokens = response.data.tokens || {
-      access_token: response.data.access_token!,
-      refresh_token: response.data.refresh_token!,
-      expires_in: response.data.expires_in!,
-      token_type: response.data.token_type || 'bearer'
-    };
-
-    // Store tokens
-    if (tokens.access_token && tokens.refresh_token) {
-      await this.tokenManager.setTokens({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: Date.now() + (tokens.expires_in * 1000)
-      });
-    }
-
-    // Call onSignIn callback if it exists
-    if (this.onSignIn) {
-      this.onSignIn({ user: response.data.user });
-    }
-
-    return {
-      user: response.data.user,
-      tokens: {
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_in: tokens.expires_in,
-        token_type: tokens.token_type
-      }
-    };
-  }
-
-  /**
-   * Disable MFA
-   */
-  async disableMFA(password: string): Promise<{ message: string }> {
-    const response = await this.http.post<{ message: string }>('/api/v1/auth/mfa/disable', { password });
+    const response = await this.http.post<{ message: string }>('/api/v1/mfa/verify', request);
     return response.data;
   }
 
   /**
-   * Regenerate MFA backup codes
+   * Disable MFA for the signed-in user. Requires the account password.
+   *
+   * Targets `POST /api/v1/mfa/disable` (apps/api/app/routers/v1/mfa.py:321),
+   * body `{ password }` (an optional `code` may also be supplied). The prior
+   * code used the nonexistent `/api/v1/auth/mfa/disable` path.
+   */
+  async disableMFA(password: string, code?: string): Promise<{ message: string }> {
+    const body: { password: string; code?: string } = { password };
+    if (code) body.code = code;
+    const response = await this.http.post<{ message: string }>('/api/v1/mfa/disable', body);
+    return response.data;
+  }
+
+  /**
+   * Regenerate the user's one-time MFA backup codes (invalidates the old set).
+   * Requires the account password.
+   *
+   * Targets `POST /api/v1/mfa/regenerate-backup-codes`
+   * (apps/api/app/routers/v1/mfa.py:363). IMPORTANT: that handler declares
+   * `password: str` as a bare parameter, which FastAPI binds as a QUERY
+   * parameter, not a JSON body field. The prior code sent `{ password }` in the
+   * request body, so the server saw no password and rejected the call — hence
+   * `password` is passed via `params` here.
    */
   async regenerateMFABackupCodes(password: string): Promise<MFABackupCodesResponse> {
-    const response = await this.http.post<MFABackupCodesResponse>('/api/v1/mfa/regenerate-backup-codes', {
-      password
-    });
+    const response = await this.http.post<MFABackupCodesResponse>(
+      '/api/v1/mfa/regenerate-backup-codes',
+      undefined,
+      { params: { password } }
+    );
     return response.data;
   }
 
@@ -522,9 +596,14 @@ export class Auth {
       throw new ValidationError('Invalid MFA code format');
     }
 
-    const response = await this.http.post<{ valid: boolean; message: string }>('/api/v1/mfa/validate-code', {
-      code
-    });
+    // The handler (apps/api/app/routers/v1/mfa.py:400) declares `code: str` as a
+    // bare parameter → FastAPI binds it as a QUERY parameter, so it is sent via
+    // `params`, not the JSON body (which the server would ignore).
+    const response = await this.http.post<{ valid: boolean; message: string }>(
+      '/api/v1/mfa/validate-code',
+      undefined,
+      { params: { code } }
+    );
     return response.data;
   }
 
@@ -996,9 +1075,19 @@ export class Auth {
   }
 
   /**
-   * Get passkey authentication options
+   * Get passkey authentication (assertion) options to feed
+   * `navigator.credentials.get`.
+   *
+   * Targets `POST /api/v1/passkeys/authenticate/options`
+   * (apps/api/app/routers/v1/passkeys.py:291), body `{ email? }`. The response
+   * includes a server-minted `sessionId` (passkeys.py:336) that keys the
+   * one-time challenge stored in Redis. That `sessionId` MUST be passed back to
+   * {@link verifyPasskeyAuthentication} — the verify endpoint reads the challenge
+   * server-side by session id and never trusts a client-supplied challenge
+   * (2026-08-23 replay-hardening fix).
    */
   async getPasskeyAuthenticationOptions(email?: string): Promise<{
+    sessionId: string;
     challenge: string;
     rpId: string;
     timeout: number;
@@ -1006,6 +1095,7 @@ export class Auth {
     userVerification: string;
   }> {
     type PasskeyAuthOptions = {
+      sessionId: string;
       challenge: string;
       rpId: string;
       timeout: number;
@@ -1020,11 +1110,23 @@ export class Auth {
   }
 
   /**
-   * Verify passkey authentication
+   * Verify a passkey assertion and sign the user in.
+   *
+   * Targets `POST /api/v1/passkeys/authenticate/verify`
+   * (apps/api/app/routers/v1/passkeys.py:350). The handler takes the JSON body
+   * `{ email?, credential }` AND a `session_id` QUERY parameter (a bare `str`
+   * param, so it is not a body field). The server resolves the one-time
+   * challenge from Redis by that session id.
+   *
+   * The response is FLAT — `{ verified, access_token, refresh_token, token_type,
+   * expires_in, user }` (passkeys.py:472) — NOT nested under `tokens`. The prior
+   * code sent `challenge` in the body (ignored by the new endpoint) and read
+   * tokens from a nonexistent `response.data.tokens`, so it neither authenticated
+   * nor stored tokens.
    */
   async verifyPasskeyAuthentication(
     credential: PublicKeyCredentialJSON,
-    challenge: string,
+    sessionId: string,
     email?: string
   ): Promise<{
     verified: boolean;
@@ -1032,7 +1134,7 @@ export class Auth {
     refresh_token: string;
     token_type: string;
     expires_in: number;
-    user: User;
+    user: Pick<User, 'id' | 'email' | 'first_name' | 'last_name'>;
   }> {
     type PasskeyAuthResponse = {
       verified: boolean;
@@ -1040,27 +1142,26 @@ export class Auth {
       refresh_token: string;
       token_type: string;
       expires_in: number;
-      user: User;
-      tokens?: { access_token: string; refresh_token: string; expires_in: number };
+      user: Pick<User, 'id' | 'email' | 'first_name' | 'last_name'>;
     };
-    const response = await this.http.post<PasskeyAuthResponse>('/api/v1/passkeys/authenticate/verify', {
-      credential,
-      challenge,
-      email
-    }, { skipAuth: true });
+    const response = await this.http.post<PasskeyAuthResponse>(
+      '/api/v1/passkeys/authenticate/verify',
+      { credential, email },
+      { skipAuth: true, params: { session_id: sessionId } }
+    );
 
-    // Store tokens
-    if (response.data.tokens && response.data.tokens.access_token && response.data.tokens.refresh_token) {
+    // Tokens are flat at the top level of the response.
+    if (response.data.access_token && response.data.refresh_token) {
       await this.tokenManager.setTokens({
-        access_token: response.data.tokens.access_token,
-        refresh_token: response.data.tokens.refresh_token,
-        expires_at: Date.now() + (response.data.tokens.expires_in * 1000)
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_at: Date.now() + (response.data.expires_in * 1000)
       });
     }
 
     // Call onSignIn callback if it exists
     if (this.onSignIn) {
-      this.onSignIn({ user: response.data.user });
+      this.onSignIn({ user: response.data.user as unknown as User });
     }
 
     return response.data;
