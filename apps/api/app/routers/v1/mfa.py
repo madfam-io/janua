@@ -14,6 +14,7 @@ import jwt as pyjwt
 import pyotp
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, Request
+from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -100,6 +101,79 @@ def generate_backup_codes(count: int = 10) -> List[str]:
     return codes
 
 
+# ── Backup-code hashing (2026-08-23 security fix) ──────────────────────────────
+# Backup codes were stored PLAINTEXT in mfa_backup_codes (a P0). They are secrets
+# equivalent to a second factor, so they are now hashed at rest with the same
+# bcrypt primitive the platform uses for passwords, and compared in constant time.
+# A dedicated context here keeps this independent of the legacy beta_auth module.
+_backup_code_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _normalize_backup_code(code: str) -> str:
+    """Canonical form for hashing/compare: strip dashes, uppercase, trim."""
+    return code.replace("-", "").strip().upper()
+
+
+def hash_backup_code(code: str) -> str:
+    """Hash a backup code for at-rest storage (bcrypt over the normalized form)."""
+    return _backup_code_context.hash(_normalize_backup_code(code))
+
+
+def _entry_matches_code(entry: dict, code: str) -> bool:
+    """Constant-time-ish match of a submitted code against ONE stored entry.
+
+    Backward compatible: new entries carry {"hash": ...}; legacy rows may still
+    carry {"code": <plaintext>} (or a bare string). Both are accepted so existing
+    users are not locked out; the legacy plaintext path is removed as codes are
+    regenerated. Does NOT consult the `used` flag — callers do (see
+    consume_backup_code) so the "used" policy is enforced in exactly one place.
+    """
+    normalized = _normalize_backup_code(code)
+    if isinstance(entry, dict):
+        stored_hash = entry.get("hash")
+        if stored_hash:
+            try:
+                return _backup_code_context.verify(normalized, stored_hash)
+            except Exception:
+                return False
+        # Legacy plaintext entry (pre-2026-08-23) — compare normalized forms.
+        legacy = entry.get("code")
+        if legacy is not None:
+            return secrets.compare_digest(_normalize_backup_code(legacy), normalized)
+        return False
+    # Bare-string legacy entry.
+    return secrets.compare_digest(_normalize_backup_code(str(entry)), normalized)
+
+
+def consume_backup_code(user: "User", code: str) -> bool:
+    """Verify a backup code against the user's UNUSED codes and consume it.
+
+    Returns True and marks the matching entry used (mutating user.mfa_backup_codes
+    in place) if a valid, not-yet-used code is found; False otherwise. This is the
+    ONE place backup codes are validated for login/verify, so the single-use and
+    hashing rules cannot drift between call sites (the prior code re-implemented
+    this 4× and one site — disable_mfa — ignored the `used` flag entirely).
+    """
+    entries = user.mfa_backup_codes
+    if not entries or not isinstance(entries, list):
+        return False
+    for i, entry in enumerate(entries):
+        is_used = entry.get("used", False) if isinstance(entry, dict) else False
+        if is_used:
+            continue
+        if _entry_matches_code(entry, code):
+            # Normalize the entry to the current dict shape and mark consumed.
+            user.mfa_backup_codes[i] = {
+                **(entry if isinstance(entry, dict) else {}),
+                "used": True,
+                "used_at": datetime.utcnow().isoformat(),
+            }
+            # Drop any lingering plaintext from a legacy entry now that it's spent.
+            user.mfa_backup_codes[i].pop("code", None)
+            return True
+    return False
+
+
 def generate_qr_code(provisioning_uri: str) -> str:
     """Generate QR code as base64 encoded image"""
     qr = qrcode.QRCode(
@@ -180,9 +254,10 @@ async def enable_mfa(
     # Generate backup codes
     backup_codes = generate_backup_codes()
 
-    # Store backup codes with metadata
+    # Store backup codes HASHED (2026-08-23 security fix) — the plaintext is
+    # returned to the user ONCE in the response below and never persisted.
     backup_codes_data = [
-        {"code": code, "used": False, "created_at": datetime.utcnow().isoformat()}
+        {"hash": hash_backup_code(code), "used": False, "created_at": datetime.utcnow().isoformat()}
         for code in backup_codes
     ]
 
@@ -265,21 +340,10 @@ async def disable_mfa(
         totp_valid = totp.verify(request.code, valid_window=1)
 
         if not totp_valid:
-            # Try backup code
-            backup_valid = False
-            if current_user.mfa_backup_codes:
-                for i, backup_data in enumerate(current_user.mfa_backup_codes):
-                    if isinstance(backup_data, dict):
-                        stored_code = backup_data.get("code", "")
-                    else:
-                        stored_code = backup_data
-
-                    # Remove dashes for comparison
-                    if stored_code.replace("-", "") == request.code.replace("-", ""):
-                        backup_valid = True
-                        break
-
-            if not backup_valid:
+            # Try backup code — hashed compare + single-use enforced via the one
+            # shared helper (the prior inline check here ignored the `used` flag,
+            # so a spent backup code could still disable MFA — 2026-08-23 fix).
+            if not consume_backup_code(current_user, request.code):
                 raise HTTPException(status_code=400, detail="Invalid verification code")
 
     # Disable MFA
@@ -312,9 +376,9 @@ async def regenerate_backup_codes(
     # Generate new backup codes
     backup_codes = generate_backup_codes()
 
-    # Store backup codes with metadata
+    # Store HASHED (2026-08-23 security fix); plaintext returned once below.
     backup_codes_data = [
-        {"code": code, "used": False, "created_at": datetime.utcnow().isoformat()}
+        {"hash": hash_backup_code(code), "used": False, "created_at": datetime.utcnow().isoformat()}
         for code in backup_codes
     ]
 
@@ -354,40 +418,16 @@ async def validate_mfa_code(
 
         return {"valid": True, "message": "Code is valid"}
 
-    # Try backup code
-    if current_user.mfa_backup_codes:
-        for i, backup_data in enumerate(current_user.mfa_backup_codes):
-            if isinstance(backup_data, dict):
-                stored_code = backup_data.get("code", "")
-                is_used = backup_data.get("used", False)
-            else:
-                stored_code = backup_data
-                is_used = False
-
-            # Remove dashes for comparison
-            if not is_used and stored_code.replace("-", "") == code.replace("-", ""):
-                # Mark backup code as used
-                if isinstance(backup_data, dict):
-                    current_user.mfa_backup_codes[i]["used"] = True
-                    current_user.mfa_backup_codes[i]["used_at"] = datetime.utcnow().isoformat()
-                else:
-                    # Convert to dict format
-                    current_user.mfa_backup_codes[i] = {
-                        "code": stored_code,
-                        "used": True,
-                        "used_at": datetime.utcnow().isoformat(),
-                    }
-
-                # Log backup code usage
-                activity = ActivityLog(
-                    user_id=current_user.id,
-                    action="mfa_backup_code_used",
-                    details={"code_index": i},
-                )
-                db.add(activity)
-                await db.commit()
-
-                return {"valid": True, "message": "Backup code is valid (now consumed)"}
+    # Try backup code — hashed compare + single-use via the one shared helper.
+    if consume_backup_code(current_user, code):
+        activity = ActivityLog(
+            user_id=current_user.id,
+            action="mfa_backup_code_used",
+            details={"context": "validate-code"},
+        )
+        db.add(activity)
+        await db.commit()
+        return {"valid": True, "message": "Backup code is valid (now consumed)"}
 
     return {"valid": False, "message": "Invalid code"}
 
@@ -566,31 +606,16 @@ async def verify_mfa_challenge(
     totp = pyotp.TOTP(user.mfa_secret)
     code_valid = totp.verify(request_data.code, valid_window=1)
 
-    # If TOTP failed, try backup codes
-    if not code_valid and user.mfa_backup_codes:
-        for i, backup_data in enumerate(user.mfa_backup_codes):
-            if isinstance(backup_data, dict):
-                stored_code = backup_data.get("code", "")
-                is_used = backup_data.get("used", False)
-            else:
-                stored_code = backup_data
-                is_used = False
-
-            if not is_used and stored_code.replace("-", "") == request_data.code.replace("-", ""):
-                # Mark backup code as used
-                if isinstance(backup_data, dict):
-                    user.mfa_backup_codes[i]["used"] = True
-                    user.mfa_backup_codes[i]["used_at"] = datetime.utcnow().isoformat()
-
-                # Log backup code usage
-                activity = ActivityLog(
-                    user_id=user.id,
-                    action="mfa_backup_code_used",
-                    details={"code_index": i, "context": "signin"},
-                )
-                db.add(activity)
-                code_valid = True
-                break
+    # If TOTP failed, try backup codes — hashed compare + single-use via the one
+    # shared helper (2026-08-23 fix; was an inline plaintext loop).
+    if not code_valid and consume_backup_code(user, request_data.code):
+        activity = ActivityLog(
+            user_id=user.id,
+            action="mfa_backup_code_used",
+            details={"context": "signin"},
+        )
+        db.add(activity)
+        code_valid = True
 
     if not code_valid:
         raise HTTPException(status_code=401, detail="Invalid MFA code")
