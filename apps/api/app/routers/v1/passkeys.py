@@ -75,18 +75,32 @@ class PasskeyUpdateRequest(BaseModel):
 
 
 def get_rp_id() -> str:
-    """Get Relying Party ID (domain)"""
-    # In production, this should be your domain
-    return settings.DOMAIN or "localhost"
+    """Get Relying Party ID.
+
+    Must be the registrable domain the passkey is scoped to (e.g. `janua.dev`),
+    NOT `settings.DOMAIN` (which defaults to `localhost` and would make every
+    prod passkey scoped to localhost — 2026-08-23 fix). Prefer the dedicated
+    WEBAUTHN_RP_ID; fall back to DOMAIN only if it is unset.
+    """
+    return getattr(settings, "WEBAUTHN_RP_ID", None) or settings.DOMAIN or "localhost"
 
 
 def get_rp_name() -> str:
     """Get Relying Party Name"""
-    return settings.APP_NAME or "Janua"
+    return getattr(settings, "WEBAUTHN_RP_NAME", None) or settings.APP_NAME or "Janua"
 
 
 def get_origin() -> str:
-    """Get expected origin"""
+    """Get expected origin.
+
+    The RP origin the browser reports in the WebAuthn ceremony (scheme + host,
+    e.g. `https://janua.dev`). Prefer the dedicated WEBAUTHN_ORIGIN so it matches
+    the RP ID; fall back to FRONTEND_URL / a derived origin (2026-08-23 fix — was
+    FRONTEND_URL only, which need not match get_rp_id()).
+    """
+    configured = getattr(settings, "WEBAUTHN_ORIGIN", None)
+    if configured:
+        return configured
     if settings.FRONTEND_URL:
         return settings.FRONTEND_URL
     return (
@@ -94,6 +108,16 @@ def get_origin() -> str:
         if settings.ENVIRONMENT == "production"
         else f"http://{get_rp_id()}:3000"
     )
+
+
+# Redis key builders + TTLs for one-time WebAuthn challenges (server-side only —
+# a challenge must NEVER be supplied by the client, or replay protection is void).
+def _reg_challenge_key(user_id) -> str:
+    return f"passkey_challenge:{user_id}"
+
+
+def _auth_challenge_key(session_id: str) -> str:
+    return f"passkey_auth_challenge:{session_id}"
 
 
 @router.post("/register/options")
@@ -106,6 +130,16 @@ async def get_registration_options(
     # Get existing passkeys to exclude
     result = await db.execute(select(Passkey).where(Passkey.user_id == current_user.id))
     existing_passkeys = result.scalars().all()
+
+    # Enforce the per-identity passkey cap (2026-08-23 fix — MAX_PASSKEYS_PER_IDENTITY
+    # existed in config but was enforced nowhere). Checked here so the ceremony is
+    # refused before the user touches their authenticator; re-checked at verify.
+    max_passkeys = getattr(settings, "MAX_PASSKEYS_PER_IDENTITY", 10)
+    if len(existing_passkeys) >= max_passkeys:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Passkey limit reached ({max_passkeys}). Remove one before adding another.",
+        )
 
     exclude_credentials = []
     for passkey in existing_passkeys:
@@ -138,7 +172,7 @@ async def get_registration_options(
 
     redis_client = await get_redis()
     await redis_client.setex(
-        f"passkey_challenge:{current_user.id}",
+        _reg_challenge_key(current_user.id),
         300,  # 5 minutes
         challenge,
     )
@@ -173,11 +207,22 @@ async def verify_registration(
     db: Session = Depends(get_db),
 ):
     """Verify WebAuthn registration"""
-    # Get stored challenge
-    if not current_user.user_metadata or "webauthn_challenge" not in current_user.user_metadata:
-        raise HTTPException(status_code=400, detail="No registration in progress")
+    # Read the one-time challenge from Redis, where /register/options stored it
+    # (2026-08-23 fix — verify previously read user_metadata["webauthn_challenge"],
+    # which options never wrote, so registration ALWAYS failed). Deleted after
+    # read so a challenge can be used exactly once.
+    from app.core.redis import get_redis
 
-    expected_challenge = base64url_to_bytes(current_user.user_metadata["webauthn_challenge"])
+    redis_client = await get_redis()
+    challenge_key = _reg_challenge_key(current_user.id)
+    stored_challenge = await redis_client.get(challenge_key)
+    if not stored_challenge:
+        raise HTTPException(status_code=400, detail="No registration in progress or challenge expired")
+    if isinstance(stored_challenge, bytes):
+        stored_challenge = stored_challenge.decode()
+    await redis_client.delete(challenge_key)
+
+    expected_challenge = base64url_to_bytes(stored_challenge)
 
     # Verify registration
     try:
@@ -206,6 +251,12 @@ async def verify_registration(
     if existing:
         raise HTTPException(status_code=400, detail="This passkey is already registered")
 
+    # Re-check the cap at verify (defense in depth; the options step also checks).
+    count_result = await db.execute(select(Passkey).where(Passkey.user_id == current_user.id))
+    max_passkeys = getattr(settings, "MAX_PASSKEYS_PER_IDENTITY", 10)
+    if len(count_result.scalars().all()) >= max_passkeys:
+        raise HTTPException(status_code=400, detail=f"Passkey limit reached ({max_passkeys}).")
+
     # Create passkey
     passkey = Passkey(
         user_id=current_user.id,
@@ -218,8 +269,7 @@ async def verify_registration(
 
     db.add(passkey)
 
-    # Clear challenge
-    del current_user.user_metadata["webauthn_challenge"]
+    # (Challenge already deleted from Redis above — one-time use.)
 
     # Log activity
     activity = ActivityLog(
@@ -300,11 +350,30 @@ async def get_authentication_options(
 @router.post("/authenticate/verify")
 async def verify_authentication(
     auth_request: PasskeyAuthRequest,
-    challenge: str,  # In production, get from session/Redis
+    session_id: str,
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Verify WebAuthn authentication"""
+    """Verify WebAuthn authentication.
+
+    2026-08-23 security fix: the challenge is read SERVER-SIDE from Redis keyed by
+    the `session_id` returned by /authenticate/options — it is NOT accepted from
+    the client. The prior version took `challenge` as a caller-supplied query
+    param, which let a client present its own challenge and defeated replay
+    protection entirely. The challenge is deleted after read (one-time use).
+    """
+    # Resolve the one-time challenge from the server side.
+    from app.core.redis import get_redis
+
+    redis_client = await get_redis()
+    challenge_key = _auth_challenge_key(session_id)
+    stored_challenge = await redis_client.get(challenge_key)
+    if not stored_challenge:
+        raise HTTPException(status_code=400, detail="No authentication in progress or challenge expired")
+    if isinstance(stored_challenge, bytes):
+        stored_challenge = stored_challenge.decode()
+    await redis_client.delete(challenge_key)
+
     # Get credential ID from response
     credential_id = auth_request.credential.get("id")
     if not credential_id:
@@ -323,11 +392,11 @@ async def verify_authentication(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Verify authentication
+    # Verify authentication against the SERVER-STORED challenge.
     try:
         verification = verify_authentication_response(
             credential=auth_request.credential,
-            expected_challenge=base64url_to_bytes(challenge),
+            expected_challenge=base64url_to_bytes(stored_challenge),
             expected_origin=get_origin(),
             expected_rp_id=get_rp_id(),
             credential_public_key=base64url_to_bytes(passkey.public_key),
@@ -338,6 +407,30 @@ async def verify_authentication(
 
     if not verification.verified:
         raise HTTPException(status_code=400, detail="Authentication verification failed")
+
+    # Cloned-authenticator detection (2026-08-23): a non-increasing signature
+    # counter means either a cloned credential or a replay. Authenticators that
+    # don't implement a counter report 0/0 (allowed). Otherwise the new count must
+    # strictly exceed the stored one. The library also guards this, but we refuse
+    # explicitly and audit it rather than relying on library internals.
+    if not (verification.new_sign_count == 0 and passkey.sign_count == 0):
+        if verification.new_sign_count <= passkey.sign_count:
+            db.add(
+                ActivityLog(
+                    user_id=user.id,
+                    action="passkey_clone_suspected",
+                    details={
+                        "passkey_id": str(passkey.id),
+                        "stored_sign_count": passkey.sign_count,
+                        "presented_sign_count": verification.new_sign_count,
+                    },
+                )
+            )
+            await db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail="Authentication refused: signature counter did not advance (possible cloned credential).",
+            )
 
     # Update sign count
     passkey.sign_count = verification.new_sign_count
