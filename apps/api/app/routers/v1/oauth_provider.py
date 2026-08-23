@@ -873,6 +873,30 @@ async def authorize_get(
                     detail="Email verification required. Please verify your email before authorizing third-party applications.",
                 )
 
+    # SECURITY (2026-08-23): enforce MFA at /authorize. The docstring long claimed
+    # "MFA required → respect it; never bypass" but no check existed. Even with the
+    # login form now gating MFA, a PRE-EXISTING non-MFA session cookie could sail
+    # through here, so /authorize refuses to issue a code for an MFA-enforced user
+    # and sends them back through login to complete the second factor. Gated behind
+    # MFA_ENFORCE_ON_LOGIN (default OFF): inert until the challenge UI ships; when
+    # off, behavior is unchanged. Mirrors the email-verification handling above:
+    # silent auth → login_required error redirect; interactive → back to login.
+    from app.auth.mfa_enforcement import mfa_required_for
+
+    if mfa_required_for(current_user):
+        if silent_auth:
+            return _redirect_with_oauth_error(
+                redirect_uri,
+                error="login_required",
+                error_description="mfa_required",
+                state=state,
+                client_validated=True,
+            )
+        login_params = urlencode(
+            {"client_id": client_id, "client_name": client.name, "mfa_required": "1"}
+        )
+        return RedirectResponse(url=f"/api/v1/auth/login?{login_params}", status_code=302)
+
     # Check if user has already consented to all requested scopes
     requested_scopes = ConsentService.parse_scopes(scope)
     has_consent = await ConsentService.has_consent(db, current_user.id, client_id, requested_scopes)

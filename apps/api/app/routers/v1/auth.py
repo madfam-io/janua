@@ -1099,6 +1099,22 @@ async def login_form(
     # Reset failed attempts on successful login
     await AccountLockoutService.reset_failed_attempts(db, user)
 
+    # SECURITY (2026-08-23): enforce MFA on the OAuth browser-login path. This was
+    # the primary bypass — a user with MFA enabled was issued a full session here
+    # with no second factor. Gated behind MFA_ENFORCE_ON_LOGIN (default OFF), so
+    # this is inert until the challenge UI ships and the flag is flipped; when off,
+    # mfa_required_for() returns False and behavior is unchanged.
+    from app.auth.mfa_enforcement import mfa_required_for
+
+    if mfa_required_for(user):
+        await log_activity(
+            db, str(user.id), "signin", {"method": "oauth_form", "mfa_required": True}, request
+        )
+        return make_error_page(
+            "This account requires a second factor to sign in. Complete the "
+            "additional verification step to continue.",
+        )
+
     # Create session and tokens
     access_token, refresh_token, session = await AuthService.create_session(
         db, user, ip_address=request.client.host, user_agent=request.headers.get("user-agent")
@@ -1979,6 +1995,27 @@ async def magic_link_callback(
     if not user:
         return _expired_page()
 
+    # SECURITY (2026-08-23): a magic link proves mailbox control but is not the
+    # user's second factor. If MFA is enforced and enabled, do NOT mint a session
+    # here — and do NOT burn the link, so the user can complete verification.
+    # Gated behind MFA_ENFORCE_ON_LOGIN (default OFF): inert until the challenge UI
+    # ships. When off, behavior is unchanged.
+    from app.auth.mfa_enforcement import mfa_required_for
+
+    if mfa_required_for(user):
+        await log_activity(
+            db, str(user.id), "signin", {"method": "magic_link", "mfa_required": True}, req
+        )
+        return HTMLResponse(
+            content=_recovery_page_html(
+                "<h1>Additional verification required</h1>"
+                '<p class="lede">This account has two-factor authentication enabled. '
+                "Signing in by link is not sufficient on its own.</p>"
+                "<p>Return to the sign-in page and complete the second-factor step.</p>"
+            ),
+            status_code=401,
+        )
+
     # Burn the token before minting anything: a link that has produced a
     # session must never produce a second one.
     magic_link.used_at = datetime.utcnow()
@@ -2040,6 +2077,36 @@ async def verify_magic_link(
 
     if not user:
         raise HTTPException(status_code=400, detail="User not found")
+
+    # SECURITY (2026-08-23): enforce MFA on the JSON magic-link path too. A JSON
+    # caller receives the same mfa_required + mfa_token contract the /signin path
+    # uses, and completes at /mfa/challenge/verify. The link is NOT burned on an
+    # MFA interrupt, so the user isn't stranded. Gated behind MFA_ENFORCE_ON_LOGIN
+    # (default OFF): inert until the challenge UI ships; when off, unchanged.
+    from app.auth.mfa_enforcement import mfa_required_for, mint_mfa_challenge_token
+
+    if mfa_required_for(user):
+        await log_activity(
+            db, str(user.id), "signin", {"method": "magic_link", "mfa_required": True}, req
+        )
+        return SignInResponse(
+            user=UserResponse(
+                id=str(user.id),
+                email=user.email,
+                email_verified=user.email_verified,
+                username=user.username,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                profile_image_url=user.profile_image_url,
+                is_admin=getattr(user, "is_admin", False),
+                created_at=user.created_at,
+                updated_at=user.updated_at,
+                last_sign_in_at=user.last_sign_in_at,
+            ),
+            tokens=None,
+            mfa_required=True,
+            mfa_token=mint_mfa_challenge_token(user),
+        )
 
     # Mark magic link as used
     magic_link.used_at = datetime.utcnow()
