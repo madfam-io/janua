@@ -33,7 +33,7 @@ images:
 - digest: sha256:31bf494f480a6568aab2f3a2d255bae21e53d94f5a8843a6c456eb826bc92c5d
   name: ghcr.io/madfam-org/janua-admin
   newName: ghcr.io/madfam-org/janua-admin
-- digest: sha256:bcdc77a4c6502b35cb9c9dacfb6611e4d9de6ef12e33be83b729796c8cf13973
+- digest: sha256:3ead4f1a8f96067fbd09dbc9c06494d5248cb24ae2ace9fbce3480eafa0d0785
   name: ghcr.io/madfam-org/janua-api
   newName: ghcr.io/madfam-org/janua-api
 - digest: sha256:d4f5366fdcf59eaa9a4d9487047b946688c0f62d116aad3e1d2fabca0d64e92e
