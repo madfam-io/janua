@@ -91,4 +91,4 @@ pytest>=9.0.3  # GHSA-6w46-j5rx-g56g
 pytest-asyncio>=0.24.0  # Updated
 pytest-cov>=6.0.0  # Updated
 black>=26.3.1  # GHSA-3936-cmfr-pm3m
-fakeredis[aioredis]>=2.21.0  # Required for CI testing
+fakeredis>=2.26.0  # Required for CI testing; >=2.26 supports the RESP3 HELLO handshake redis-py>=5 negotiates (2.21 raised "unknown command `hello`" against redis 8.x). The [aioredis] extra was removed in newer fakeredis — async support is built in.
