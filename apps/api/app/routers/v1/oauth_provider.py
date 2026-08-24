@@ -272,6 +272,83 @@ async def _get_user_entitlements(
     return entitlements
 
 
+async def _get_user_org_claims(user: User, db: AsyncSession) -> dict:
+    """Resolve organization claims for HUMAN tokens (authorization_code + refresh).
+
+    Machine (client_credentials) tokens have always carried ``org_id`` from the
+    OAuth client's own organization binding; human tokens carried none, so an
+    org-scoped resource server (e.g. symbiosis-hcm, which 403s any request
+    whose token lacks ``org_id``) could never authorize a browser login.
+
+    Contract:
+      - ``orgs``: every ACTIVE membership as ``{id, slug, role}``. Omitted
+        entirely when the user has none.
+      - ``org_id`` / ``tenant_id`` / ``org_slug``: emitted ONLY when
+        unambiguous — exactly one active membership, or ``user.tenant_id``
+        names one of them. Ambiguity emits ``orgs`` alone; consumers must not
+        guess a tenant.
+
+    Memberships with status other than ``active`` (pending/inactive/removed)
+    never contribute — a removed member must not keep tenant access through a
+    long-lived refresh chain. Failure to resolve emits no org claims at all
+    (fail-closed: downstream org-scoped services reject, never mis-scope).
+    """
+    try:
+        result = await db.execute(
+            select(OrganizationMember, Organization)
+            .join(
+                Organization,
+                Organization.id == OrganizationMember.organization_id,
+            )
+            .where(
+                OrganizationMember.user_id == user.id,
+                OrganizationMember.status == "active",
+            )
+        )
+        rows = result.all()
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch org claims, omitting from token",
+            user_id=str(user.id),
+            error=str(e),
+        )
+        await db.rollback()
+        return {}
+
+    if not rows:
+        return {}
+
+    claims: dict = {
+        "orgs": [
+            {"id": str(org.id), "slug": org.slug, "role": member.role or "member"}
+            for member, org in rows
+        ]
+    }
+
+    primary = None
+    if len(rows) == 1:
+        primary = rows[0][1]
+    else:
+        tenant_id = getattr(user, "tenant_id", None)
+        if tenant_id:
+            tenant_id = str(tenant_id)
+            for _member, org in rows:
+                if str(org.id) == tenant_id:
+                    primary = org
+                    break
+
+    if primary is not None:
+        claims.update(
+            {
+                "org_id": str(primary.id),
+                "tenant_id": str(primary.id),
+                "org_slug": primary.slug,
+            }
+        )
+
+    return claims
+
+
 # ============================================================================
 # Cookie-based Authentication Helper
 # ============================================================================
@@ -1616,6 +1693,10 @@ async def _handle_authorization_code_grant(
     # bootstrap. See app/services/entitlements_service.py.
     madfam_entitled_products = entitlements_to_claim(await get_user_entitlements(user, db))
 
+    # Organization claims for org-scoped resource servers (symbiosis-hcm etc.);
+    # unambiguous org_id or none — see _get_user_org_claims.
+    org_claims = await _get_user_org_claims(user, db)
+
     # Resolve per-client audience (falls back to global JWT_AUDIENCE)
     client_audience = client.audience or settings.JWT_AUDIENCE
 
@@ -1635,6 +1716,9 @@ async def _handle_authorization_code_grant(
             "is_admin": entitlements["is_admin"],
             # MADFAM ecosystem per-product entitlements
             "madfam_entitled_products": madfam_entitled_products,
+            # Organization membership claims (orgs always when member of any;
+            # org_id/tenant_id/org_slug only when unambiguous)
+            **org_claims,
         },
     )
 
@@ -1725,6 +1809,10 @@ async def _handle_refresh_token_grant(
     # Per-product MADFAM ecosystem grants (Selva-unified SSO Phase 1).
     madfam_entitled_products = entitlements_to_claim(await get_user_entitlements(user, db))
 
+    # Organization claims for org-scoped resource servers (symbiosis-hcm etc.);
+    # unambiguous org_id or none — see _get_user_org_claims.
+    org_claims = await _get_user_org_claims(user, db)
+
     # Resolve per-client audience (falls back to global JWT_AUDIENCE)
     client_audience = client.audience or settings.JWT_AUDIENCE
 
@@ -1744,6 +1832,9 @@ async def _handle_refresh_token_grant(
             "is_admin": entitlements["is_admin"],
             # MADFAM ecosystem per-product entitlements
             "madfam_entitled_products": madfam_entitled_products,
+            # Organization membership claims (orgs always when member of any;
+            # org_id/tenant_id/org_slug only when unambiguous)
+            **org_claims,
         },
     )
 
