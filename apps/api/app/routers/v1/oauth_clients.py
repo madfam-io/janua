@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin, verify_internal_api_key
-from app.models import OAuthClient, User
+from app.models import AuditLog, OAuthClient, User
 from app.schemas.oauth_client import (
     OAuthClientCreate,
     OAuthClientDetailResponse,
@@ -51,6 +51,53 @@ async def get_oauth_client_service(
     return OAuthClientService(db)
 
 
+# Actor recorded for registrations authenticated by the shared INTERNAL_API_KEY.
+# The key authenticates a *machine* caller, not a person: there is no user
+# behind it, so `user_id` stays NULL (the column is nullable) and the principal
+# is named in `details.actor` rather than faked onto a human's id. Attributing
+# these to the bootstrap admin would be worse than leaving it null — it would
+# read as that admin having provisioned credentials they never touched.
+INTERNAL_API_KEY_PRINCIPAL = "internal-api-key"
+
+
+def _record_internal_registration_audit(
+    db: AsyncSession,
+    *,
+    action: str,
+    client: OAuthClient,
+) -> None:
+    """Stage an audit_logs row for an internal-key OAuth client registration.
+
+    Internal-key registrations previously wrote NO audit row at all: machine
+    credentials could be minted or reconfigured through
+    ``POST /oauth/clients/register`` and the only trace was an application log
+    line, which is not queryable as an audit record and does not survive log
+    rotation.
+
+    Follows the same direct-``AuditLog`` construction used by
+    ``OAuthClientService`` (create/update/delete/rotate). Never records secret
+    material — only the client name, public client_id, and audience.
+
+    Staged on the session; the caller commits alongside the client write so the
+    audit row and the registration land in one transaction.
+    """
+    db.add(
+        AuditLog(
+            user_id=None,
+            action=action,
+            resource_type="oauth_client",
+            resource_id=client.id,
+            details={
+                "actor": INTERNAL_API_KEY_PRINCIPAL,
+                "actor_type": "service",
+                "client_id": client.client_id,
+                "name": _safe_oauth_client_name(client.name),
+                "audience": client.audience,
+            },
+        )
+    )
+
+
 @router.post("/register", response_model=OAuthClientDetailResponse)
 async def register_oauth_client(
     data: OAuthClientCreate,
@@ -66,40 +113,54 @@ async def register_oauth_client(
     Consumer services call this from their own bootstrap scripts using the
     shared INTERNAL_API_KEY, without needing a human login.
 
-    **Idempotent and convergent**: If a client with the same stable key already
-    exists, reconciles non-secret fields from the request and returns the
-    existing client (HTTP 200, no secret). The stable key is `client_key`, or
-    `audience` when `client_key` is omitted. Legacy clients still fall back to
-    name matching. On first creation, returns HTTP 201 with the client_secret
-    for confidential clients (only shown once).
+    **Idempotent and convergent, keyed by CONSUMER EDGE**: the stable identity of
+    a registration is the client **`name`**. Re-registering the same name
+    reconciles non-secret fields and returns the existing client (HTTP 200, no
+    secret). A *new* name creates a new client (HTTP 201 + `client_secret`, shown
+    exactly once) **even when it shares an `audience` with an existing client**.
+
+    Several consumer edges legitimately target one audience — `zavlo-cfdi-emitter`
+    and `nauta-legal-drafts` both call `karafiel-api` — and per ADR-006 each edge
+    gets its own client scoped to exactly what it calls.
 
     **Auth**: X-Internal-API-Key header (shared secret from K8s).
     """
-    registration_key = data.client_key or data.audience
     if data.client_key and data.audience and data.client_key != data.audience:
         raise HTTPException(
             status_code=400,
             detail="client_key must match audience until a separate client key column exists",
         )
 
+    # Upsert identity is the NAME — the stable consumer-edge identifier.
+    #
+    # This used to try `client_key || audience` FIRST and fall back to name.
+    # Audience is not an identity: it names the API being *called*, and many
+    # consumer edges call the same API. Registering a second same-audience
+    # client therefore reached into the first client's row and renamed it,
+    # rewrote its scopes and description, and returned 200 with no secret — a
+    # silent hijack that left the original consumer holding a client_id whose
+    # scopes now belonged to somebody else, with no new credential issued to
+    # either party. The token path already supported N clients per audience
+    # (tests/unit/routers/test_service_token_clients.py mints independently for
+    # two karafiel-api clients); only this registration key disagreed.
+    #
+    # Names are stable by construction — they are declared in each consumer's
+    # checked-in manifest (examples/consumer-bootstrap/janua.client.yaml) and in
+    # scripts/seed_service_clients.py — so every existing caller keeps
+    # converging onto its own row exactly as before. See the PR body for the
+    # old-vs-new semantics table.
+    #
+    # A pinned `client_id` still takes precedence when supplied: it is a
+    # stronger identity claim than the name, and honoring it first keeps
+    # re-registration idempotent for consumers that rename their edge while
+    # pinning the id.
     existing_client = None
-    if registration_key:
-        existing = await db.execute(
-            select(OAuthClient)
-            .where(OAuthClient.audience == registration_key)
-            .order_by(OAuthClient.created_at)
-            .limit(1)
-        )
-        existing_client = existing.scalar_one_or_none()
+
+    if data.client_id:
+        existing_client = await service.get_client_by_client_id(data.client_id)
 
     if not existing_client:
         existing_client = await service.get_client_by_name(data.name)
-
-    if not existing_client:
-        existing = await db.execute(
-            select(OAuthClient).where(OAuthClient.name == data.name).order_by(OAuthClient.created_at).limit(1)
-        )
-        existing_client = existing.scalar_one_or_none()
 
     if existing_client:
         if data.client_id and existing_client.client_id != data.client_id:
@@ -107,7 +168,13 @@ async def register_oauth_client(
                 status_code=409,
                 detail="Client name already registered with a different client_id",
             )
-        existing_client.name = data.name
+        if existing_client.name != data.name:
+            # Reached only via a pinned client_id: the id is the stronger claim,
+            # so a rename under a pinned id is an update, not a hijack.
+            raise HTTPException(
+                status_code=409,
+                detail="client_id already registered to a different client",
+            )
         existing_client.description = data.description
         existing_client.redirect_uris = data.redirect_uris
         existing_client.allowed_scopes = data.allowed_scopes or [
@@ -125,22 +192,16 @@ async def register_oauth_client(
         if data.is_confidential is not None:
             existing_client.is_confidential = data.is_confidential
         existing_client.updated_at = datetime.utcnow()
+        _record_internal_registration_audit(
+            db,
+            action="oauth_client_registered_internal_updated",
+            client=existing_client,
+        )
         await db.commit()
         await db.refresh(existing_client)
 
         response.status_code = 200
         return _client_detail_response(existing_client)
-
-    if data.client_id:
-        existing_by_id = await service.get_client_by_client_id(data.client_id)
-        if existing_by_id:
-            if existing_by_id.name == data.name:
-                response.status_code = 200
-                return _client_detail_response(existing_by_id)
-            raise HTTPException(
-                status_code=409,
-                detail="client_id already registered to a different client",
-            )
 
     # Resolve bootstrap admin user (first admin by creation date)
     admin_result = await db.execute(
@@ -169,6 +230,18 @@ async def register_oauth_client(
 
     safe_name = _safe_oauth_client_name(data.name)
     logger.info("OAuth client registered via bootstrap: %s (client_id=%s)", safe_name, client.client_id)
+
+    # create_client() writes an `oauth_client_created` row attributed to the
+    # bootstrap admin. That row cannot distinguish a human dashboard create from
+    # an unattended internal-key registration, so record the registration itself
+    # as well — otherwise the internal-key path leaves no trace of who provisioned
+    # a machine credential.
+    _record_internal_registration_audit(
+        db,
+        action="oauth_client_registered_internal_created",
+        client=client,
+    )
+    await db.commit()
 
     response.status_code = 201
     return OAuthClientDetailResponse(
