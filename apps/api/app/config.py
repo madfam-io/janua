@@ -102,6 +102,18 @@ class Settings(BaseSettings):
     )
 
     # Redis
+    # Rate limits
+    MAGIC_LINK_RATE_LIMIT: str = Field(
+        default="5/hour",
+        description=(
+            "slowapi limit string for POST /auth/magic-link, keyed by client IP. "
+            "The default protects against email-bombing, but a team onboarding "
+            "ceremony from ONE shared IP (an office WiFi) hard-stops at the 6th "
+            "person. Raise temporarily (e.g. '60/hour') for the ceremony window, "
+            "then restore."
+        ),
+    )
+
     REDIS_URL: str = Field(default="redis://localhost:6379/0", description="Redis connection URL")
     REDIS_POOL_SIZE: int = Field(default=10)
     REDIS_DECODE_RESPONSES: bool = Field(default=True)
