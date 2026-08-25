@@ -40,7 +40,21 @@ Issuer (production): `https://auth.madfam.io`
 
 Provisioned by an operator with `apps/api/scripts/seed_service_clients.py`
 (or zero-touch via `POST /api/v1/oauth/clients/register` +
-`X-Internal-API-Key`). Registration properties:
+`X-Internal-API-Key`).
+
+**One client per consumer edge, keyed by `name`.** Registration identity is the
+client **`name`** — the stable consumer-edge identifier declared in the
+consumer's `janua.client.yaml` (or in `seed_service_clients.py`). Re-registering
+the same name reconciles non-secret fields and returns 200 with **no** secret; a
+new name creates a new client (201 + `client_secret`, shown once) **even when it
+shares an `audience`**. Audience names the API being *called*, and several edges
+legitimately call one API: `zavlo-cfdi-emitter` and `nauta-legal-drafts` both
+target `karafiel-api`. Per ADR-006 each edge gets its own client scoped to
+exactly what it calls. Internal-key registrations are recorded in `audit_logs`
+(`oauth_client_registered_internal_created` / `..._updated`), attributed to the
+`internal-api-key` principal and carrying no secret material.
+
+Registration properties:
 
 ```jsonc
 // zavlo-cfdi-emitter
