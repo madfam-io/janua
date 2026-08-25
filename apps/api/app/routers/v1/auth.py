@@ -2153,7 +2153,11 @@ async def resend_verification_email(
 
 
 @router.post("/magic-link")
-@limiter.limit("5/hour")  # Rate limiting for magic link requests
+# Config knob (default "5/hour", per client IP): a team-onboarding ceremony from
+# one shared office IP dies at the 6th request under the hardcoded limit — see
+# Settings.MAGIC_LINK_RATE_LIMIT. Callable so per-request evaluation follows the
+# deployed env without code changes.
+@limiter.limit(lambda: settings.MAGIC_LINK_RATE_LIMIT)
 async def send_magic_link(
     request: Request,
     magic_link_data: MagicLinkRequest,
