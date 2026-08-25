@@ -887,3 +887,122 @@ class TestOidcEndSession:
 
         assert exc_info.value.status_code == 400
         assert "post_logout_redirect_uri" in exc_info.value.detail
+
+
+class TestUserOrgClaims:
+    """_get_user_org_claims — organization claims on HUMAN tokens.
+
+    Contract under test: `orgs` lists every ACTIVE membership; `org_id` /
+    `tenant_id` / `org_slug` appear only when unambiguous (single active
+    membership, or user.tenant_id names one); non-active memberships and
+    lookup failures emit nothing (fail-closed).
+    """
+
+    @staticmethod
+    def _user(tenant_id=None):
+        user = MagicMock()
+        user.id = uuid.uuid4()
+        user.tenant_id = tenant_id
+        return user
+
+    @staticmethod
+    def _membership_row(role="member", slug="acme", org_id=None):
+        member = MagicMock()
+        member.role = role
+        org = MagicMock()
+        org.id = org_id or uuid.uuid4()
+        org.slug = slug
+        return (member, org)
+
+    @staticmethod
+    def _db_returning(rows):
+        db = AsyncMock()
+        result = MagicMock()  # result methods are sync (see TESTING_PATTERNS.md)
+        result.all.return_value = rows
+        db.execute = AsyncMock(return_value=result)
+        return db
+
+    async def test_single_active_membership_emits_unambiguous_org(self):
+        from app.routers.v1.oauth_provider import _get_user_org_claims
+
+        row = self._membership_row(role="member", slug="crea")
+        db = self._db_returning([row])
+
+        claims = await _get_user_org_claims(self._user(), db)
+
+        org = row[1]
+        assert claims["org_id"] == str(org.id)
+        assert claims["tenant_id"] == str(org.id)
+        assert claims["org_slug"] == "crea"
+        assert claims["orgs"] == [{"id": str(org.id), "slug": "crea", "role": "member"}]
+
+    async def test_multiple_memberships_without_tenant_emit_orgs_only(self):
+        from app.routers.v1.oauth_provider import _get_user_org_claims
+
+        rows = [
+            self._membership_row(slug="org-a"),
+            self._membership_row(slug="org-b", role="admin"),
+        ]
+        db = self._db_returning(rows)
+
+        claims = await _get_user_org_claims(self._user(tenant_id=None), db)
+
+        assert "org_id" not in claims
+        assert "tenant_id" not in claims
+        assert "org_slug" not in claims
+        assert [o["slug"] for o in claims["orgs"]] == ["org-a", "org-b"]
+
+    async def test_multiple_memberships_with_matching_tenant_pick_it(self):
+        from app.routers.v1.oauth_provider import _get_user_org_claims
+
+        target = self._membership_row(slug="org-b", role="admin")
+        rows = [self._membership_row(slug="org-a"), target]
+        db = self._db_returning(rows)
+
+        claims = await _get_user_org_claims(self._user(tenant_id=target[1].id), db)
+
+        assert claims["org_id"] == str(target[1].id)
+        assert claims["org_slug"] == "org-b"
+        assert len(claims["orgs"]) == 2
+
+    async def test_no_memberships_emit_no_org_claims(self):
+        from app.routers.v1.oauth_provider import _get_user_org_claims
+
+        db = self._db_returning([])
+
+        claims = await _get_user_org_claims(self._user(), db)
+
+        assert claims == {}
+
+    async def test_lookup_failure_is_fail_closed_and_rolls_back(self):
+        from app.routers.v1.oauth_provider import _get_user_org_claims
+
+        db = AsyncMock()
+        db.execute = AsyncMock(side_effect=RuntimeError("db down"))
+
+        claims = await _get_user_org_claims(self._user(), db)
+
+        assert claims == {}
+        db.rollback.assert_awaited_once()
+
+    async def test_query_filters_on_user_and_active_status(self):
+        from app.routers.v1.oauth_provider import _get_user_org_claims
+
+        db = self._db_returning([])
+        await _get_user_org_claims(self._user(), db)
+
+        query = db.execute.await_args.args[0]
+        compiled = str(query)
+        assert "organization_members" in compiled
+        assert "status" in compiled
+        assert "user_id" in compiled
+
+    async def test_null_member_role_defaults_to_member(self):
+        from app.routers.v1.oauth_provider import _get_user_org_claims
+
+        row = self._membership_row(role=None, slug="crea")
+        db = self._db_returning([row])
+
+        claims = await _get_user_org_claims(self._user(), db)
+
+        assert claims["orgs"][0]["role"] == "member"
