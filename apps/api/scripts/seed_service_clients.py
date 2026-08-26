@@ -92,6 +92,24 @@ SERVICE_CLIENTS: list[dict[str, Any]] = [
         "grant_types": ["client_credentials"],
         "is_confidential": True,
     },
+    {
+        "name": "forj-catalog-materializer",
+        "description": (
+            "Forj → Yantra4D render service client. The forj catalog "
+            "materializer pre-renders hyperobject parameter-sets (from the "
+            "yantra4d + fashion-cabinet commons) into GLB assets for the "
+            "forj infinite-scroll storefront (buy → manufacture-on-demand). "
+            "yantra4d:render is the only scope: it lets a machine token clear "
+            "yantra4d's pro-tier GLB export gate (yantra4d apps/api/"
+            "middleware/auth.py RENDER_SCOPE). Nothing else. Same edge "
+            "fashion-cabinet's body_render.py already uses."
+        ),
+        "audience": "yantra4d-api",
+        "redirect_uris": [],
+        "allowed_scopes": ["yantra4d:render"],
+        "grant_types": ["client_credentials"],
+        "is_confidential": True,
+    },
 ]
 
 

@@ -7,6 +7,7 @@ Cross-service identity for the RFC 0024 §P4 consolidations:
 | Zavlo → Karafiel CFDI bridge (§P4.2) | `zavlo-cfdi-emitter` | `cfdi:issue` | `karafiel-api` | Karafiel API |
 | RouteCraft → Dhanam billing (§P4.3) | `routecraft-billing-relay` | `billing:events` | `dhanam-api` | Dhanam API |
 | Nauta → Karafiel legal drafts (D3.5) | `nauta-legal-drafts` | `legal:draft`, `legal:client-profile` | `karafiel-api` | Karafiel API |
+| Forj → Yantra4D catalog render | `forj-catalog-materializer` | `yantra4d:render` | `yantra4d-api` | Yantra4D render API |
 
 Both migration plans (`zavlo/docs/karafiel-cfdi-migration-plan.md`,
 `routecraft/docs/dhanam-payments-migration-plan.md`) are gated on this
@@ -21,8 +22,9 @@ that edge needs. Resource servers verify tokens offline via Janua's JWKS
 Janua's `client_credentials` support (token endpoint, per-client scope
 allowlist, introspection, JWKS) **already exists** — see
 [`docs/guides/machine-to-machine-authentication-guide.md`](./guides/machine-to-machine-authentication-guide.md)
-for the general pattern. This page pins down the two concrete
-consolidation clients and how each side integrates.
+for the general pattern. This page pins down the concrete service→service
+clients (the RFC 0024 §P4 consolidations plus the Forj→Yantra4D catalog
+render edge) and how each side integrates.
 
 ## Endpoints
 
@@ -62,7 +64,24 @@ Provisioned by an operator with `apps/api/scripts/seed_service_clients.py`
   "redirect_uris": [],
   "is_confidential": true
 }
+
+// forj-catalog-materializer
+{
+  "name": "forj-catalog-materializer",
+  "audience": "yantra4d-api",
+  "allowed_scopes": ["yantra4d:render"],
+  "grant_types": ["client_credentials"],
+  "redirect_uris": [],
+  "is_confidential": true
+}
 ```
+
+The `yantra4d:render` scope namespace is what makes Yantra4D emit a
+`yantra4d_tier` claim high enough to clear its `pro`-tier GLB export gate
+(`yantra4d/apps/api/middleware/auth.py`, `RENDER_SCOPE`). This is the same
+render edge `fashion-cabinet/apps/api/body_render.py` already mints against
+(`FC_YANTRA4D_CLIENT_ID/SECRET`) — forj's materializer is a second producer
+on it, holding `FORJ_YANTRA4D_CLIENT_ID` / `FORJ_YANTRA4D_CLIENT_SECRET`.
 
 The `client_secret` is shown **once** at provisioning. Store it in the
 approved secret store (Enclii/Vault) and mount it into the calling
