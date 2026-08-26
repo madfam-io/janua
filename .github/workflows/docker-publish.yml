@@ -128,12 +128,34 @@ jobs:
           provenance: false
           sbom: false
 
+      # Retry: 2026-08-26 crea-frontend run 33010085743 lost a deploy when
+      # GitHub's OIDC endpoint returned non-JSON ("invalid character 'u'") and
+      # cosign died. Image was pushed, digest never pinned, ArgoCD never rolled.
       - name: Sign image with cosign
         if: steps.build.outcome == 'success'
         env:
           COSIGN_EXPERIMENTAL: "true"
+          IMAGE_REF: ${{ env.IMAGE_PREFIX }}/janua-api@${{ steps.build.outputs.digest }}
         run: |
-          cosign sign --yes ${{ env.IMAGE_PREFIX }}/janua-api@${{ steps.build.outputs.digest }}
+          set -euo pipefail
+          signed=0
+          for wait in 0 20 60; do
+            if [ "$wait" -gt 0 ]; then
+              echo "::warning::cosign sign failed for ${IMAGE_REF} (transient OIDC/Fulcio/Rekor?); retrying in ${wait}s..."
+              sleep "$wait"
+            fi
+            if cosign sign --yes "${IMAGE_REF}"; then
+              signed=1
+              break
+            fi
+          done
+          if [ "$signed" -ne 1 ]; then
+            echo "::error::cosign sign failed 3 times for ${IMAGE_REF}."
+            echo "::error::The image was BUILT AND PUSHED but is NOT signed, so it will not be"
+            echo "::error::pinned and ArgoCD will not roll it: the live host is still serving the"
+            echo "::error::PREVIOUS build even though this commit is on main. Rerun the failed jobs."
+            exit 1
+          fi
 
   build-admin:
     name: Build Admin
@@ -178,12 +200,34 @@ jobs:
           provenance: false
           sbom: false
 
+      # Retry: 2026-08-26 crea-frontend run 33010085743 lost a deploy when
+      # GitHub's OIDC endpoint returned non-JSON ("invalid character 'u'") and
+      # cosign died. Image was pushed, digest never pinned, ArgoCD never rolled.
       - name: Sign image with cosign
         if: steps.build.outcome == 'success'
         env:
           COSIGN_EXPERIMENTAL: "true"
+          IMAGE_REF: ${{ env.IMAGE_PREFIX }}/janua-admin@${{ steps.build.outputs.digest }}
         run: |
-          cosign sign --yes ${{ env.IMAGE_PREFIX }}/janua-admin@${{ steps.build.outputs.digest }}
+          set -euo pipefail
+          signed=0
+          for wait in 0 20 60; do
+            if [ "$wait" -gt 0 ]; then
+              echo "::warning::cosign sign failed for ${IMAGE_REF} (transient OIDC/Fulcio/Rekor?); retrying in ${wait}s..."
+              sleep "$wait"
+            fi
+            if cosign sign --yes "${IMAGE_REF}"; then
+              signed=1
+              break
+            fi
+          done
+          if [ "$signed" -ne 1 ]; then
+            echo "::error::cosign sign failed 3 times for ${IMAGE_REF}."
+            echo "::error::The image was BUILT AND PUSHED but is NOT signed, so it will not be"
+            echo "::error::pinned and ArgoCD will not roll it: the live host is still serving the"
+            echo "::error::PREVIOUS build even though this commit is on main. Rerun the failed jobs."
+            exit 1
+          fi
 
   build-dashboard:
     name: Build Dashboard
@@ -229,12 +273,34 @@ jobs:
           provenance: false
           sbom: false
 
+      # Retry: 2026-08-26 crea-frontend run 33010085743 lost a deploy when
+      # GitHub's OIDC endpoint returned non-JSON ("invalid character 'u'") and
+      # cosign died. Image was pushed, digest never pinned, ArgoCD never rolled.
       - name: Sign image with cosign
         if: steps.build.outcome == 'success'
         env:
           COSIGN_EXPERIMENTAL: "true"
+          IMAGE_REF: ${{ env.IMAGE_PREFIX }}/janua-dashboard@${{ steps.build.outputs.digest }}
         run: |
-          cosign sign --yes ${{ env.IMAGE_PREFIX }}/janua-dashboard@${{ steps.build.outputs.digest }}
+          set -euo pipefail
+          signed=0
+          for wait in 0 20 60; do
+            if [ "$wait" -gt 0 ]; then
+              echo "::warning::cosign sign failed for ${IMAGE_REF} (transient OIDC/Fulcio/Rekor?); retrying in ${wait}s..."
+              sleep "$wait"
+            fi
+            if cosign sign --yes "${IMAGE_REF}"; then
+              signed=1
+              break
+            fi
+          done
+          if [ "$signed" -ne 1 ]; then
+            echo "::error::cosign sign failed 3 times for ${IMAGE_REF}."
+            echo "::error::The image was BUILT AND PUSHED but is NOT signed, so it will not be"
+            echo "::error::pinned and ArgoCD will not roll it: the live host is still serving the"
+            echo "::error::PREVIOUS build even though this commit is on main. Rerun the failed jobs."
+            exit 1
+          fi
 
   build-docs:
     name: Build Docs
@@ -278,12 +344,34 @@ jobs:
           provenance: false
           sbom: false
 
+      # Retry: 2026-08-26 crea-frontend run 33010085743 lost a deploy when
+      # GitHub's OIDC endpoint returned non-JSON ("invalid character 'u'") and
+      # cosign died. Image was pushed, digest never pinned, ArgoCD never rolled.
       - name: Sign image with cosign
         if: steps.build.outcome == 'success'
         env:
           COSIGN_EXPERIMENTAL: "true"
+          IMAGE_REF: ${{ env.IMAGE_PREFIX }}/janua-docs@${{ steps.build.outputs.digest }}
         run: |
-          cosign sign --yes ${{ env.IMAGE_PREFIX }}/janua-docs@${{ steps.build.outputs.digest }}
+          set -euo pipefail
+          signed=0
+          for wait in 0 20 60; do
+            if [ "$wait" -gt 0 ]; then
+              echo "::warning::cosign sign failed for ${IMAGE_REF} (transient OIDC/Fulcio/Rekor?); retrying in ${wait}s..."
+              sleep "$wait"
+            fi
+            if cosign sign --yes "${IMAGE_REF}"; then
+              signed=1
+              break
+            fi
+          done
+          if [ "$signed" -ne 1 ]; then
+            echo "::error::cosign sign failed 3 times for ${IMAGE_REF}."
+            echo "::error::The image was BUILT AND PUSHED but is NOT signed, so it will not be"
+            echo "::error::pinned and ArgoCD will not roll it: the live host is still serving the"
+            echo "::error::PREVIOUS build even though this commit is on main. Rerun the failed jobs."
+            exit 1
+          fi
 
   build-website:
     name: Build Website
@@ -329,12 +417,34 @@ jobs:
           provenance: false
           sbom: false
 
+      # Retry: 2026-08-26 crea-frontend run 33010085743 lost a deploy when
+      # GitHub's OIDC endpoint returned non-JSON ("invalid character 'u'") and
+      # cosign died. Image was pushed, digest never pinned, ArgoCD never rolled.
       - name: Sign image with cosign
         if: steps.build.outcome == 'success'
         env:
           COSIGN_EXPERIMENTAL: "true"
+          IMAGE_REF: ${{ env.IMAGE_PREFIX }}/janua-website@${{ steps.build.outputs.digest }}
         run: |
-          cosign sign --yes ${{ env.IMAGE_PREFIX }}/janua-website@${{ steps.build.outputs.digest }}
+          set -euo pipefail
+          signed=0
+          for wait in 0 20 60; do
+            if [ "$wait" -gt 0 ]; then
+              echo "::warning::cosign sign failed for ${IMAGE_REF} (transient OIDC/Fulcio/Rekor?); retrying in ${wait}s..."
+              sleep "$wait"
+            fi
+            if cosign sign --yes "${IMAGE_REF}"; then
+              signed=1
+              break
+            fi
+          done
+          if [ "$signed" -ne 1 ]; then
+            echo "::error::cosign sign failed 3 times for ${IMAGE_REF}."
+            echo "::error::The image was BUILT AND PUSHED but is NOT signed, so it will not be"
+            echo "::error::pinned and ArgoCD will not roll it: the live host is still serving the"
+            echo "::error::PREVIOUS build even though this commit is on main. Rerun the failed jobs."
+            exit 1
+          fi
 
   commit-digests:
     name: Commit Digests to Staging Kustomization
@@ -422,6 +532,30 @@ jobs:
             sleep $((ATTEMPT * 2))
           done
           echo "ERROR: Failed to push after 3 attempts"
+          exit 1
+
+      # Loud-stale guard. "Update digests" skips any service whose build job did
+      # not end in `success`, and this job runs `if: always()` — so a build that
+      # pushed its image and then died at the sign step is silently dropped from
+      # the pin while this job goes green. That is the 2026-08-26 crea-frontend
+      # failure mode exactly: green on main, previous build still live.
+      - name: Guard — fail loudly if a built image was not pinned
+        if: >-
+          always() &&
+          (needs.build-api.result == 'failure' ||
+           needs.build-admin.result == 'failure' ||
+           needs.build-dashboard.result == 'failure' ||
+           needs.build-docs.result == 'failure' ||
+           needs.build-website.result == 'failure')
+        run: |
+          echo "::error title=Image pushed but NOT pinned/deployed::A build job failed after its"
+          echo "::error::image may already have been pushed to GHCR (api=${{ needs.build-api.result }},"
+          echo "::error::admin=${{ needs.build-admin.result }}, dashboard=${{ needs.build-dashboard.result }},"
+          echo "::error::docs=${{ needs.build-docs.result }}, website=${{ needs.build-website.result }})."
+          echo "::error::Its digest was SKIPPED by the pin step above, so ArgoCD was never handed a new"
+          echo "::error::digest and THE LIVE HOST IS STILL SERVING THE PREVIOUS BUILD even though this"
+          echo "::error::commit is green on main. Rerun the failed jobs:"
+          echo "::error::  gh run rerun ${{ github.run_id }} --failed"
           exit 1
 
   report-lifecycle:
