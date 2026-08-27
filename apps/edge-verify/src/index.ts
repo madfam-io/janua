@@ -28,7 +28,10 @@ const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
   // Ecosystem partner domains that talk to the edge verifier from the browser.
   'https://*.enclii.dev',
   'https://*.rondel.io',
-  'https://*.forgesight.quest',
+  // forgesight.app only: the forgesight.quest registration expired and the
+  // zone is retired (2026-08). Do not re-add it — an expired domain in this
+  // allowlist hands its CORS access to whoever re-registers it.
+  'https://*.forgesight.app',
   'https://*.dhan.am',
   'https://*.karafiel.mx',
   'https://*.tezca.mx',

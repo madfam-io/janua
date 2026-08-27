@@ -113,14 +113,15 @@ ECOSYSTEM_CLIENTS: list[dict[str, Any]] = [
         "audience": "forgesight-api",
         "client_id": "jnc_hMmsXcCeWGFTn95l9I1iLzibSugXCgDC",
         # forgesight migrated forgesight.quest -> forgesight.app (2026-08-22).
-        # Both zones stay registered until the .quest registration lapses.
+        # 2026-08-27: the .quest registration EXPIRED and the zone is retired.
+        # Its redirect_uris are removed and must NOT be re-added. A redirect_uri
+        # pointing at a lapsed domain is a domain-takeover surface: whoever
+        # re-registers forgesight.quest becomes a valid auth-code destination
+        # for this client at auth.madfam.io.
         "redirect_uris": [
             "https://app.forgesight.app",
             "https://app.forgesight.app/auth/callback",
             "https://app.forgesight.app/api/auth/callback",
-            "https://app.forgesight.quest",
-            "https://app.forgesight.quest/auth/callback",
-            "https://app.forgesight.quest/api/auth/callback",
             "http://localhost:3000",
             "http://localhost:3000/auth/callback",
             "http://localhost:3000/api/auth/callback",
@@ -133,12 +134,11 @@ ECOSYSTEM_CLIENTS: list[dict[str, Any]] = [
         "description": "Forgesight admin panel",
         "audience": "forgesight-api",
         "client_id": "jnc_71GgDdnFqsb_ha9_Z45tAMRZCbLX9Rz5",
-        # See forgesight-app above: .app is primary, .quest kept until it lapses.
+        # See forgesight-app above: .app only. The .quest zone is retired
+        # (registration expired 2026-08) and must not be re-registered here.
         "redirect_uris": [
             "https://admin.forgesight.app",
             "https://admin.forgesight.app/auth/callback",
-            "https://admin.forgesight.quest",
-            "https://admin.forgesight.quest/auth/callback",
             "http://localhost:3001",
             "http://localhost:3001/auth/callback",
         ],
