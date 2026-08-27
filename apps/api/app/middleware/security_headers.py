@@ -59,7 +59,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # list — this CSP entry just permits the browser to follow.
             f"form-action 'self' https://{self.api_host} "
             "https://*.enclii.dev https://*.madfam.io https://*.dhan.am "
-            "https://*.tezca.mx https://*.karafiel.mx https://*.forgesight.quest "
+            "https://*.tezca.mx https://*.karafiel.mx "
+            # 2026-08-26: forgesight migrated forgesight.quest -> forgesight.app.
+            # Both zones are listed while .quest still resolves; drop the
+            # .quest entry once the registration lapses.
+            "https://forgesight.app https://*.forgesight.app "
+            "https://*.forgesight.quest "
             "https://*.fortuna.tube https://*.avala.studio "
             "https://*.cotiza.studio https://*.almanac.solar https://*.yantra4d.com "
             "https://*.coforma.studio https://*.routecraft.app https://*.solar "
