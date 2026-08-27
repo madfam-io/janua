@@ -47,20 +47,17 @@ spec:
     port: 8080
     replicas: 1
     healthCheck: /api/v1/health/ready
-  domains:
-    - name: api.janua.dev
-      environment: production
-    - name: app.janua.dev
-      environment: production
-    - name: admin.janua.dev
-      environment: production
-    - name: auth.madfam.io
-      environment: production
-    - name: janua.dev
-      environment: production
-    - name: www.janua.dev
-      environment: production
-    - name: madfam.io
-      environment: production
-    - name: www.madfam.io
-      environment: production
+  # domains: intentionally NOT declared here — REMOVED 2026-08-27.
+  #
+  # This file is a legacy single Service doc named `janua`, but no cluster
+  # Service named `janua` exists (the real ones are janua-api / janua-admin /
+  # janua-dashboard / janua-website, each on port 80). On 2026-08-27 the
+  # platform's domain reconciler captured the 8 domains that used to be listed
+  # here onto that nonexistent backend and rewrote the tunnel's working ingress
+  # rules to `janua.janua.svc:8080`, taking down auth.madfam.io, madfam.io and
+  # janua.dev — the full identity outage. Until enclii supports per-domain
+  # service targets (or this manifest is split into truthful per-surface
+  # Service docs), the domain→service bindings live in the switchyard registry
+  # ONLY: auth.madfam.io + api.janua.dev → janua-api · admin.janua.dev →
+  # janua-admin · app.janua.dev → janua-dashboard · janua.dev + www → 
+  # janua-website · madfam.io + www belong to the madfam-site project, not here.
