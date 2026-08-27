@@ -61,10 +61,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "https://*.enclii.dev https://*.madfam.io https://*.dhan.am "
             "https://*.tezca.mx https://*.karafiel.mx "
             # 2026-08-26: forgesight migrated forgesight.quest -> forgesight.app.
-            # Both zones are listed while .quest still resolves; drop the
-            # .quest entry once the registration lapses.
+            # 2026-08-27: the .quest registration EXPIRED and the zone is
+            # retired. Its form-action entry is removed and must not be
+            # restored: an expired domain in a form-action allowlist lets a
+            # re-registrant receive OAuth form submissions from auth.madfam.io.
             "https://forgesight.app https://*.forgesight.app "
-            "https://*.forgesight.quest "
             "https://*.fortuna.tube https://*.avala.studio "
             "https://*.cotiza.studio https://*.almanac.solar https://*.yantra4d.com "
             "https://*.coforma.studio https://*.routecraft.app https://*.solar "

@@ -6,6 +6,15 @@
 **Scope**: 12 surfaces across 8 domains
 **Context**: Post zero-touch agnosticism changes (middleware consolidation, seed script expansion, CSP dynamic host)
 
+> **Historical record.** Forgesight surfaces below are recorded at their
+> `forgesight.quest` addresses. That zone is **retired (2026-08)** — the
+> registration expired and Forgesight now serves from `forgesight.app`.
+> Recommendation H-2 ("add `app.forgesight.quest` to CORS allowed origins")
+> is **superseded**: `.quest` origins were deliberately removed from
+> `CORS_ORIGINS`, CSP `form-action`, and the forgesight OAuth clients'
+> `redirect_uris`, because an expired domain in any of those lists is a
+> domain-takeover surface. Do not action H-2 as written.
+
 ---
 
 ## Executive Summary

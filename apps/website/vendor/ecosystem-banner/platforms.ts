@@ -27,7 +27,7 @@ export const DEFAULT_ECOSYSTEM_PLATFORMS: readonly EcosystemPlatform[] = [
   { keyword: 'LEGAL OPS', name: 'Tezca', url: 'https://tezca.mx' },
   { keyword: 'PHYGITAL FABRICATION', name: 'Yantra4D', url: 'https://yantra4d.com' },
   { keyword: 'QUOTING ENGINE', name: 'Cotiza', url: 'https://cotiza.studio' },
-  { keyword: 'INDUSTRY INTELLIGENCE', name: 'Forge Sight', url: 'https://forgesight.quest' },
+  { keyword: 'INDUSTRY INTELLIGENCE', name: 'Forge Sight', url: 'https://forgesight.app' },
   { keyword: 'MANUFACTURING', name: 'Pravara', url: 'https://mes.madfam.io' },
   { keyword: 'GAMES', name: 'Rondelio', url: 'https://rondel.io' },
   { keyword: 'ROUTING & LOGISTICS', name: 'RouteCraft', url: 'https://routecraft.app' },
