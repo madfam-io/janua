@@ -67,6 +67,17 @@ class TestResolveBranding:
         # Footer credits MADFAM (the platform underneath a client tenant).
         assert b["platform_name"] == "MADFAM"
         assert b["header_bg"] == "#1a2a8f"
+        # CTM carries the client's header mark and MADFAM's footer mark (the
+        # same public crea-map assets the kalya booking emails use).
+        assert b["header_logo_url"] == "https://crea-map.madfam.io/crea-logo-email.png"
+        assert b["footer_logo_url"] == "https://crea-map.madfam.io/madfam-logo.png"
+
+    def test_madfam_default_has_no_hotlinked_logos(self):
+        """The MADFAM default keeps its INLINE mark; the hotlinked slots are
+        empty so nothing changes for existing callers."""
+        b = resolve_branding()
+        assert b["header_logo_url"] == ""
+        assert b["footer_logo_url"] == ""
 
     def test_lookalike_host_does_not_match(self):
         """Suffix match is on a dot boundary; `evilkalya.app` is not kalya."""
@@ -200,10 +211,30 @@ class TestRenderedFrame:
         assert "#1a2a8f" in html
 
     def test_ctm_header_drops_madfam_logo(self):
-        """CTM header is typographic — no MADFAM logo in the header segment."""
+        """CTM header carries the CREA mark, never the MADFAM one. The MADFAM
+        inline logo (alt="MADFAM") must not appear in the header segment; the
+        Crea mark (alt="Crea Tu Mundo") is what's there instead."""
         html = self._render(locale="es", branding_url=CTM_REDIRECT)
         header_seg = html.split('class="content"')[0]
         assert 'alt="MADFAM"' not in header_seg
+        # The CTM header carries the Crea mark (hotlinked, alt = the brand name).
+        assert "crea-logo-email.png" in header_seg
+        assert 'alt="Crea Tu Mundo"' in header_seg
+
+    def test_ctm_footer_carries_madfam_mark(self):
+        """The CTM footer credits MADFAM WITH the MADFAM mark, in the footer
+        segment (below the content), so the header-segment assertions above are
+        unaffected."""
+        html = self._render(locale="es", branding_url=CTM_REDIRECT)
+        footer_seg = html.split('class="content"')[-1]
+        assert "madfam-logo.png" in footer_seg
+
+    def test_default_render_has_no_hotlinked_logos(self):
+        """No branding signal -> the inline MADFAM mark only; neither hotlinked
+        CTM asset appears."""
+        html = self._render(locale="en")
+        assert "crea-logo-email.png" not in html
+        assert "madfam-logo.png" not in html
 
     def test_ctm_es_footer_credits_madfam_with_con_tecnologia_de(self):
         html = self._render(locale="es", branding_url=CTM_REDIRECT)
