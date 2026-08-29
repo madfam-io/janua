@@ -63,6 +63,40 @@ Footer:  Con tecnología de MADFAM
 needs DNS records published — exactly what managing their web presence gives
 us. Without it, mail from their domain is spam-foldered or rejected.
 
+## Phase 1, refined — MADFAM sends, the BODY is the tenant's
+
+**2026-08-29.** The sender line above is untouched. What changed is the BODY:
+the header wordmark and palette may now read as the client's, with MADFAM
+credited underneath. A person signing into their own workspace sees their own
+name at the top of the sign-in mail; the envelope is still MADFAM's.
+
+```
+From:    MADFAM <hola@madfam.io>            (UNCHANGED — Phase 1)
+Header:  the tenant's name and palette      (e.g. "Crea Tu Mundo", indigo)
+Footer:  Con tecnología de MADFAM           ("Powered by MADFAM" in en)
+```
+
+This is a refinement of Phase 1, not the start of Phase 2. Phase 2 — the
+client's DOMAIN on the From line — remains gated on that domain being verified
+in Resend, exactly as below. Only the parts of the message that do not affect
+deliverability were made per-tenant.
+
+The resolver is `app/services/email_branding.py::resolve_branding()`. It keys on
+the magic-link `redirect_url` host (crea-map / kalya → CTM) or an explicit
+`org_id`, and returns the header name, header palette, and footer credit;
+everything else defaults to the MADFAM frame, so an unknown or absent signal
+renders exactly what it rendered before. It is deliberately kept separate from
+`resolve_sender`, and nothing it returns is ever used to build the From line —
+`tests/unit/services/test_email_branding.py` pins that a CTM-context send still
+comes from `MADFAM <hola@madfam.io>`.
+
+Why keyed on the redirect host rather than `WhiteLabelConfiguration`: the auth
+mailer runs in FastAPI BackgroundTasks with no DB session, so the org-branding
+table (keyed by `organization_id`) is not reachable at send time. The redirect
+host is the tenant signal that IS available — the same one Phase 2 will read.
+When a send path carries a session, `resolve_branding(org_id=…)` is the seam to
+hang the DB-backed config on.
+
 ## The seam that makes Phase 2 cheap
 
 `app/services/email_service.py::resolve_sender()` accepts `redirect_url` and

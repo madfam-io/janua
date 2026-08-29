@@ -99,7 +99,15 @@
 <body>
     <div class="container">
         <div class="email-wrapper">
-            <div class="header">
+            <!-- The header wordmark and palette are the ONE part of the frame
+                 that varies per tenant (BODY branding, Phase-1 refinement — the
+                 From line stays MADFAM; see docs/EMAIL_SENDER_POLICY.md and
+                 app/services/email_branding.py). `header_*` default to the
+                 MADFAM values so every existing caller renders byte-identically;
+                 a client tenant (CTM) passes its own name and colors, and the
+                 footer below credits MADFAM via "Con tecnología de". -->
+            <div class="header" style="background: {{ header_bg | default('linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', true) }}; color: {{ header_fg | default('#ffffff', true) }};">
+                {% if (header_name | default('MADFAM', true)) == 'MADFAM' %}
                 <div class="logo">
                     <!-- INLINE PNG, not the SVG and not a remote URL.
                          Gmail strips <svg> entirely, and most clients block
@@ -113,13 +121,16 @@
                          width="60" height="60" alt="MADFAM"
                          style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;" />
                 </div>
-                <!-- MADFAM is the sender on EVERY message, whichever platform
-                     produced it. Bespoke clients meet several of our platforms
-                     over an engagement; a header that changes per product
-                     teaches them nothing and reads as several vendors. One
-                     consistent brand is what makes the NEXT email safe to
-                     open. The platform is credited in the footer instead. -->
-                <h1 style="margin: 0; font-size: 24px; font-weight: 600;">MADFAM</h1>
+                {% endif %}
+                <!-- The wordmark. MADFAM by default, on every platform's own
+                     message: bespoke clients meet several of our platforms over
+                     an engagement, and a header that changes per PRODUCT reads
+                     as several vendors. A client TENANT is different — a person
+                     signing into their own workspace should see their own name
+                     here, with MADFAM credited in the footer. `header_name`
+                     defaults to MADFAM so nothing changes for existing callers;
+                     the From line is MADFAM regardless. -->
+                <h1 style="margin: 0; font-size: 24px; font-weight: 600;">{{ header_name | default('MADFAM', true) }}</h1>
                 <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 14px;">{{ t('tagline') }}</p>
             </div>
             

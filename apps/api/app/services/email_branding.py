@@ -1,0 +1,161 @@
+"""Per-tenant BODY branding for transactional email.
+
+This is a Phase-1 *refinement*, not Phase 2. See `docs/EMAIL_SENDER_POLICY.md`.
+
+WHAT THIS DOES AND, JUST AS IMPORTANTLY, WHAT IT DOES NOT. Phase 1 keeps one
+sender for every message — `MADFAM <hola@madfam.io>` — because a bespoke client
+meets several MADFAM platforms over an engagement and a sender that changes per
+product reads as several vendors. That does not have to mean every BODY reads
+"MADFAM" as well: a client who signs into their own workspace should see their
+own name at the top of the sign-in mail, with MADFAM credited underneath. This
+module resolves the header name and header palette that vary per tenant, and
+NOTHING it returns is ever used to build the From line. `resolve_sender` in
+`email_service.py` stays the single, deliberately-unused Phase-2 seam.
+
+    From line   -> ALWAYS MADFAM (resolve_sender, untouched)
+    Body header -> the tenant's name and palette (this module)
+    Body footer -> "Con tecnología de <platform>" — the platform credited, and
+                   for a client tenant the platform IS MADFAM, so the footer
+                   reads "Con tecnología de MADFAM" (es) / "Powered by MADFAM".
+
+WHY THE SIGNAL IS THE REDIRECT HOST, NOT A DB LOOKUP. The auth mailer runs
+inside FastAPI BackgroundTasks, which hold no DB session — `EmailService()` is
+instantiated per task with neither Redis nor a DB handle. The tenant signal
+that IS available at send time is the same one `resolve_sender` was built to
+read: the magic-link `redirect_url`, whose host names the product the recipient
+is being sent back to. That is why branding is keyed on host here rather than on
+`WhiteLabelConfiguration` (which exists, is keyed by `organization_id`, and is
+the right home once a send path carries a session — a caller that already knows
+the org id can pass it via `org_id` and it is honored first).
+
+WHY THIS IS NOT "A GIANT HOST MAP". It is one tenant. The registry is CTM's
+canonical org id plus the two hosts CTM users actually sign in through
+(crea-map, kalya). A second client is a second entry, added the day their
+branding is agreed — not a config surface for every product.
+"""
+
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse
+
+# --------------------------------------------------------------------------
+# The MADFAM default. Byte-for-byte the header base.html rendered before this
+# module existed: the blue gradient, white text, the "MADFAM" wordmark. Every
+# caller that resolves to no tenant gets exactly this, so an unknown or absent
+# signal is a no-op — the regression tests pin that the default render is
+# identical to today's.
+# --------------------------------------------------------------------------
+MADFAM_BRANDING: Dict[str, str] = {
+    # `header_name` drives the wordmark in base.html's header. `platform_name`
+    # / `platform_url` drive the "Con tecnología de" footer, and default to
+    # Janua exactly as base.html did before (the footer credits the platform;
+    # for a MADFAM-branded message the platform underneath is Janua).
+    "header_name": "MADFAM",
+    "header_bg": "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+    "header_fg": "#ffffff",
+    "platform_name": "Janua",
+    "platform_url": "https://janua.dev",
+}
+
+# --------------------------------------------------------------------------
+# Crea Tu Mundo Autismo (CTM). Its canonical Janua org and the hosts its users
+# sign in through. Header reads the client's name in the client's palette;
+# footer credits MADFAM (the platform underneath a client tenant IS MADFAM,
+# so `platform_name` is MADFAM here, not Janua).
+#
+# CTM palette: deep royal indigo on a warm cream ground. Kept typographic on
+# purpose — no hotlinked logo (blocked by most clients) and no CID/inline
+# image (fiddly through Resend); a name in brand colors reads correctly
+# everywhere, including with images off.
+# --------------------------------------------------------------------------
+CTM_ORG_ID = "e6cbd51d-8329-4c4e-8c74-aba643ab4575"
+
+CTM_BRANDING: Dict[str, str] = {
+    "header_name": "Crea Tu Mundo",
+    # Deep royal indigo, flat (no gradient) — reads as the brand, not as a
+    # second MADFAM. `header_fg` is the warm-cream text on that indigo ground.
+    "header_bg": "#1a2a8f",
+    "header_fg": "#fdf6e3",
+    # The footer credits the platform, which for a client tenant is MADFAM.
+    "platform_name": "MADFAM",
+    "platform_url": "https://madfam.io",
+}
+
+# Hosts whose sign-in redirect identifies a CTM user. Matched on exact host or
+# a subdomain suffix, so both `crea-map.madfam.io` and a bare `kalya.app`
+# resolve. NOT a catch-all: `madfam.io` itself is deliberately absent — it is
+# MADFAM's own host and must keep MADFAM branding.
+CTM_HOSTS: tuple = (
+    "crea-map.madfam.io",
+    "ensayo-map.madfam.io",
+    "kalya.app",
+)
+
+
+def _host_matches(host: str, pattern: str) -> bool:
+    """True when `host` is `pattern` or a subdomain of it.
+
+    Suffix match on a dot boundary so `kalya.app` matches `kalya.app` and
+    `app.kalya.app` but never `evilkalya.app`.
+    """
+    host = host.lower().strip()
+    pattern = pattern.lower().strip()
+    return host == pattern or host.endswith("." + pattern)
+
+
+def _tenant_for_host(host: Optional[str]) -> Optional[str]:
+    """Map a redirect host to a tenant key, or None for MADFAM default."""
+    if not host:
+        return None
+    for pattern in CTM_HOSTS:
+        if _host_matches(host, pattern):
+            return "ctm"
+    return None
+
+
+def _tenant_for_org_id(org_id: Optional[str]) -> Optional[str]:
+    """Map an organization id to a tenant key, or None for MADFAM default."""
+    if not org_id:
+        return None
+    if str(org_id).strip().lower() == CTM_ORG_ID:
+        return "ctm"
+    return None
+
+
+_TENANT_BRANDING: Dict[str, Dict[str, str]] = {
+    "ctm": CTM_BRANDING,
+}
+
+
+def resolve_branding(
+    redirect_url: Optional[str] = None,
+    org_id: Optional[Any] = None,
+) -> Dict[str, str]:
+    """The BODY branding context for one message.
+
+    Returns a plain dict merged into the template context: `header_name`,
+    `header_bg`, `header_fg` (the header wordmark and palette) plus
+    `platform_name` / `platform_url` (the "Con tecnología de" footer). Always a
+    complete set — a template never has to guard for a missing key.
+
+    Resolution order, highest precedence first:
+
+      1. `org_id` — a caller that already knows the tenant (a send path with a
+         session, or the template endpoint if a caller passes one) is
+         authoritative. This is where `WhiteLabelConfiguration` would be read
+         from once a mailer carries a DB session; today it is the static
+         registry.
+      2. `redirect_url` host — the signal the auth mailer actually has at send
+         time, the same host `resolve_sender` reads.
+      3. Neither, or an unrecognized value -> MADFAM. Unknown tenants get
+         today's exact MADFAM frame; this is a no-op for every existing caller.
+
+    NEVER used to build the From line. Body branding only. See module docstring
+    and `docs/EMAIL_SENDER_POLICY.md`.
+    """
+    tenant = _tenant_for_org_id(org_id)
+    if tenant is None and redirect_url:
+        host = urlparse(redirect_url).hostname
+        tenant = _tenant_for_host(host)
+    if tenant is None:
+        return dict(MADFAM_BRANDING)
+    return {**MADFAM_BRANDING, **_TENANT_BRANDING[tenant]}

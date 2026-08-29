@@ -18,6 +18,7 @@ import redis.asyncio as redis
 import structlog
 
 from app.config import settings
+from app.services.email_branding import resolve_branding
 from app.services.email_i18n import (
     FALLBACK_LOCALE,
     FORMALITY_TU,
@@ -524,6 +525,12 @@ class EmailService:
             "base_url": settings.BASE_URL,
             "company_name": "Janua",
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
+            # BODY branding (header wordmark + palette, footer credit) resolved
+            # from the redirect host — the tenant the link sends the person back
+            # TO. Defaults to MADFAM, so an unknown or absent host renders
+            # exactly today's frame. The From line is unaffected: `resolve_sender`
+            # below still returns MADFAM. See app/services/email_branding.py.
+            **resolve_branding(redirect_url=redirect_url),
         }
 
         subject = subject_for("magic_link", recipient_locale, recipient_formality)
