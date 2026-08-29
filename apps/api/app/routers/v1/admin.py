@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.routers.v1.auth import get_current_user
+from app.routers.v1.organizations.dependencies import validate_unique_slug
 from app.services.account_lockout_service import AccountLockoutService
 from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.auth_service import AuthService
@@ -133,6 +134,31 @@ class AdminUserUpdateRequest(BaseModel):
 # User.is_admin flag. Keeping the two disjoint is the no-privilege-escalation
 # boundary — an org "admin" must never confer platform admin, and vice-versa.
 _ALLOWED_ORG_ROLES = {"member", "admin", "owner"}
+
+
+class AdminOrganizationCreateRequest(BaseModel):
+    """Admin: create an organization owned by a SPECIFIED existing user.
+
+    The self-service `POST /organizations/` always sets owner = the caller, and
+    janua exposes no ownership-transfer endpoint. That makes it impossible for an
+    operator to stand up a CUSTOMER's canonical org (owned by the customer's
+    master user, not the operator) — which is exactly what onboarding a tenant
+    like a client account requires. This admin endpoint fills that gap: the owner
+    is named explicitly and must already exist.
+    """
+
+    name: str = Field(..., min_length=1, max_length=200)
+    slug: str = Field(..., min_length=1, max_length=100, pattern="^[a-z0-9-]+$")
+    # The owner is an EXISTING user, addressed by email (the human-meaningful key
+    # an operator has) or by id. Exactly one must be provided.
+    owner_email: Optional[EmailStr] = Field(
+        None, description="Email of the existing user to own the org."
+    )
+    owner_id: Optional[str] = Field(
+        None, description="UUID of the existing user to own the org (alternative to owner_email)."
+    )
+    description: Optional[str] = Field(None, max_length=1000)
+    billing_email: Optional[EmailStr] = None
 
 
 class AdminUserCreateRequest(BaseModel):
@@ -729,6 +755,97 @@ async def get_user_lockout_status(
         raise HTTPException(status_code=404, detail=status["error"])
 
     return status
+
+
+@router.post("/organizations", response_model=OrganizationAdminResponse, status_code=201)
+async def create_organization_admin(
+    request: AdminOrganizationCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create an organization owned by a SPECIFIED existing user (admin only).
+
+    WHY THIS EXISTS. `POST /organizations/` sets owner = the caller, and there is
+    no ownership-transfer endpoint (the members/roles sub-routers are not
+    mounted). So an operator could not create a customer's canonical org owned by
+    the CUSTOMER's master user — the org would be owned by the operator. Tenant
+    onboarding (e.g. standing up one canonical org that provisions a client
+    across every product slice) needs exactly this. The owner is named
+    explicitly, must already exist, and is added as an `owner`-role member.
+
+    Idempotent-friendly: a duplicate slug returns 400 (via validate_unique_slug),
+    so re-running after the org exists fails cleanly rather than creating a
+    second org — the caller then reads the existing org via GET /organizations.
+
+    Privilege model: gated by check_admin_permission (platform admins only).
+    Naming an owner here does NOT grant that user platform admin — org-scoped
+    ownership and the platform `is_admin` flag stay disjoint.
+    """
+    check_admin_permission(current_user)
+
+    if (request.owner_email is None) == (request.owner_id is None):
+        raise HTTPException(
+            status_code=422,
+            detail="Provide exactly one of owner_email or owner_id.",
+        )
+
+    # Resolve the owner FIRST — a bad owner must fail before any write, never
+    # orphan a half-created org.
+    if request.owner_id is not None:
+        try:
+            owner_uuid = uuid.UUID(request.owner_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid owner_id")
+        owner_result = await db.execute(select(User).where(User.id == owner_uuid))
+    else:
+        owner_result = await db.execute(select(User).where(User.email == request.owner_email))
+    owner = owner_result.scalar_one_or_none()
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner user not found")
+
+    # Unique slug (raises 400 if taken) — this is also the idempotency guard.
+    await validate_unique_slug(db, request.slug)
+
+    org = Organization(
+        name=request.name,
+        slug=request.slug,
+        description=request.description,
+        owner_id=owner.id,
+        billing_email=request.billing_email or owner.email,
+        billing_plan="free",
+        settings={},
+        org_metadata={},
+    )
+    db.add(org)
+    await db.flush()  # assign org.id without ending the transaction
+
+    # Add the owner as an owner-role member (mirrors create_organization, which
+    # adds the creator; here the OWNER is the member, not the calling admin).
+    db.add(
+        OrganizationMember(
+            organization_id=org.id,
+            user_id=owner.id,
+            role="owner",
+            status="active",
+            joined_at=datetime.utcnow(),
+        )
+    )
+
+    await db.commit()
+    await db.refresh(org)
+
+    return OrganizationAdminResponse(
+        id=str(org.id),
+        name=org.name,
+        slug=org.slug,
+        owner_id=str(org.owner_id),
+        owner_email=owner.email,
+        billing_plan=org.billing_plan,
+        billing_email=org.billing_email,
+        members_count=1,
+        created_at=org.created_at,
+        updated_at=org.updated_at,
+    )
 
 
 @router.get("/organizations", response_model=List[OrganizationAdminResponse])
