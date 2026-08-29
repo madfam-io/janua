@@ -54,18 +54,37 @@ MADFAM_BRANDING: Dict[str, str] = {
     "header_fg": "#ffffff",
     "platform_name": "Janua",
     "platform_url": "https://janua.dev",
+    # `header_logo_url` / `footer_logo_url` are the hotlinked brand marks. EMPTY
+    # for the MADFAM default: a MADFAM-branded message keeps its INLINE base64
+    # wordmark (base.html, gated on header_name == 'MADFAM') and needs no footer
+    # mark — the header already carries the brand. A client tenant sets these to
+    # the client's header mark and MADFAM's footer mark. Empty string, not a
+    # missing key, so the template's `if` is a plain truthiness test.
+    "header_logo_url": "",
+    "footer_logo_url": "",
 }
 
 # --------------------------------------------------------------------------
 # Crea Tu Mundo Autismo (CTM). Its canonical Janua org and the hosts its users
-# sign in through. Header reads the client's name in the client's palette;
-# footer credits MADFAM (the platform underneath a client tenant IS MADFAM,
-# so `platform_name` is MADFAM here, not Janua).
+# sign in through. Header reads the client's name in the client's palette and
+# carries the client's LOGO; footer credits MADFAM with the MADFAM mark (the
+# platform underneath a client tenant IS MADFAM, so `platform_name` is MADFAM
+# here, not Janua).
 #
-# CTM palette: deep royal indigo on a warm cream ground. Kept typographic on
-# purpose — no hotlinked logo (blocked by most clients) and no CID/inline
-# image (fiddly through Resend); a name in brand colors reads correctly
-# everywhere, including with images off.
+# CTM palette: deep royal indigo on a warm cream ground. The header logo is
+# the gold Crea mark with the indigo header ground BAKED IN (flat RGB PNG, no
+# alpha), the same asset the kalya booking emails carry and which is verified
+# to render in real inboxes (Proton, 2026-08-29). The client's own name in
+# brand colors remains the `<img>` alt text, so with images OFF the header
+# still reads "Crea Tu Mundo" — the logo is an enhancement over the
+# typographic frame, not a replacement for it.
+#
+# WHY HOTLINKED, NOT INLINE. The MADFAM default header ships an inline base64
+# PNG (blocked-image-proof). CTM's marks are hotlinked from crea-map.madfam.io
+# instead, deliberately: they are ALREADY LIVE and public there, they are the
+# byte-identical assets the kalya emails use (one source of truth for the CTM
+# brand across both mailers), and they proved to render in Proton. Keeping the
+# alt text as the brand name preserves the images-off case.
 # --------------------------------------------------------------------------
 CTM_ORG_ID = "e6cbd51d-8329-4c4e-8c74-aba643ab4575"
 
@@ -78,6 +97,11 @@ CTM_BRANDING: Dict[str, str] = {
     # The footer credits the platform, which for a client tenant is MADFAM.
     "platform_name": "MADFAM",
     "platform_url": "https://madfam.io",
+    # The gold Crea mark on the indigo header ground (60px, flat RGB, ~10KB),
+    # and the MADFAM mark for the "Con tecnología de MADFAM" footer (28px).
+    # Same public assets as the kalya booking emails (crea-map origin).
+    "header_logo_url": "https://crea-map.madfam.io/crea-logo-email.png",
+    "footer_logo_url": "https://crea-map.madfam.io/madfam-logo.png",
 }
 
 # Hosts whose sign-in redirect identifies a CTM user. Matched on exact host or

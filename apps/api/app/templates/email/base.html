@@ -122,6 +122,21 @@
                          style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;" />
                 </div>
                 {% endif %}
+                {% if header_logo_url | default('', true) %}
+                <!-- A client TENANT's own header mark (CTM's gold Crea logo on
+                     the indigo ground). HOTLINKED from crea-map.madfam.io — the
+                     same public asset the kalya booking emails carry, verified
+                     to render in real inboxes. The `alt` is the tenant name, so
+                     with images OFF this degrades to exactly the typographic
+                     wordmark below rather than to nothing. Only set for a
+                     client tenant (email_branding.py); the MADFAM default keeps
+                     its inline base64 mark above and leaves this empty. -->
+                <div class="logo">
+                    <img src="{{ header_logo_url }}"
+                         width="60" height="60" alt="{{ header_name | default('MADFAM', true) }}"
+                         style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;" />
+                </div>
+                {% endif %}
                 <!-- The wordmark. MADFAM by default, on every platform's own
                      message: bespoke clients meet several of our platforms over
                      an engagement, and a header that changes per PRODUCT reads
@@ -146,8 +161,17 @@
                 <!-- "Powered by" credits the platform without competing with the
                      MADFAM brand above. `platform_name`/`platform_url` default
                      to Janua so every existing caller renders correctly; a
-                     platform that passes its own gets its own. -->
+                     platform that passes its own gets its own. For a client
+                     tenant, `footer_logo_url` sets the MADFAM mark that sits
+                     beside the credit — the same 28px mark the kalya booking
+                     emails use; its `alt` carries the name for images-off. The
+                     MADFAM default leaves it empty (the header already carries
+                     the MADFAM brand, so a footer mark would be redundant). -->
                 <p style="margin: 0 0 10px 0; font-size: 12px; opacity: 0.75;">
+                    {% if footer_logo_url | default('', true) %}
+                    <img src="{{ footer_logo_url }}" width="28" height="28" alt="{{ platform_name | default('Janua', true) }}"
+                         style="display:inline-block;border:0;vertical-align:middle;margin-right:6px;" />
+                    {% endif %}
                     {{ t('powered_by') }}
                     <a href="{{ platform_url | default('https://janua.dev', true) }}">{{ platform_name | default('Janua', true) }}</a>
                 </p>
