@@ -161,6 +161,28 @@ class AdminOrganizationCreateRequest(BaseModel):
     billing_email: Optional[EmailStr] = None
 
 
+class AdminOrganizationUpdateRequest(BaseModel):
+    """Admin: adopt/repair an existing organization — set its owner and/or rename.
+
+    Companion to AdminOrganizationCreateRequest, for orgs that ALREADY exist and
+    need an owner assigned or a name aligned. The self-service PATCH
+    /organizations/{id} requires the caller to be an org admin, and
+    transfer-ownership requires the new owner to already be a member plus a
+    confirmation password — neither works for an operator adopting an ownerless
+    org they are not a member of. This admin path does: the named owner must
+    already exist, and is (re)asserted as an `owner`-role member. All fields
+    optional; only what is provided is changed.
+    """
+
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    owner_email: Optional[EmailStr] = Field(
+        None, description="Email of the existing user to make owner."
+    )
+    owner_id: Optional[str] = Field(
+        None, description="UUID of the existing user to make owner (alternative to owner_email)."
+    )
+
+
 class AdminUserCreateRequest(BaseModel):
     """Admin create-user request (parity with Supabase Auth admin.createUser)."""
 
@@ -843,6 +865,115 @@ async def create_organization_admin(
         billing_plan=org.billing_plan,
         billing_email=org.billing_email,
         members_count=1,
+        created_at=org.created_at,
+        updated_at=org.updated_at,
+    )
+
+
+@router.patch("/organizations/{org_id}", response_model=OrganizationAdminResponse)
+async def update_organization_admin(
+    org_id: str,
+    request: AdminOrganizationUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Adopt/repair an existing organization: set its owner and/or rename it (admin only).
+
+    The self-service `PATCH /organizations/{id}` requires the caller to be an org
+    admin, and `POST /organizations/{id}/transfer-ownership` requires the new
+    owner to already be a member plus a confirmation password. Neither lets an
+    operator assign an owner to an org they are not a member of — the exact case
+    of an ownerless org that was provisioned out-of-band and now needs its
+    customer's master user as owner. This admin path does it: the named owner
+    must already exist and is (re)asserted as an `owner`-role member.
+
+    Only provided fields change. Gated by check_admin_permission.
+    """
+    check_admin_permission(current_user)
+
+    try:
+        org_uuid = uuid.UUID(org_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid organization ID")
+
+    org_result = await db.execute(select(Organization).where(Organization.id == org_uuid))
+    org = org_result.scalar_one_or_none()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Resolve the new owner (if requested) before any write.
+    owner: Optional[User] = None
+    if request.owner_email is not None or request.owner_id is not None:
+        if request.owner_email is not None and request.owner_id is not None:
+            raise HTTPException(
+                status_code=422, detail="Provide at most one of owner_email or owner_id."
+            )
+        if request.owner_id is not None:
+            try:
+                owner_uuid = uuid.UUID(request.owner_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid owner_id")
+            r = await db.execute(select(User).where(User.id == owner_uuid))
+        else:
+            r = await db.execute(select(User).where(User.email == request.owner_email))
+        owner = r.scalar_one_or_none()
+        if not owner:
+            raise HTTPException(status_code=404, detail="Owner user not found")
+
+    if request.name is not None:
+        org.name = request.name
+    if owner is not None:
+        org.owner_id = owner.id
+    org.updated_at = datetime.utcnow()
+
+    # (Re)assert the owner as an owner-role member — idempotent: update an
+    # existing membership, else insert one. Mirrors how create adds the owner.
+    if owner is not None:
+        existing_member = await db.execute(
+            select(OrganizationMember).where(
+                OrganizationMember.organization_id == org.id,
+                OrganizationMember.user_id == owner.id,
+            )
+        )
+        member = existing_member.scalar_one_or_none()
+        if member is None:
+            db.add(
+                OrganizationMember(
+                    organization_id=org.id,
+                    user_id=owner.id,
+                    role="owner",
+                    status="active",
+                    joined_at=datetime.utcnow(),
+                )
+            )
+        else:
+            member.role = "owner"
+            member.status = "active"
+
+    await db.commit()
+    await db.refresh(org)
+
+    # Resolve owner email for the response (the org may have had an owner already).
+    owner_email = None
+    if org.owner_id is not None:
+        oe = await db.execute(select(User).where(User.id == org.owner_id))
+        ou = oe.scalar_one_or_none()
+        owner_email = ou.email if ou else ""
+
+    count_result = await db.execute(
+        select(func.count(organization_members.c.user_id)).where(
+            organization_members.c.organization_id == org.id
+        )
+    )
+    return OrganizationAdminResponse(
+        id=str(org.id),
+        name=org.name,
+        slug=org.slug,
+        owner_id=str(org.owner_id) if org.owner_id else "",
+        owner_email=owner_email or "",
+        billing_plan=org.billing_plan,
+        billing_email=org.billing_email,
+        members_count=count_result.scalar() or 0,
         created_at=org.created_at,
         updated_at=org.updated_at,
     )
