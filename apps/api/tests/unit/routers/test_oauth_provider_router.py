@@ -424,6 +424,93 @@ class TestUserEntitlements:
         assert "admin" in result["roles"]
         assert result["is_admin"] is True
 
+    async def test_membership_query_filters_status_active(self, mock_db, mock_user):
+        """The membership query MUST filter status == 'active'.
+
+        Regression guard for G4: a removed/inactive member kept org roles/tier
+        in their token because the query had no status filter. Mirror the idiom
+        `_get_user_org_claims` uses. We compile the SELECT and assert the
+        status='active' predicate is present in the WHERE clause.
+        """
+        from app.routers.v1.oauth_provider import _get_user_entitlements
+
+        captured = {}
+
+        async def _capture_execute(stmt, *args, **kwargs):
+            # Compile WITHOUT literal_binds — the mock user id is not a real UUID
+            # and would fail to render; the SQL text + bound params are enough.
+            compiled = stmt.compile()
+            captured["sql"] = str(compiled)
+            captured["params"] = compiled.params
+            return MagicMock(
+                scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+            )
+
+        mock_db.execute = AsyncMock(side_effect=_capture_execute)
+
+        await _get_user_entitlements(mock_user, mock_db)
+
+        sql = captured["sql"].lower()
+        # The WHERE clause must reference the status column, and the bound value
+        # must be 'active' — mirrors the filter `_get_user_org_claims` applies.
+        assert "status" in sql
+        assert "active" in captured["params"].values()
+
+    async def test_inactive_member_gets_no_org_roles_or_tier(self, mock_db, mock_user):
+        """A member whose only memberships are inactive/removed/pending gets the
+        community defaults — no org roles, no org tier.
+
+        With the status filter in the query, the DB returns zero rows for a
+        user whose memberships are all non-active, so the function falls through
+        to defaults. This mirrors `_get_user_org_claims`'s fail-closed behaviour.
+        """
+        from app.routers.v1.oauth_provider import _get_user_entitlements
+
+        # DB returns [] because the status='active' filter excludes the user's
+        # inactive/removed/pending memberships. The org lookup must NOT happen.
+        mock_db.execute = AsyncMock(
+            return_value=MagicMock(
+                scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+            )
+        )
+
+        result = await _get_user_entitlements(mock_user, mock_db)
+
+        assert result["roles"] == []
+        assert result["tier"] == "community"
+        assert result["sub_status"] == "inactive"
+        # Exactly one query ran (memberships). The org tier lookup is skipped
+        # because no active membership was found.
+        assert mock_db.execute.await_count == 1
+
+    async def test_active_member_still_gets_org_roles_and_tier(self, mock_db, mock_user):
+        """Behaviour for ACTIVE members is preserved exactly by the G4 fix."""
+        from app.routers.v1.oauth_provider import _get_user_entitlements
+
+        org_id = uuid.uuid4()
+        active_member = MagicMock(role="admin", organization_id=org_id, status="active")
+        org = MagicMock(subscription_tier="pro")
+
+        call = {"n": 0}
+
+        async def _execute(*args, **kwargs):
+            call["n"] += 1
+            if call["n"] == 1:  # membership query
+                return MagicMock(
+                    scalars=MagicMock(
+                        return_value=MagicMock(all=MagicMock(return_value=[active_member]))
+                    )
+                )
+            # org lookup
+            return MagicMock(scalar_one_or_none=MagicMock(return_value=org))
+
+        mock_db.execute = AsyncMock(side_effect=_execute)
+
+        result = await _get_user_entitlements(mock_user, mock_db)
+
+        assert "admin" in result["roles"]
+        assert result["tier"] == "pro"
+
 
 class TestAuthorizationEndpointValidation:
     """Test authorization endpoint validation logic"""
