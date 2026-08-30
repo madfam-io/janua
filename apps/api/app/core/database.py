@@ -247,8 +247,14 @@ async def bootstrap_admin_user():
         pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
         async with db_manager.get_session() as session:
-            # Check if admin already exists
-            result = await session.execute(select(User).where(User.email == admin_email))
+            # Check if admin already exists. The bootstrap admin is a platform
+            # identity created below WITHOUT a tenant_id (org link is via
+            # OrganizationMember), so it lives in the untenanted pool. Email is
+            # per-tenant since migration 013 — scope to that pool so this stays a
+            # single-row lookup and never matches a tenant's identical email.
+            result = await session.execute(
+                select(User).where(User.email == admin_email, User.tenant_id.is_(None))
+            )
             existing_admin = result.scalar_one_or_none()
 
             if existing_admin:

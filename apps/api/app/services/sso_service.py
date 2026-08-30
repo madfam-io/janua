@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import User
+from .user_lookup import get_user_by_email
 
 try:
     from ..models import IDPMetadata, SSOConfiguration, SSOProvider, SSOSession, SSOStatus
@@ -444,10 +445,13 @@ class SSOService:
         only when the IdP did not assert one of its own.
         """
 
-        # Check if user exists
-        stmt = select(User).where(User.email == email)
-        result = await self.db.execute(stmt)
-        user = result.scalar_one_or_none()
+        # Check if user exists in the untenanted / staff pool. NOTE: the JIT
+        # branch below creates SSO users WITHOUT a tenant_id (org association is
+        # via user_metadata + OrganizationMember, not the tenant_id column), so
+        # those users live in the NULL-tenant pool — scoping the lookup there is
+        # what finds the same user on a later SSO login. (Making SSO users
+        # tenant_id-scoped would be a separate behavioural change.)
+        user = await get_user_by_email(self.db, email, tenant_id=None)
 
         if not user and sso_config.jit_provisioning:
             # Create new user

@@ -353,11 +353,22 @@ async def create_user(
                 detail=SCIMError.format(400, "userName and email are required"),
             )
 
-        # Check if user already exists
+        # Check if user already exists. SCIM-provisioned users live in the
+        # untenanted pool (org link is via OrganizationMember, tenant_id stays
+        # NULL), so scope the EMAIL arm to that pool — email is per-tenant since
+        # migration 013 and a global email match could hit another tenant's user.
+        # Username is still globally unique, so its arm stays unscoped. Use
+        # `.first()` (not scalar_one_or_none) since the or_ can legitimately match
+        # more than one row (an email row and a username row).
         existing_user = await db.execute(
-            select(User).where(or_(User.email == primary_email, User.username == username))
+            select(User).where(
+                or_(
+                    and_(User.email == primary_email, User.tenant_id.is_(None)),
+                    User.username == username,
+                )
+            )
         )
-        if existing_user.scalar_one_or_none():
+        if existing_user.scalars().first():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=SCIMError.format(409, "User already exists"),

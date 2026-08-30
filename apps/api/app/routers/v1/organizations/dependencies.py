@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Organization, User, organization_members
+from app.services.user_lookup import get_user_by_email
 from app.routers.v1.auth import get_current_user
 
 
@@ -110,9 +111,11 @@ async def validate_invitation_email(db: Session, org_id: uuid.UUID, email: str) 
     """Validate invitation email (not already a member or pending invitation)"""
     from app.models import OrganizationInvitation
 
-    # Check if user is already a member
-    user_result = await db.execute(select(User).where(User.email == email))
-    user_query = user_result.scalar_one_or_none()
+    # Check if user is already a member. Resolve the invitee in the untenanted /
+    # staff pool: invitable users are platform identities and org membership is
+    # via OrganizationMember (decoupled from tenant_id), so this is where they
+    # live. Email is per-tenant since migration 013 → scope to keep single-row.
+    user_query = await get_user_by_email(db, email, tenant_id=None)
     if user_query:
         member_result = await db.execute(
             select(organization_members).where(

@@ -230,8 +230,15 @@ class OrganizationRepository:
         return count or 0
 
     async def find_user_by_email(self, email: str) -> Optional[User]:
-        """Find user by email"""
-        return self.db.query(User).filter(User.email == email).first()
+        """Find user by email in the untenanted / staff pool.
+
+        Email is per-tenant since migration 013, so a bare match could return an
+        arbitrary row across pools. This repository serves the org-invitation
+        flow, where invitees are platform identities (org membership is via
+        OrganizationMember, decoupled from tenant_id) — so scope to the NULL-
+        tenant pool. Sync session, so it filters inline.
+        """
+        return self.db.query(User).filter(User.email == email, User.tenant_id.is_(None)).first()
 
     async def find_pending_invitation(
         self, organization_id: UUID, email: str

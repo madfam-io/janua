@@ -25,6 +25,7 @@ from app.routers.v1.auth import get_current_user, SignInResponse, UserResponse, 
 from app.services.auth_service import AuthService
 
 from ...models import ActivityLog, User, UserStatus
+from ...services.user_lookup import get_user_by_email
 
 router = APIRouter(prefix="/mfa", tags=["mfa"])
 
@@ -439,11 +440,9 @@ async def validate_mfa_code(
 @router.get("/recovery-options")
 async def get_recovery_options(email: str, db: Session = Depends(get_db)):
     """Get MFA recovery options for a user (public endpoint)"""
-    # Find user by email
-    result = await db.execute(
-        select(User).where(User.email == email, User.status == UserStatus.ACTIVE)
-    )
-    user = result.scalar_one_or_none()
+    # Find user by email — untenanted / staff pool (platform MFA recovery; email
+    # is per-tenant since migration 013, so scope to keep this single-row).
+    user = await get_user_by_email(db, email, tenant_id=None, active_only=True)
 
     if not user:
         # Don't reveal if user exists
@@ -479,11 +478,8 @@ async def get_recovery_options(email: str, db: Session = Depends(get_db)):
 @router.post("/initiate-recovery")
 async def initiate_mfa_recovery(email: str, db: Session = Depends(get_db)):
     """Initiate MFA recovery process"""
-    # Find user by email
-    result = await db.execute(
-        select(User).where(User.email == email, User.status == UserStatus.ACTIVE)
-    )
-    user = result.scalar_one_or_none()
+    # Find user by email — untenanted / staff pool (see get_recovery_options).
+    user = await get_user_by_email(db, email, tenant_id=None, active_only=True)
 
     if not user or not user.mfa_enabled:
         # Don't reveal if user exists or has MFA
