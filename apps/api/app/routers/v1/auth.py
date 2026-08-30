@@ -66,6 +66,14 @@ class SignUpRequest(BaseModel):
     # already knows its user's language should be able to say so, and an
     # unsupported tag must degrade to the default rather than 422 a signup.
     locale: Optional[str] = Field(None, max_length=35)
+    # The OAuth client of the app whose end-user is signing up. When present and
+    # bound to an organization, the new user is scoped to that tenant (tenant_id
+    # + an OrganizationMember row) — this is what makes a client's DB-only BaaS
+    # signup land a *tenant-scoped* user, so the data-api token (the `data-api`
+    # scope) can carry a tenant_id. Absent/unknown/not-org-bound → an ordinary
+    # untenanted signup, exactly as before. Deliberately a soft hint, never a
+    # 422: a bad client_id must not block a signup (same stance as `locale`).
+    client_id: Optional[str] = Field(None, max_length=255)
 
     @field_validator("username")
     @classmethod
@@ -236,6 +244,33 @@ async def log_audit_event(
 
 
 # Authentication endpoints
+
+
+async def _resolve_signup_tenant(db: Session, client_id: Optional[str]):
+    """Resolve the organization a self-signup should be scoped to, or None.
+
+    Keyed off the app's OAuth ``client_id`` exactly as the data-api token seam
+    is (`oauth_provider._data_api_claims`): the client is registered FOR a
+    tenant, so its ``organization_id`` is the tenant a user signing up through
+    that app belongs to.
+
+    Returns the org UUID only when the client exists, is active, AND is
+    org-bound. Every other case — no client_id, unknown/inactive client, or a
+    client with no organization — returns None so the signup proceeds as an
+    ordinary untenanted account. This is a soft hint by design: a wrong or stale
+    client_id must never turn a valid signup into an error.
+    """
+    if not client_id:
+        return None
+    from ...models import OAuthClient as _OAuthClient
+
+    result = await db.execute(select(_OAuthClient).where(_OAuthClient.client_id == client_id))
+    oauth_client = result.scalar_one_or_none()
+    if not oauth_client or not oauth_client.is_active:
+        return None
+    return oauth_client.organization_id
+
+
 @router.post("/signup", response_model=SignInResponse)
 @limiter.limit("3/minute")  # Strict rate limiting for signup
 async def sign_up(
@@ -285,6 +320,31 @@ async def sign_up(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    # Bind the user to a tenant when they signed up through an org-bound app's
+    # OAuth client. This is what turns a client's DB-only BaaS signup into a
+    # *tenant-scoped* account: tenant_id + an active OrganizationMember make
+    # `_get_user_org_claims` emit the org unambiguously, so this user's data-api
+    # token (the `data-api` scope) carries that tenant_id and PostgREST scopes
+    # their queries under RLS. No client_id / not org-bound → skipped entirely
+    # (ordinary untenanted signup, unchanged behaviour). Isolated in its own
+    # commit so a membership hiccup cannot poison the user row that already
+    # committed above.
+    signup_org_id = await _resolve_signup_tenant(db, signup_data.client_id)
+    if signup_org_id is not None:
+        from ...models import OrganizationMember
+
+        user.tenant_id = signup_org_id
+        db.add(
+            OrganizationMember(
+                organization_id=signup_org_id,
+                user_id=user.id,
+                role="member",
+                status="active",
+            )
+        )
+        await db.commit()
+        await db.refresh(user)
 
     # Create session
     access_token, refresh_token, session = await AuthService.create_session(
