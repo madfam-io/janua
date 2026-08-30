@@ -28,6 +28,7 @@ from ...models import (
     User,
     organization_members,
 )
+from ...services.user_lookup import get_user_by_email
 
 logger = structlog.get_logger()
 
@@ -630,9 +631,10 @@ async def invite_member(
 
     org = await check_organization_permission(db, current_user, org_uuid, OrganizationRole.ADMIN)
 
-    # Check if user already member
-    user_result = await db.execute(select(User).where(User.email == request.email))
-    existing_user = user_result.scalar_one_or_none()
+    # Check if user already member. Resolve in the untenanted / staff pool
+    # (invitees are platform identities; org membership is via OrganizationMember,
+    # decoupled from tenant_id). Per-tenant email since 013 → scope to single-row.
+    existing_user = await get_user_by_email(db, request.email, tenant_id=None)
     if existing_user:
         member_result = await db.execute(
             select(organization_members).where(

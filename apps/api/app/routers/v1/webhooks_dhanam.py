@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.database import get_db
 from app.models import EntitlementSource, Organization, User
+from app.services.user_lookup import get_user_by_email
 from app.services.entitlements_service import (
     cancel_entitlement,
     upsert_entitlement,
@@ -400,8 +401,9 @@ async def _resolve_user(
                 return user
 
     if user_email_payload:
-        result = await db.execute(select(User).where(User.email == str(user_email_payload).lower()))
-        user = result.scalar_one_or_none()
+        # Dhanam (ecosystem billing) references platform users → untenanted pool.
+        # Per-tenant email since migration 013, so scope to keep this single-row.
+        user = await get_user_by_email(db, str(user_email_payload).lower(), tenant_id=None)
         if user is not None:
             return user
 

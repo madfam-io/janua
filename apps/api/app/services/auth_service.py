@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.redis import SessionStore, get_redis
 from app.models import AuditLog, Session, User
+from app.services.user_lookup import get_user_by_email
 
 logger = structlog.get_logger()
 
@@ -81,9 +82,11 @@ class AuthService:
 
             tenant_id = uuid4()
 
-        # Check if user already exists
-        existing = await db.execute(select(User).where(User.email == email))
-        if existing.scalar_one_or_none():
+        # Check if user already exists IN THIS TENANT's pool. Email uniqueness is
+        # per-tenant (migration 013), and this method sets `tenant_id=tenant_id`
+        # on the created row below, so the existence check must scope to the same
+        # tenant — else it would spuriously conflict on another tenant's user.
+        if await get_user_by_email(db, email, tenant_id=tenant_id):
             from app.exceptions import ConflictError
 
             raise ConflictError("User with this email already exists")
@@ -115,9 +118,11 @@ class AuthService:
     @staticmethod
     async def authenticate_user(db: AsyncSession, email: str, password: str) -> Optional[User]:
         """Authenticate user with email and password"""
-        # Get user
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
+        # Get user from the untenanted / staff pool. This signature carries no
+        # tenant, and it is the platform password-auth path; end-user (tenanted)
+        # auth resolves its tenant from the OAuth client context, not here. Pool-
+        # scoping also keeps the lookup single-row now that email is per-tenant.
+        user = await get_user_by_email(db, email, tenant_id=None)
 
         if not user:
             logger.warning("Authentication failed - user not found", email=email)

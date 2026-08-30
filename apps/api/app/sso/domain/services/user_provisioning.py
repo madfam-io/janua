@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Organization, User
+from app.services.user_lookup import get_user_by_email
 
 from ...exceptions import ValidationError
 from ..protocols.base import SSOConfiguration, UserProvisioningData
@@ -69,11 +70,22 @@ class UserProvisioningService:
         return new_user
 
     async def _find_existing_user(self, email: str, organization_id: str) -> Optional[User]:
-        """Find existing user by email and organization"""
+        """Find an existing SSO/JIT-provisioned user by email.
 
-        stmt = select(User).where(User.email == email, User.organization_id == organization_id)
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        Since migration 013 ``users.email`` is unique PER TENANT, so a bare
+        ``select(User).where(User.email == x)`` can match multiple rows and must
+        be pool-scoped. JIT-provisioned SSO users are created WITHOUT a
+        ``tenant_id`` (their org link is ``OrganizationMember`` + user_metadata,
+        not the ``tenant_id`` column — see ``_create_new_user`` below and the
+        sibling ``app.services.sso_service.SSOService._provision_user``), so they
+        live in the untenanted / staff pool. Scope the lookup there.
+
+        ``organization_id`` is not part of the email-uniqueness key (User has no
+        ``organization_id`` column — that clause used to raise); it is retained
+        in the signature for callers and membership is enforced elsewhere.
+        """
+
+        return await get_user_by_email(self.db, email, tenant_id=None)
 
     async def _create_new_user(
         self, user_data: UserProvisioningData, organization_id: str, sso_config: SSOConfiguration

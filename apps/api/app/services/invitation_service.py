@@ -82,8 +82,16 @@ class InvitationService:
 
         # Check if the invitee is already a member. Membership is keyed by
         # user_id, not by email, so resolve the address first; an address with
-        # no account cannot already be a member.
-        invitee = self.db.query(User).filter(User.email == invitation_data.email).first()
+        # no account cannot already be a member. Resolve in the untenanted /
+        # staff pool: invitees are platform identities and membership is via
+        # OrganizationMember (decoupled from tenant_id). Email is per-tenant
+        # since migration 013, so scope the lookup to that pool (sync session
+        # here, so this filters inline rather than via get_user_by_email).
+        invitee = (
+            self.db.query(User)
+            .filter(User.email == invitation_data.email, User.tenant_id.is_(None))
+            .first()
+        )
         if invitee is not None:
             existing_member = (
                 self.db.query(OrganizationMember)

@@ -26,6 +26,7 @@ from app.routers.v1.auth import get_current_user
 from app.services.auth_service import AuthService
 
 from ...models import ActivityLog, Passkey, User
+from ...services.user_lookup import get_user_by_email
 from ...models import Session as UserSession
 
 router = APIRouter(prefix="/passkeys", tags=["passkeys"])
@@ -296,9 +297,10 @@ async def get_authentication_options(
     allow_credentials = []
 
     if request.email:
-        # Passwordless login - get user's passkeys
-        user_result = await db.execute(select(User).where(User.email == request.email))
-        user = user_result.scalar_one_or_none()
+        # Passwordless login - get user's passkeys. Untenanted / staff pool
+        # (platform passkey login; per-tenant email since 013 → scope to
+        # single-row). End-user passkey auth would resolve its tenant separately.
+        user = await get_user_by_email(db, request.email, tenant_id=None)
         if user:
             passkeys_result = await db.execute(select(Passkey).where(Passkey.user_id == user.id))
             passkeys = passkeys_result.scalars().all()

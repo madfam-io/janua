@@ -45,6 +45,7 @@ from ...models import (
     organization_members,
 )
 from ...models import Session as UserSession
+from ...services.user_lookup import get_user_by_email
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -536,10 +537,15 @@ async def create_user_admin(
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
 
-    # Reject duplicates (case-sensitive email match, consistent with the rest of
-    # the codebase's User.email lookups).
-    existing = await db.execute(select(User).where(User.email == request.email))
-    if existing.scalar_one_or_none():
+    # Reject duplicates within the pool this user will land in. Email is
+    # per-tenant since migration 013, and the created row below takes
+    # tenant_id = org.id (when an org was given) or a fresh random tenant. So
+    # scope the check to org.id when present: a global check would wrongly
+    # conflict on another tenant's identical email. With no org the new user gets
+    # a unique random tenant and cannot collide, but we still guard against a
+    # clashing UNTENANTED (staff) account, preserving the prior reject there.
+    dup_scope = org.id if org is not None else None
+    if await get_user_by_email(db, request.email, tenant_id=dup_scope):
         raise HTTPException(status_code=409, detail="User with this email already exists")
 
     # Password: validate + hash when provided; otherwise leave unusable and mint
@@ -826,9 +832,11 @@ async def create_organization_admin(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid owner_id")
         owner_result = await db.execute(select(User).where(User.id == owner_uuid))
+        owner = owner_result.scalar_one_or_none()
     else:
-        owner_result = await db.execute(select(User).where(User.email == request.owner_email))
-    owner = owner_result.scalar_one_or_none()
+        # Owner-by-email resolves in the untenanted / staff pool (org owners are
+        # platform identities; per-tenant email since 013 → scope to single-row).
+        owner = await get_user_by_email(db, request.owner_email, tenant_id=None)
     if not owner:
         raise HTTPException(status_code=404, detail="Owner user not found")
 
@@ -921,9 +929,10 @@ async def update_organization_admin(
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid owner_id")
             r = await db.execute(select(User).where(User.id == owner_uuid))
+            owner = r.scalar_one_or_none()
         else:
-            r = await db.execute(select(User).where(User.email == request.owner_email))
-        owner = r.scalar_one_or_none()
+            # Untenanted / staff pool (see the other owner-by-email resolve).
+            owner = await get_user_by_email(db, request.owner_email, tenant_id=None)
         if not owner:
             raise HTTPException(status_code=404, detail="Owner user not found")
 

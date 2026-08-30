@@ -19,6 +19,7 @@ from app.core.redis import SessionStore, get_redis
 from app.exceptions import AuthenticationError, ValidationError
 from app.models.user import Session, User
 from app.services.auth_service import AuthService
+from app.services.user_lookup import get_user_by_email
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 logger = structlog.get_logger()
@@ -85,8 +86,9 @@ async def signup(
 ):
     """Register a new user"""
     try:
-        # Check if user already exists
-        existing_user = await db.scalar(select(User).where(User.email == request.email))
+        # Check if user already exists — untenanted / staff pool (per-tenant
+        # email since migration 013; this legacy signup path is platform).
+        existing_user = await get_user_by_email(db, request.email, tenant_id=None)
         if existing_user:
             raise ValidationError("Email already registered")
 
@@ -322,8 +324,8 @@ async def request_password_reset(
 ):
     """Request password reset link"""
     try:
-        # Check if user exists
-        user = await db.scalar(select(User).where(User.email == request.email))
+        # Check if user exists — untenanted / staff pool (see register above).
+        user = await get_user_by_email(db, request.email, tenant_id=None)
 
         # Always return success even if user doesn't exist (security)
         if user:

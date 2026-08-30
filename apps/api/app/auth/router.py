@@ -30,6 +30,7 @@ except Exception as e:
     logger.error("Failed to import ResendEmailService", error_type=type(e).__name__)
     EMAIL_SERVICE_AVAILABLE = False
 from app.models.user import User
+from app.services.user_lookup import get_user_by_email
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -418,11 +419,9 @@ async def verify_email(request: VerifyEmailRequest, db=Depends(get_db), redis=De
         email_service = get_email_service(redis)
         token_info = await email_service.verify_email_token(request.token)
 
-        # Update user email_verified status in database
-        from sqlalchemy import select
-
-        result = await db.execute(select(User).where(User.email == token_info["email"]))
-        user = result.scalar_one_or_none()
+        # Update user email_verified status in database. Untenanted / staff pool
+        # (per-tenant email since migration 013; legacy platform verify path).
+        user = await get_user_by_email(db, token_info["email"], tenant_id=None)
 
         if user:
             user.email_verified = True
@@ -505,8 +504,13 @@ async def reset_password(request: ResetPasswordRequest, db=Depends(get_db)):
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token"
             )
 
-        # Get user by email
-        user = db.query(User).filter(User.email == stored_email.decode()).first()
+        # Get user by email — untenanted / staff pool (per-tenant email since
+        # migration 013; sync session here, so scope inline). Legacy platform path.
+        user = (
+            db.query(User)
+            .filter(User.email == stored_email.decode(), User.tenant_id.is_(None))
+            .first()
+        )
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 

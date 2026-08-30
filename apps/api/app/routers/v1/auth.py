@@ -26,6 +26,7 @@ from app.database import AsyncSessionLocal, get_db
 from app.dependencies import get_current_user
 from app.services.account_lockout_service import AccountLockoutService
 from app.services.auth_service import AuthService
+from app.services.user_lookup import get_user_by_email
 from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.email import EmailService
 from app.services.email_service import (
@@ -285,8 +286,24 @@ async def sign_up(
     if not await signups_enabled(db):
         raise HTTPException(status_code=403, detail="Sign ups are currently disabled")
 
-    # Check if email already exists
-    result = await db.execute(select(User).where(User.email == signup_data.email))
+    # Resolve the tenant BEFORE the email check, because email uniqueness is now
+    # per-tenant (migration 013): the same address may exist once per tenant plus
+    # once in the untenanted pool. Resolving first lets the existence check — and
+    # the created row — be scoped to exactly the pool the DB partial indexes
+    # enforce, so the app and the DB agree. Soft hint: no/unknown/not-org-bound
+    # client_id → None → the untenanted pool, exactly as before tenanting existed.
+    signup_org_id = await _resolve_signup_tenant(db, signup_data.client_id)
+
+    # Check if email already exists WITHIN the target pool. Scoping to
+    # `tenant_id == signup_org_id` (or `IS NULL` for the untenanted pool) mirrors
+    # the two partial unique indexes; a bare global check here would wrongly
+    # reject a client's user whose email merely collides with another tenant's.
+    email_stmt = select(User).where(User.email == signup_data.email)
+    if signup_org_id is not None:
+        email_stmt = email_stmt.where(User.tenant_id == signup_org_id)
+    else:
+        email_stmt = email_stmt.where(User.tenant_id.is_(None))
+    result = await db.execute(email_stmt)
     existing_user = result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -308,6 +325,10 @@ async def sign_up(
     # behaviour before this) meant every user fell through to the deployment
     # default forever, since nothing else ever writes the column except an
     # explicit PATCH /users/me that almost nobody makes.
+    #
+    # tenant_id is set at construction (from the tenant resolved above) so the
+    # row lands in the right pool atomically and the DB partial unique index
+    # (migration 013) enforces per-tenant email uniqueness on this very insert.
     user = User(
         email=signup_data.email,
         password_hash=AuthService.hash_password(signup_data.password),
@@ -316,25 +337,22 @@ async def sign_up(
         username=signup_data.username,
         status=UserStatus.ACTIVE,
         locale=locale_from_request(request, signup_data.locale),
+        tenant_id=signup_org_id,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
 
-    # Bind the user to a tenant when they signed up through an org-bound app's
-    # OAuth client. This is what turns a client's DB-only BaaS signup into a
-    # *tenant-scoped* account: tenant_id + an active OrganizationMember make
-    # `_get_user_org_claims` emit the org unambiguously, so this user's data-api
-    # token (the `data-api` scope) carries that tenant_id and PostgREST scopes
-    # their queries under RLS. No client_id / not org-bound → skipped entirely
+    # When the signup was tenant-bound, also record membership. This is what
+    # makes `_get_user_org_claims` emit the org unambiguously, so the user's
+    # data-api token (the `data-api` scope) carries that tenant_id and PostgREST
+    # scopes their queries under RLS. No client_id / not org-bound → skipped
     # (ordinary untenanted signup, unchanged behaviour). Isolated in its own
     # commit so a membership hiccup cannot poison the user row that already
     # committed above.
-    signup_org_id = await _resolve_signup_tenant(db, signup_data.client_id)
     if signup_org_id is not None:
         from ...models import OrganizationMember
 
-        user.tenant_id = signup_org_id
         db.add(
             OrganizationMember(
                 organization_id=signup_org_id,
@@ -428,9 +446,13 @@ async def sign_in(credentials: SignInRequest, request: Request, db: Session = De
     """Authenticate user and get tokens"""
     # Find user - we need to find the user first to check lockout status
     # Note: We look for any user (not just ACTIVE) to check lockout, then verify status
+    # Scoped to the untenanted (staff / platform) pool: this bare-credential
+    # /signin serves platform identities. End-user (tenanted) login gets its own
+    # tenant-aware entry via the OIDC flow; keeping this pool-scoped means a
+    # tenant's end-user can never be returned here (post-013 email is per-tenant,
+    # so a global lookup could otherwise match the wrong pool's user).
     if credentials.email:
-        result = await db.execute(select(User).where(User.email == credentials.email))
-        user = result.scalar_one_or_none()
+        user = await get_user_by_email(db, credentials.email, tenant_id=None)
     else:
         result = await db.execute(select(User).where(User.username == credentials.username))
         user = result.scalar_one_or_none()
@@ -1341,9 +1363,9 @@ async def login_form(
 """
         return HTMLResponse(content=error_html, status_code=401)
 
-    # Find user by email (without status filter to check lockout first)
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
+    # Find user by email (without status filter to check lockout first).
+    # Untenanted / staff pool (see /signin note) — this hosted flow is platform.
+    user = await get_user_by_email(db, email, tenant_id=None)
 
     if not user:
         return make_error_page("Invalid email or password. Please try again.")
@@ -1732,10 +1754,8 @@ async def _dispatch_password_reset(
     and the hosted forgot-password form. Does nothing when no ACTIVE user
     matches: enumeration safety is both callers' contract, so absence must be
     indistinguishable from success at every transport."""
-    result = await db.execute(
-        select(User).where(User.email == email, User.status == UserStatus.ACTIVE)
-    )
-    user = result.scalar_one_or_none()
+    # Untenanted / staff pool (see /signin note); enumeration-safe either way.
+    user = await get_user_by_email(db, email, tenant_id=None, active_only=True)
     if not (user and settings.EMAIL_ENABLED):
         return
 
@@ -2231,11 +2251,12 @@ async def send_magic_link(
     if not settings.EMAIL_ENABLED:
         raise HTTPException(status_code=400, detail="Email service not configured")
 
-    # Find or create user
-    result = await db.execute(
-        select(User).where(User.email == magic_link_data.email, User.status == UserStatus.ACTIVE)
+    # Find or create user — untenanted / staff pool (see /signin note). This
+    # bare-email magic link is a platform entry; both the lookup and the created
+    # row below stay in the NULL-tenant pool, agreeing with uq_users_email_global.
+    user = await get_user_by_email(
+        db, magic_link_data.email, tenant_id=None, active_only=True
     )
-    user = result.scalar_one_or_none()
 
     if not user:
         # Create user without password for magic link only.

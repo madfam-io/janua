@@ -481,12 +481,20 @@ class OAuthService:
 
             return oauth_account.user, False
 
-        # Check if user with email exists
+        # Check if user with email exists in the untenanted / staff pool. Social
+        # login is a platform identity flow and the create branch below leaves
+        # tenant_id NULL, so scope to that pool: post-013 email is per-tenant, and
+        # a bare .first() across pools could return another tenant's user. (Sync
+        # session here, so this scopes inline rather than via get_user_by_email.)
         user = None
         if user_info.get("email"):
             user = (
                 db.query(User)
-                .filter(User.email == user_info["email"], User.status == UserStatus.ACTIVE)
+                .filter(
+                    User.email == user_info["email"],
+                    User.status == UserStatus.ACTIVE,
+                    User.tenant_id.is_(None),
+                )
                 .first()
             )
 

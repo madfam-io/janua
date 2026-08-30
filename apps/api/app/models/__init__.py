@@ -31,8 +31,32 @@ class UserStatus(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
+    # Email uniqueness is PER-TENANT, not global — see migration
+    # 013_per_tenant_email_uniqueness. Two partial unique indexes model the two
+    # pools: `uq_users_tenant_email` (UNIQUE(tenant_id, email) WHERE tenant_id IS
+    # NOT NULL) gives each tenant its own email namespace, and
+    # `uq_users_email_global` (UNIQUE(email) WHERE tenant_id IS NULL) preserves
+    # global uniqueness for the untenanted / staff pool. This is why `email`
+    # below carries NO `unique=True`/`index=True`: those would recreate the old
+    # global `ix_users_email` that 013 drops.
+    __table_args__ = (
+        sa.Index(
+            "uq_users_tenant_email",
+            "tenant_id",
+            "email",
+            unique=True,
+            postgresql_where=sa.text("tenant_id IS NOT NULL"),
+        ),
+        sa.Index(
+            "uq_users_email_global",
+            "email",
+            unique=True,
+            postgresql_where=sa.text("tenant_id IS NULL"),
+        ),
+    )
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String(255), unique=True, nullable=False, index=True)
+    email = Column(String(255), nullable=False)
     email_verified = Column(Boolean, default=False)
     password_hash = Column(String(255))
     status = Column(SQLEnum(UserStatus), default=UserStatus.ACTIVE)
