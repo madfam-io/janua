@@ -20,6 +20,12 @@ from app.routers.v1.organizations.dependencies import validate_unique_slug
 from app.services.account_lockout_service import AccountLockoutService
 from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.auth_service import AuthService
+from app.services.entitlements_service import (
+    cancel_entitlement,
+    remove_org_product_tier,
+    set_org_product_tier,
+    upsert_entitlement,
+)
 from app.services.system_settings_service import SystemSettingsService, invalidate_cors_cache
 
 # Application start time for uptime calculation
@@ -27,6 +33,7 @@ APPLICATION_START_TIME = time.time()
 
 from ...models import (
     ActivityLog,
+    EntitlementSource,
     OAuthAccount,
     OAuthProvider,
     Organization,
@@ -1069,6 +1076,327 @@ async def delete_organization_admin(
     await db.commit()
 
     return {"message": "Organization deleted successfully"}
+
+
+# =============================================================================
+# Entitlement Write-API (admin-only)
+# =============================================================================
+#
+# Today the ONLY writer of entitlements is the Dhanam subscription webhook.
+# This adds an AUDITED, platform-admin-only surface to grant/revoke product
+# entitlements for a USER (user_entitlements rows) or an ORG (product_tiers
+# JSONB). Both are auth-system mutations — every call writes an AuditLog row.
+#
+# product/tier are FREE-TEXT by design: the canonical set lives in
+# internal-devops/ecosystem/product-tier-mapping.yaml and Janua deliberately
+# does NOT enforce it (new products/tiers ship without a Janua code change).
+# We only validate non-empty strings, never the value set.
+
+
+class AdminUserEntitlementGrantRequest(BaseModel):
+    """Grant/upsert a per-user product entitlement (source=admin_grant)."""
+
+    user_id: str = Field(..., description="UUID of the user to grant to.")
+    product: str = Field(..., min_length=1, max_length=64, description="Product slug (free-text).")
+    tier: str = Field(..., min_length=1, max_length=64, description="Tier within the product.")
+    expires_at: Optional[datetime] = Field(
+        None, description="Optional expiry. NULL = no expiry (typical for admin grants)."
+    )
+
+
+class AdminUserEntitlementRevokeRequest(BaseModel):
+    """Revoke (cancel) a per-user product entitlement."""
+
+    user_id: str = Field(..., description="UUID of the user to revoke from.")
+    product: str = Field(..., min_length=1, max_length=64, description="Product slug to revoke.")
+
+
+class AdminUserEntitlementResponse(BaseModel):
+    """A user_entitlements row after a grant/revoke."""
+
+    user_id: str
+    product: str
+    tier: str
+    source: str
+    expires_at: Optional[datetime]
+    granted_at: Optional[datetime]
+
+
+class AdminOrgEntitlementGrantRequest(BaseModel):
+    """Set one product:tier key on an organization's product_tiers JSONB."""
+
+    org_id: str = Field(..., description="UUID of the organization.")
+    product: str = Field(..., min_length=1, max_length=64, description="Product slug (free-text).")
+    tier: str = Field(..., min_length=1, max_length=64, description="Tier within the product.")
+
+
+class AdminOrgEntitlementRevokeRequest(BaseModel):
+    """Remove one product key from an organization's product_tiers JSONB."""
+
+    org_id: str = Field(..., description="UUID of the organization.")
+    product: str = Field(..., min_length=1, max_length=64, description="Product slug to remove.")
+
+
+class AdminOrgEntitlementResponse(BaseModel):
+    """The organization's product_tiers map after a grant/revoke."""
+
+    org_id: str
+    product_tiers: dict
+
+
+async def _record_entitlement_audit(
+    db: Session,
+    *,
+    event_type: AuditEventType,
+    actor: User,
+    tenant_id: str,
+    resource_type: str,
+    resource_id: str,
+    organization_id: Optional[str],
+    details: dict,
+) -> None:
+    """Write an AuditLog row for an entitlement mutation.
+
+    Same tamper-evident AuditLogger chain the admin create-user handler uses.
+    An audit failure must NOT block the mutation (it is best-effort, logged),
+    but the mutation itself is committed by the caller. Never records a secret.
+    """
+    try:
+        audit_logger = AuditLogger(db)
+        await audit_logger.log(
+            event_type=event_type,
+            tenant_id=tenant_id,
+            identity_id=str(actor.id),
+            resource_type=resource_type,
+            resource_id=resource_id,
+            organization_id=organization_id,
+            details=details,
+            severity="info",
+        )
+    except Exception:
+        # Audit logging failure must not break the entitlement mutation.
+        pass
+
+
+@router.post("/entitlements/user", response_model=AdminUserEntitlementResponse)
+async def grant_user_entitlement(
+    request: AdminUserEntitlementGrantRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Grant/upsert a per-user product entitlement (admin only, audited).
+
+    Idempotent on the (user_id, product) pair via the service upsert. Source is
+    always ADMIN_GRANT — distinguishing operator grants from Dhanam-driven rows.
+    Gated by check_admin_permission (platform admins only; org-admin never
+    reaches here).
+    """
+    check_admin_permission(current_user)
+
+    try:
+        user_uuid = uuid.UUID(request.user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    user_result = await db.execute(select(User).where(User.id == user_uuid))
+    target_user = user_result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    row = await upsert_entitlement(
+        db,
+        user_id=user_uuid,
+        product=request.product,
+        tier=request.tier,
+        source=EntitlementSource.ADMIN_GRANT,
+        expires_at=request.expires_at,
+    )
+
+    await _record_entitlement_audit(
+        db,
+        event_type=AuditEventType.ENTITLEMENT_GRANT,
+        actor=current_user,
+        tenant_id=str(getattr(target_user, "tenant_id", None) or target_user.id),
+        resource_type="user_entitlement",
+        resource_id=str(user_uuid),
+        organization_id=None,
+        details={
+            "scope": "user",
+            "user_id": str(user_uuid),
+            "product": request.product,
+            "tier": request.tier,
+            "expires_at": request.expires_at.isoformat() if request.expires_at else None,
+            "granted_by": str(current_user.id),
+            "source": EntitlementSource.ADMIN_GRANT.value,
+            "via": "admin.grant_user_entitlement",
+        },
+    )
+
+    await db.commit()
+
+    return AdminUserEntitlementResponse(
+        user_id=str(row.user_id),
+        product=row.product,
+        tier=row.tier,
+        source=row.source.value if hasattr(row.source, "value") else str(row.source),
+        expires_at=row.expires_at,
+        granted_at=getattr(row, "granted_at", None),
+    )
+
+
+@router.delete("/entitlements/user", response_model=AdminUserEntitlementResponse)
+async def revoke_user_entitlement(
+    request: AdminUserEntitlementRevokeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke (cancel) a per-user product entitlement (admin only, audited).
+
+    Cancellation sets expires_at = now (preserving the row for audit history),
+    matching the Dhanam webhook's cancel semantics. 404 when the user is unknown;
+    404 when the user has no such entitlement row to cancel.
+    """
+    check_admin_permission(current_user)
+
+    try:
+        user_uuid = uuid.UUID(request.user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    user_result = await db.execute(select(User).where(User.id == user_uuid))
+    target_user = user_result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    row = await cancel_entitlement(db, user_id=user_uuid, product=request.product)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Entitlement not found")
+
+    await _record_entitlement_audit(
+        db,
+        event_type=AuditEventType.ENTITLEMENT_REVOKE,
+        actor=current_user,
+        tenant_id=str(getattr(target_user, "tenant_id", None) or target_user.id),
+        resource_type="user_entitlement",
+        resource_id=str(user_uuid),
+        organization_id=None,
+        details={
+            "scope": "user",
+            "user_id": str(user_uuid),
+            "product": request.product,
+            "revoked_by": str(current_user.id),
+            "via": "admin.revoke_user_entitlement",
+        },
+    )
+
+    await db.commit()
+
+    return AdminUserEntitlementResponse(
+        user_id=str(row.user_id),
+        product=row.product,
+        tier=row.tier,
+        source=row.source.value if hasattr(row.source, "value") else str(row.source),
+        expires_at=row.expires_at,
+        granted_at=getattr(row, "granted_at", None),
+    )
+
+
+@router.post("/entitlements/org", response_model=AdminOrgEntitlementResponse)
+async def grant_org_entitlement(
+    request: AdminOrgEntitlementGrantRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set one product:tier on an org's product_tiers JSONB (admin only, audited).
+
+    Merges (does not clobber other products). Org members inherit this tier at
+    JWT-issue time when they have no explicit per-user row.
+    """
+    check_admin_permission(current_user)
+
+    try:
+        org_uuid = uuid.UUID(request.org_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid org_id")
+
+    updated = await set_org_product_tier(
+        db,
+        org_id=org_uuid,
+        product=request.product,
+        tier=request.tier,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    await _record_entitlement_audit(
+        db,
+        event_type=AuditEventType.ENTITLEMENT_GRANT,
+        actor=current_user,
+        tenant_id=str(org_uuid),
+        resource_type="org_entitlement",
+        resource_id=str(org_uuid),
+        organization_id=str(org_uuid),
+        details={
+            "scope": "org",
+            "org_id": str(org_uuid),
+            "product": request.product,
+            "tier": request.tier,
+            "granted_by": str(current_user.id),
+            "via": "admin.grant_org_entitlement",
+        },
+    )
+
+    await db.commit()
+
+    return AdminOrgEntitlementResponse(org_id=str(org_uuid), product_tiers=updated)
+
+
+@router.delete("/entitlements/org", response_model=AdminOrgEntitlementResponse)
+async def revoke_org_entitlement(
+    request: AdminOrgEntitlementRevokeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove one product from an org's product_tiers JSONB (admin only, audited).
+
+    Idempotent — removing an absent product still returns the current map.
+    Other products are preserved.
+    """
+    check_admin_permission(current_user)
+
+    try:
+        org_uuid = uuid.UUID(request.org_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid org_id")
+
+    updated = await remove_org_product_tier(
+        db,
+        org_id=org_uuid,
+        product=request.product,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    await _record_entitlement_audit(
+        db,
+        event_type=AuditEventType.ENTITLEMENT_REVOKE,
+        actor=current_user,
+        tenant_id=str(org_uuid),
+        resource_type="org_entitlement",
+        resource_id=str(org_uuid),
+        organization_id=str(org_uuid),
+        details={
+            "scope": "org",
+            "org_id": str(org_uuid),
+            "product": request.product,
+            "revoked_by": str(current_user.id),
+            "via": "admin.revoke_org_entitlement",
+        },
+    )
+
+    await db.commit()
+
+    return AdminOrgEntitlementResponse(org_id=str(org_uuid), product_tiers=updated)
 
 
 @router.get("/activity-logs", response_model=List[ActivityLogResponse])

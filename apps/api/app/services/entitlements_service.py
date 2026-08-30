@@ -89,6 +89,12 @@ ADMIN_BOOTSTRAP_PRODUCTS: tuple[str, ...] = (
     "pravara-mes",
     "sim4d",
     "ceq",
+    # CTM-critical client products (Phase 0 — Nauta ERP entitlement substrate).
+    # kalya = booking/calendar (canonical slug); symbiosis = HCM product;
+    # crea-map = clinical app. Slugs must match what the hub keys off.
+    "kalya",
+    "symbiosis",
+    "crea-map",
 )
 
 ADMIN_TIER = "admin"
@@ -316,3 +322,62 @@ async def cancel_entitlement(
         row.updated_at = datetime.utcnow()
         await db.flush()
     return row
+
+
+async def set_org_product_tier(
+    db: AsyncSession,
+    *,
+    org_id: UuidType,
+    product: str,
+    tier: str,
+) -> Optional[dict[str, str]]:
+    """
+    Set (merge) one product:tier key on an organization's product_tiers JSONB.
+
+    Mirrors the merge the Dhanam webhook performs (webhooks_dhanam.py): read the
+    current dict, copy-on-write a NEW dict, set the one key, and reassign the
+    attribute so SQLAlchemy detects the change (JSONB is not mutation-tracked by
+    default — mutating in place would not be flushed). Other products in the map
+    are preserved untouched.
+
+    Returns the updated product_tiers dict, or None when the org does not exist.
+    """
+    org_result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = org_result.scalar_one_or_none()
+    if org is None:
+        return None
+
+    # Copy-on-write: build a NEW dict so the ORM sees the attribute change.
+    current_tiers = dict(org.product_tiers or {})
+    current_tiers[product] = tier
+    org.product_tiers = current_tiers
+    org.updated_at = datetime.utcnow()
+    await db.flush()
+    return current_tiers
+
+
+async def remove_org_product_tier(
+    db: AsyncSession,
+    *,
+    org_id: UuidType,
+    product: str,
+) -> Optional[dict[str, str]]:
+    """
+    Remove one product key from an organization's product_tiers JSONB.
+
+    Same copy-on-write discipline as `set_org_product_tier`. Idempotent —
+    removing an absent product is a no-op that still returns the current map.
+
+    Returns the updated product_tiers dict, or None when the org does not exist.
+    """
+    org_result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = org_result.scalar_one_or_none()
+    if org is None:
+        return None
+
+    current_tiers = dict(org.product_tiers or {})
+    current_tiers.pop(product, None)
+    org.product_tiers = current_tiers
+    org.updated_at = datetime.utcnow()
+    await db.flush()
+    return current_tiers

@@ -23,6 +23,8 @@ from app.services.entitlements_service import (
     cancel_entitlement,
     entitlements_to_claim,
     get_user_entitlements,
+    remove_org_product_tier,
+    set_org_product_tier,
     upsert_entitlement,
 )
 
@@ -90,6 +92,34 @@ class TestEntitlementToClaim:
             Entitlement("mu", "pro", None, EntitlementSource.ADMIN_GRANT),
         ]
         assert entitlements_to_claim(items) == ["alpha:pro", "mu:pro", "zeta:pro"]
+
+
+class TestAdminBootstrapProducts:
+    """The admin catch-all bootstrap set (G2)."""
+
+    def test_ctm_critical_products_present(self):
+        """kalya, symbiosis, crea-map are CTM-critical client products that an
+        is_admin user must auto-get `<slug>:admin` for (Phase 0)."""
+        for slug in ("kalya", "symbiosis", "crea-map"):
+            assert slug in ADMIN_BOOTSTRAP_PRODUCTS
+
+    def test_existing_platform_products_preserved(self):
+        """Adding the three must not drop any prior platform slug."""
+        for slug in (
+            "selva",
+            "janua",
+            "enclii",
+            "dhanam",
+            "karafiel",
+            "tezca",
+            "cotiza",
+            "pravara-mes",
+            "ceq",
+        ):
+            assert slug in ADMIN_BOOTSTRAP_PRODUCTS
+
+    def test_no_duplicate_slugs(self):
+        assert len(ADMIN_BOOTSTRAP_PRODUCTS) == len(set(ADMIN_BOOTSTRAP_PRODUCTS))
 
 
 class TestGetUserEntitlements:
@@ -313,3 +343,56 @@ class TestCancelEntitlement:
         await cancel_entitlement(db, user_id=uuid4(), product="karafiel")
         # Past expiry preserved — must not be overwritten with a later "now".
         assert existing.expires_at == past
+
+
+class TestSetOrgProductTier:
+    """Org-level product_tiers JSONB merge (G1 admin write-API building block)."""
+
+    async def test_returns_none_when_org_missing(self):
+        db = _make_db_with_results(("scalar_one_or_none", None))
+        out = await set_org_product_tier(db, org_id=uuid4(), product="kalya", tier="pro")
+        assert out is None
+
+    async def test_sets_key_on_empty_map(self):
+        org = MagicMock(product_tiers=None)
+        db = _make_db_with_results(("scalar_one_or_none", org))
+        out = await set_org_product_tier(db, org_id=uuid4(), product="kalya", tier="pro")
+        assert out == {"kalya": "pro"}
+        assert org.product_tiers == {"kalya": "pro"}
+
+    async def test_merge_preserves_other_products(self):
+        """Setting one product must NOT clobber others (copy-on-write merge)."""
+        org = MagicMock(product_tiers={"dhanam": "essentials"})
+        db = _make_db_with_results(("scalar_one_or_none", org))
+        out = await set_org_product_tier(db, org_id=uuid4(), product="kalya", tier="pro")
+        assert out == {"dhanam": "essentials", "kalya": "pro"}
+
+    async def test_reassigns_new_dict_for_orm_change_detection(self):
+        """A NEW dict object must be assigned (mutation-in-place is not tracked)."""
+        original = {"dhanam": "essentials"}
+        org = MagicMock(product_tiers=original)
+        db = _make_db_with_results(("scalar_one_or_none", org))
+        await set_org_product_tier(db, org_id=uuid4(), product="kalya", tier="pro")
+        assert org.product_tiers is not original  # copy-on-write
+        assert original == {"dhanam": "essentials"}  # original untouched
+
+
+class TestRemoveOrgProductTier:
+    """Org-level product_tiers key removal (G1 admin write-API building block)."""
+
+    async def test_returns_none_when_org_missing(self):
+        db = _make_db_with_results(("scalar_one_or_none", None))
+        out = await remove_org_product_tier(db, org_id=uuid4(), product="kalya")
+        assert out is None
+
+    async def test_removes_key_and_preserves_others(self):
+        org = MagicMock(product_tiers={"dhanam": "pro", "kalya": "pro"})
+        db = _make_db_with_results(("scalar_one_or_none", org))
+        out = await remove_org_product_tier(db, org_id=uuid4(), product="kalya")
+        assert out == {"dhanam": "pro"}
+
+    async def test_idempotent_when_key_absent(self):
+        org = MagicMock(product_tiers={"dhanam": "pro"})
+        db = _make_db_with_results(("scalar_one_or_none", org))
+        out = await remove_org_product_tier(db, org_id=uuid4(), product="kalya")
+        assert out == {"dhanam": "pro"}

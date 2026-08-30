@@ -94,6 +94,12 @@ class AuditEventType(str, Enum):
     BILLING_PAYMENT_SUCCESS = "billing.payment_success"
     BILLING_PAYMENT_FAILED = "billing.payment_failed"
 
+    # Entitlement events. Admin grant/revoke of product entitlements for a user
+    # or an org (POST/DELETE /api/v1/admin/entitlements/{user,org}). Every
+    # mutation of the entitlement surface is audited — it is an auth-system write.
+    ENTITLEMENT_GRANT = "entitlement.grant"
+    ENTITLEMENT_REVOKE = "entitlement.revoke"
+
     # Compliance events - GDPR
     GDPR_CONSENT_GIVEN = "gdpr.consent_given"
     GDPR_CONSENT_WITHDRAWN = "gdpr.consent_withdrawn"

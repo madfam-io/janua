@@ -226,18 +226,23 @@ async def _get_user_entitlements(
     }
 
     try:
-        # Get user's organization memberships
+        # Get user's ACTIVE organization memberships only. A member whose
+        # status is pending/inactive/removed must NOT keep org roles or tier in
+        # their token — mirrors the status filter in `_get_user_org_claims`.
         result = await db.execute(
-            select(OrganizationMember).where(OrganizationMember.user_id == user.id)
+            select(OrganizationMember).where(
+                OrganizationMember.user_id == user.id,
+                OrganizationMember.status == "active",
+            )
         )
         memberships = result.scalars().all()
 
         if memberships:
-            # Collect all roles across organizations
+            # Collect all roles across active organizations
             roles = list({m.role for m in memberships if m.role})
             entitlements["roles"] = roles
 
-            # Get primary organization (first membership or tenant)
+            # Get primary organization (tenant, or first ACTIVE membership).
             primary_org_id = memberships[0].organization_id
             if hasattr(user, "tenant_id") and user.tenant_id:
                 primary_org_id = user.tenant_id
