@@ -639,6 +639,44 @@ def _parse_requested_scopes(scope: Optional[str], client: OAuthClient) -> str:
     return " ".join(sorted(requested))
 
 
+# The scope a relying party requests to receive a PostgREST-shaped token — the
+# BaaS/data-API seam (enclii managed-Postgres addons). Opt-in per client: it only
+# takes effect when the client has it in `allowed_scopes` AND requests it, so
+# every existing token is byte-for-byte unchanged. See `_data_api_claims`.
+DATA_API_SCOPE = "data-api"
+# The single scalar Postgres role PostgREST maps to `SET LOCAL ROLE` for an
+# authenticated end-user. Deliberately the conventional Supabase/PostgREST value
+# so a tenant's existing PostgREST/RLS setup and `@supabase/*` clients work as-is.
+DATA_API_ROLE = "authenticated"
+
+
+def _data_api_claims(scope: str, client: OAuthClient, org_claims: dict) -> dict:
+    """Extra claims that make a token consumable by an enclii data-API (PostgREST).
+
+    Returns `{}` unless the granted scope includes ``data-api`` (which requires
+    the client to have that scope allowed) — so this is a NO-OP for every token
+    that does not opt in, and no existing MADFAM/ecosystem token changes shape.
+
+    When opted in, two claims are added:
+      * ``role`` — the SCALAR PostgREST needs for ``SET LOCAL ROLE`` (Janua's
+        other tokens carry ``roles`` as an ARRAY of app-RBAC roles, which
+        PostgREST cannot use). Set to ``authenticated``.
+      * ``tenant_id`` — bound to the CLIENT's organization when it has one
+        (`OAuthClient.organization_id`), so a data-API addon registered for a
+        tenant always scopes to that tenant's rows under RLS, regardless of how
+        many orgs the end-user belongs to. Falls back to the ambiguity-resolved
+        ``tenant_id`` from `org_claims` when the client is not org-bound.
+    """
+    if DATA_API_SCOPE not in set(scope.split()):
+        return {}
+    claims: dict = {"role": DATA_API_ROLE}
+    if client.organization_id is not None:
+        claims["tenant_id"] = str(client.organization_id)
+    elif org_claims.get("tenant_id"):
+        claims["tenant_id"] = org_claims["tenant_id"]
+    return claims
+
+
 def _service_account_email(client: OAuthClient) -> str:
     """Derive a stable non-human email claim for machine clients."""
     slug = re.sub(r"[^a-z0-9-]+", "-", (client.name or "").lower()).strip("-")
@@ -1719,6 +1757,9 @@ async def _handle_authorization_code_grant(
             # Organization membership claims (orgs always when member of any;
             # org_id/tenant_id/org_slug only when unambiguous)
             **org_claims,
+            # PostgREST/data-API shaping — ONLY when the client opted into the
+            # `data-api` scope; a no-op otherwise (see _data_api_claims).
+            **_data_api_claims(scope, client, org_claims),
         },
     )
 
@@ -1835,6 +1876,10 @@ async def _handle_refresh_token_grant(
             # Organization membership claims (orgs always when member of any;
             # org_id/tenant_id/org_slug only when unambiguous)
             **org_claims,
+            # PostgREST/data-API shaping — ONLY when the client opted into the
+            # `data-api` scope; a no-op otherwise (see _data_api_claims). Carried
+            # across refresh because the original scope rides the refresh token.
+            **_data_api_claims(scope, client, org_claims),
         },
     )
 
