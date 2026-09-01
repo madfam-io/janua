@@ -1070,6 +1070,10 @@ class Translation(Base):
 
 
 # Import enterprise models
+from app.models.capability_link import (  # noqa: E402,F401
+    CapabilityLink,
+    CapabilityLinkUseMode,
+)
 from app.models.connected_account import ConnectedAccount, ProviderType  # noqa: E402,F401
 from app.models.enterprise import SSOConfiguration, SSOProvider, SSOStatus  # noqa: E402
 
