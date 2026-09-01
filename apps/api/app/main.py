@@ -1121,6 +1121,15 @@ try:
 except Exception as e:
     logger.warning(f"Internal users router not available: {e}")
 
+# Internal capability links (subject-scoped bearer grants for sibling apps)
+try:
+    from app.routers.v1 import internal_capability_links as internal_capability_links_v1
+
+    app.include_router(internal_capability_links_v1.router, prefix="/api/v1/internal")
+    logger.info("Registered internal capability links router successfully")
+except Exception as e:
+    logger.warning(f"Internal capability links router not available: {e}")
+
 # Internal role/tier sync router (Dhanam → Janua hub-and-spoke)
 try:
     from app.routers.internal import roles as internal_roles

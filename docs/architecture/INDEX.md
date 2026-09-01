@@ -99,6 +99,7 @@ ADRs document significant architectural decisions:
 | ADR-001 | [Auth Flow Design](./ADR-001_AUTH_FLOW.md) | Proposed |
 | ADR-002 | [Universal Keyring](./ADR-002_UNIVERSAL_KEYRING.md) | Accepted |
 | ADR-003 | [Multi-tenancy Strategy](./ADR-003_MULTITENANCY.md) | Proposed |
+| ADR-004 | [Capability Links](./ADR-004_CAPABILITY_LINKS.md) | Proposed |
 
 ## Key Design Decisions
 
