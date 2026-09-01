@@ -1112,6 +1112,15 @@ try:
 except Exception as e:
     logger.warning(f"Email router not available: {e}")
 
+# Internal user lifecycle (sibling-app roster provisioning: crea-map alta/baja)
+try:
+    from app.routers.v1 import internal_users as internal_users_v1
+
+    app.include_router(internal_users_v1.router, prefix="/api/v1/internal")
+    logger.info("Registered internal users router successfully")
+except Exception as e:
+    logger.warning(f"Internal users router not available: {e}")
+
 # Internal role/tier sync router (Dhanam → Janua hub-and-spoke)
 try:
     from app.routers.internal import roles as internal_roles
