@@ -174,6 +174,7 @@ class AuthService:
         organization_id: Optional[str] = None,
         email: Optional[str] = None,
         audience: Optional[str] = None,
+        additional_claims: Optional[dict] = None,
     ) -> Tuple[str, str, datetime]:
         """Create JWT access token.
 
@@ -182,20 +183,36 @@ class AuthService:
         magic-link flow do the same, so a session created for a product's
         redirect host carries THAT product's audience instead of the platform
         default the product's verifier has no reason to accept.
+
+        `additional_claims` merges extra top-level claims into the payload
+        (e.g. `madfam_entitled_products` so the MADFAM ecosystem entitlement
+        claim rides session tokens the same way it already rides OIDC
+        access tokens). Reserved payload keys are set explicitly below and are
+        NOT overridable via this dict — the merge happens first so the core
+        claims win, preserving the token's identity/security invariants.
         """
         jti = secrets.token_urlsafe(32)
         expires_at = datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
 
-        payload = {
-            "sub": user_id,
-            "tid": tenant_id,
-            "jti": jti,
-            "type": "access",
-            "exp": expires_at,
-            "iat": datetime.utcnow(),
-            "iss": settings.JWT_ISSUER,
-            "aud": audience or settings.JWT_AUDIENCE,
-        }
+        payload = {}
+        # Merge caller-supplied claims first so the reserved keys below always
+        # win; additional_claims can enrich (entitlements) but never spoof
+        # sub/tid/jti/exp/iss/aud.
+        if additional_claims:
+            payload.update(additional_claims)
+
+        payload.update(
+            {
+                "sub": user_id,
+                "tid": tenant_id,
+                "jti": jti,
+                "type": "access",
+                "exp": expires_at,
+                "iat": datetime.utcnow(),
+                "iss": settings.JWT_ISSUER,
+                "aud": audience or settings.JWT_AUDIENCE,
+            }
+        )
 
         if organization_id:
             payload["org"] = organization_id
@@ -413,12 +430,44 @@ class AuthService:
                     max_sessions=max_sessions,
                 )
 
+        # Resolve the MADFAM ecosystem entitlement claim so session tokens
+        # carry `madfam_entitled_products` exactly the way the OIDC auth-code
+        # and refresh flows already stamp it (see oauth_provider.py). This lets
+        # downstream consumers (e.g. the nauta ERP hub) read entitlements from
+        # the token instead of a per-render /me/entitlements round-trip.
+        #
+        # SSOT reuse: identical `entitlements_to_claim(await get_user_entitlements(...))`
+        # pipeline as the OIDC path — no re-implementation. Resolution keys off
+        # the `user` object (User.tenant_id → first org membership), matching
+        # OIDC precisely; per-user rows beat org inheritance beat admin bootstrap.
+        #
+        # The claim is ALWAYS stamped (an empty list for users with no
+        # entitlements), byte-identical to the OIDC path which also stamps
+        # unconditionally. Entitlement resolution must never block session
+        # issuance: get_user_entitlements already degrades its own reads
+        # gracefully, and this defensive guard ensures any unexpected failure
+        # falls back to an empty claim rather than failing login.
+        from app.services.entitlements_service import (
+            entitlements_to_claim,
+            get_user_entitlements,
+        )
+
+        try:
+            madfam_entitled_products = entitlements_to_claim(await get_user_entitlements(user, db))
+        except Exception:  # pragma: no cover - defensive; never fail login on this
+            logger.warning(
+                "Failed to resolve entitlement claim for session token; stamping empty list",
+                user_id=str(user.id),
+            )
+            madfam_entitled_products = []
+
         # Create tokens
         access_token, access_jti, access_expires = AuthService.create_access_token(
             user_id=str(user.id),
             tenant_id=str(user.tenant_id),
             email=user.email,
             audience=audience,
+            additional_claims={"madfam_entitled_products": madfam_entitled_products},
         )
 
         refresh_token, refresh_jti, family, refresh_expires = AuthService.create_refresh_token(
@@ -552,9 +601,31 @@ class AuthService:
         if not user or not user.is_active:
             return None
 
+        # Re-resolve the MADFAM ecosystem entitlement claim on refresh so a
+        # refreshed session token keeps `madfam_entitled_products` (and picks
+        # up any grant/revoke since the session was minted) — mirroring the
+        # OIDC refresh grant which re-stamps the claim on every rotation. Same
+        # SSOT pipeline; same graceful degradation as create_session.
+        from app.services.entitlements_service import (
+            entitlements_to_claim,
+            get_user_entitlements,
+        )
+
+        try:
+            madfam_entitled_products = entitlements_to_claim(await get_user_entitlements(user, db))
+        except Exception:  # pragma: no cover - defensive; never fail refresh on this
+            logger.warning(
+                "Failed to resolve entitlement claim on token refresh; stamping empty list",
+                user_id=str(user.id),
+            )
+            madfam_entitled_products = []
+
         # Create new tokens
         access_token, access_jti, access_expires = AuthService.create_access_token(
-            user_id=str(user.id), tenant_id=str(user.tenant_id), email=user.email
+            user_id=str(user.id),
+            tenant_id=str(user.tenant_id),
+            email=user.email,
+            additional_claims={"madfam_entitled_products": madfam_entitled_products},
         )
 
         refresh_token, refresh_jti, family, refresh_expires = AuthService.create_refresh_token(
