@@ -54,6 +54,24 @@ class InviteValidationResponse(BaseModel):
 # -- Helpers ------------------------------------------------------------------
 
 
+def _is_expired(expires_at: Optional[datetime]) -> bool:
+    """Whether an invite expiry has passed, tolerating naive stored values.
+
+    ``guest_invites.expires_at`` is a bare ``DateTime`` (migration 004), so rows
+    written through SQLAlchemy come back naive while ``datetime.now(UTC)`` is
+    aware. Comparing the two raises ``TypeError``, which surfaced as a 500 on
+    every invite that had an expiry at all -- both here and on the public
+    validate endpoint, where it also made expiring invites distinguishable from
+    other failures. Stored values are UTC by construction, so attach UTC before
+    comparing.
+    """
+    if expires_at is None:
+        return False
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return expires_at < datetime.now(UTC)
+
+
 def _mint_guest_jwt(
     guest_id: str,
     display_name: str,
@@ -119,7 +137,7 @@ async def create_guest_token(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Invalid or revoked invite",
             )
-        if invite.expires_at and invite.expires_at < datetime.now(UTC):
+        if _is_expired(invite.expires_at):
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
                 detail="Invite has expired",
@@ -199,7 +217,7 @@ async def validate_invite(
     if invite is None or invite.revoked:
         return InviteValidationResponse(valid=False)
 
-    if invite.expires_at and invite.expires_at < datetime.now(UTC):
+    if _is_expired(invite.expires_at):
         return InviteValidationResponse(valid=False)
 
     if invite.max_uses > 0 and invite.use_count >= invite.max_uses:

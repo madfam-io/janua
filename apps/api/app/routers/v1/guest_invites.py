@@ -1,7 +1,14 @@
 """Admin CRUD for guest invite link management.
 
-Follows the same patterns as ``invitations.py`` for consistency.
-All endpoints require admin role via ``require_admin()`` dependency.
+Follows the same patterns as ``invitations.py`` for consistency, including its
+``_require_org_admin_for`` discipline: authentication alone is not authorization,
+and being an admin of *some* organization does not authorize acting on *this*
+one. Every endpoint below binds the caller to the ``org_id`` in the path before
+touching a row.
+
+The invite token is a bearer credential: it is returned exactly once, in the
+response to ``POST``. List responses expose only a short prefix, enough to tell
+two invites apart in a UI, never enough to use one.
 """
 
 from __future__ import annotations
@@ -19,7 +26,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.database_manager import get_db
 from app.dependencies import get_current_user
-from app.models import GuestInvite, User
+from app.models import GuestInvite, Organization, OrganizationMember, User
+
+#: Characters of the token surfaced in list responses. Enough to disambiguate
+#: two invites in an admin UI, far too few to replay one.
+TOKEN_PREFIX_LEN = 8
 
 router = APIRouter(
     prefix="/organizations/{org_id}/guest-invites",
@@ -38,9 +49,11 @@ class CreateGuestInviteRequest(BaseModel):
     expires_in_hours: Optional[int] = Field(default=None, ge=1, le=720)
 
 
-class GuestInviteResponse(BaseModel):
+class GuestInviteSummary(BaseModel):
+    """An invite as seen after creation: metadata only, no usable credential."""
+
     id: str
-    token: str
+    token_prefix: str
     label: str
     max_uses: int
     use_count: int
@@ -49,22 +62,28 @@ class GuestInviteResponse(BaseModel):
     expires_at: Optional[str]
     revoked: bool
     created_at: str
+
+
+class GuestInviteResponse(GuestInviteSummary):
+    """Creation-time response. The only place the token is ever returned."""
+
+    token: str
     invite_url: str
 
 
 class GuestInviteListResponse(BaseModel):
-    invites: list[GuestInviteResponse]
+    invites: list[GuestInviteSummary]
     total: int
 
 
 # -- Helpers -------------------------------------------------------------------
 
 
-def _invite_to_response(invite: GuestInvite) -> GuestInviteResponse:
-    base_url = settings.BASE_URL.rstrip("/")
-    return GuestInviteResponse(
+def _invite_to_summary(invite: GuestInvite) -> GuestInviteSummary:
+    """Redacted view. Never includes the token or the invite URL that embeds it."""
+    return GuestInviteSummary(
         id=str(invite.id),
-        token=invite.token,
+        token_prefix=(invite.token or "")[:TOKEN_PREFIX_LEN],
         label=invite.label or "",
         max_uses=invite.max_uses,
         use_count=invite.use_count,
@@ -73,8 +92,59 @@ def _invite_to_response(invite: GuestInvite) -> GuestInviteResponse:
         expires_at=invite.expires_at.isoformat() if invite.expires_at else None,
         revoked=invite.revoked,
         created_at=invite.created_at.isoformat() if invite.created_at else "",
+    )
+
+
+def _invite_to_response(invite: GuestInvite) -> GuestInviteResponse:
+    """Full view including the token. Only valid at creation time."""
+    base_url = settings.BASE_URL.rstrip("/")
+    return GuestInviteResponse(
+        **_invite_to_summary(invite).model_dump(),
+        token=invite.token,
         invite_url=f"{base_url}/guest?invite={invite.token}",
     )
+
+
+async def _require_org_admin_for(db: AsyncSession, user: User, org_id: uuid.UUID) -> None:
+    """Assert the caller administers *this* organization.
+
+    Mirrors ``invitations._require_org_admin_for``. ``get_current_user`` proves
+    only that the caller is signed in, and ``require_org_admin`` proves only that
+    they administer SOME organization -- neither stops an admin of org A from
+    reaching org B's invites through the path parameter.
+
+    Raises 404 rather than 403 so the endpoint does not confirm that an
+    organization the caller cannot reach exists.
+    """
+    not_found = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="Guest invite not found"
+    )
+
+    org = (
+        await db.execute(select(Organization).where(Organization.id == org_id))
+    ).scalar_one_or_none()
+    if org is None:
+        raise not_found
+
+    owner_id = getattr(org, "owner_id", None)
+    # Both ids must be present before they can match, so that an ownerless
+    # organization and an id-less caller do not compare equal as "None".
+    if owner_id and user.id and str(owner_id) == str(user.id):
+        return
+
+    membership = (
+        await db.execute(
+            select(OrganizationMember).where(
+                OrganizationMember.organization_id == org_id,
+                OrganizationMember.user_id == user.id,
+                OrganizationMember.role.in_(["admin", "owner"]),
+                OrganizationMember.status == "active",
+            )
+        )
+    ).scalar_one_or_none()
+
+    if membership is None:
+        raise not_found
 
 
 # -- Endpoints ----------------------------------------------------------------
@@ -89,7 +159,9 @@ async def create_guest_invite(
 ) -> GuestInviteResponse:
     """Create a new guest invite link.
 
-    Requires authenticated user (admin recommended).
+    Requires an admin or owner role in the organization named in the path. The
+    returned ``token``/``invite_url`` is shown only here -- later reads expose a
+    prefix only.
     """
     try:
         org_uuid = uuid.UUID(org_id)
@@ -97,6 +169,8 @@ async def create_guest_invite(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid org_id"
         ) from exc
+
+    await _require_org_admin_for(db, current_user, org_uuid)
 
     token = secrets.token_urlsafe(32)
     expires_at = None
@@ -125,13 +199,19 @@ async def list_guest_invites(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> GuestInviteListResponse:
-    """List guest invites for an organization."""
+    """List guest invites for an organization.
+
+    Requires an admin or owner role in the organization named in the path.
+    Tokens are redacted to a prefix; they cannot be recovered after creation.
+    """
     try:
         org_uuid = uuid.UUID(org_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid org_id"
         ) from exc
+
+    await _require_org_admin_for(db, current_user, org_uuid)
 
     result = await db.execute(
         select(GuestInvite)
@@ -140,7 +220,7 @@ async def list_guest_invites(
     )
     invites = result.scalars().all()
     return GuestInviteListResponse(
-        invites=[_invite_to_response(i) for i in invites],
+        invites=[_invite_to_summary(i) for i in invites],
         total=len(invites),
     )
 
@@ -152,7 +232,10 @@ async def revoke_guest_invite(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    """Revoke a guest invite link."""
+    """Revoke a guest invite link.
+
+    Requires an admin or owner role in the organization named in the path.
+    """
     try:
         org_uuid = uuid.UUID(org_id)
         invite_uuid = uuid.UUID(invite_id)
@@ -160,6 +243,8 @@ async def revoke_guest_invite(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid UUID"
         ) from exc
+
+    await _require_org_admin_for(db, current_user, org_uuid)
 
     result = await db.execute(
         select(GuestInvite)
