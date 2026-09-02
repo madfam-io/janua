@@ -675,6 +675,25 @@ class Settings(BaseSettings):
         """
         return self.INTERNAL_BASE_URL or self.BASE_URL
 
+    @property
+    def public_base_url(self) -> str:
+        """The PUBLIC-FACING origin for URLs a person clicks (magic-link
+        fallback callback, etc.). Prefers JANUA_CUSTOM_DOMAIN so a white-label
+        deployment emits its OWN domain, then the configured BASE_URL.
+
+        WHY THIS EXISTS: the magic-link email fallback used
+        `API_BASE_URL or BASE_URL`, and API_BASE_URL DEFAULTS to
+        `https://api.janua.dev`. Because that default is truthy, the `or` never
+        reached a correctly-set BASE_URL — so a production deployment with
+        BASE_URL=https://auth.madfam.io still emitted `api.janua.dev` links
+        (a dev domain in a first-contact auth email — the very phishing-adjacent
+        failure email_service warns against). This property never returns the
+        api.janua.dev default when a real public domain is configured.
+        """
+        if self.JANUA_CUSTOM_DOMAIN:
+            return f"https://{self.JANUA_CUSTOM_DOMAIN}"
+        return self.BASE_URL
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         """Enforce that critical secrets are set in production."""
