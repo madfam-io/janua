@@ -513,9 +513,14 @@ class EmailService:
             separator = "&" if "?" in redirect_url else "?"
             magic_url = f"{redirect_url}{separator}token={magic_token}"
         else:
-            callback = (
-                f"{settings.API_BASE_URL or settings.BASE_URL}/api/v1/auth/magic-link/callback"
-            )
+            # PUBLIC domain, never the api.janua.dev default. This fallback fires
+            # when the request named no redirect_url (a clicked link is a GET, and
+            # only Janua can trade the token then). `public_base_url` prefers
+            # JANUA_CUSTOM_DOMAIN (e.g. auth.madfam.io) — so a first-contact auth
+            # email never carries a dev domain. (Before: `API_BASE_URL or
+            # BASE_URL` emitted api.janua.dev because API_BASE_URL's default is
+            # truthy and short-circuited the correctly-set BASE_URL.)
+            callback = f"{settings.public_base_url}/api/v1/auth/magic-link/callback"
             magic_url = f"{callback}?token={magic_token}"
 
         template_data = {

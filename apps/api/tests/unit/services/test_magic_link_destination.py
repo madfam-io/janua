@@ -63,6 +63,27 @@ async def test_no_redirect_still_falls_back_to_the_janua_callback():
         await service.send_magic_link_email("cliente@example.test", "tok")
     html = send.await_args.kwargs["html_content"]
     assert "/api/v1/auth/magic-link/callback?token=tok" in html
+    # THE BUG THIS FILE EXISTS TO PREVENT: the fallback must never emit the
+    # api.janua.dev DEV host. It used to (`API_BASE_URL or BASE_URL`, and
+    # API_BASE_URL defaults to https://api.janua.dev, short-circuiting a
+    # correctly-set BASE_URL) — a dev domain in a first-contact auth email.
+    assert "api.janua.dev" not in html
+
+
+@pytest.mark.asyncio
+async def test_fallback_prefers_the_custom_domain(monkeypatch):
+    """A white-label deployment (JANUA_CUSTOM_DOMAIN=auth.madfam.io) must emit
+    the fallback callback on ITS domain, not api.janua.dev — even though
+    API_BASE_URL still carries its dev-host default."""
+    from app.services import email_service as es
+
+    monkeypatch.setattr(es.settings, "JANUA_CUSTOM_DOMAIN", "auth.madfam.io", raising=False)
+    service = EmailService()
+    with patch.object(service, "_send_email", new=AsyncMock(return_value=True)) as send:
+        await service.send_magic_link_email("cliente@example.test", "tok")
+    html = send.await_args.kwargs["html_content"]
+    assert "https://auth.madfam.io/api/v1/auth/magic-link/callback?token=tok" in html
+    assert "api.janua.dev" not in html
 
 
 def test_send_route_refuses_a_disallowed_destination_loudly():
