@@ -231,6 +231,82 @@ Standard Authorization Code flow with PKCE for public clients:
 4. **Brute Force Protection**: Rate limiting on auth endpoints
 5. **Session Anomaly Detection**: Alert on unusual login patterns
 
+## Email lookup pools and the 013 schema/code drift
+
+**Status: ACTIVE DRIFT — read before touching any email lookup.**
+
+Since janua#583 («per-tenant email uniqueness», BaaS Phase 1) the application
+treats `users.email` as unique PER POOL: once per tenant, plus once in the
+untenanted (staff / platform) pool. `app/services/user_lookup.py` is the single
+primitive for that, and every call site must declare which pool it means.
+
+**The database does not agree.** Migration `013_per_tenant_email_uniqueness` was
+written but **never applied in production**: prod's `alembic_version` is `011`,
+the database is hand-migrated, and `users.email` still carries the GLOBAL unique
+index `ix_users_email` from `000_init`. The per-tenant partial indexes
+(`uq_users_tenant_email`, `uq_users_email_global`) do not exist there.
+
+### What that drift cost (2026-09-03)
+
+`POST /api/v1/auth/magic-link` looked users up in the untenanted pool only. The
+internal provisioning API writes users **with** a `tenant_id` (CTM staff,
+provisioned by crea-map, which sends `tenant_id` in its provision body), so the
+lookup missed them; the handler's "not found → create" branch then ran and its
+INSERT collided with the still-global `ix_users_email`:
+
+```
+POST /api/v1/auth/magic-link → IntegrityError → 503
+```
+
+The requesting product showed «revisa tu correo» and no link was ever sent.
+21 users were affected (example: request_id `47ef96c7-1b29-4048-910e-3e6335a3771f`,
+2026-09-03T15:51:54Z). The operator's stopgap moved those 21 rows to the
+untenanted pool (`tenant_id = NULL`, recorded in `ops_untenant_2026_09_03`),
+which unblocks those users but not anyone provisioned with a `tenant_id` after
+that.
+
+### The bridge
+
+`resolve_user_by_email_across_pools()` in `user_lookup.py` is the documented
+bridge for **bare-email entry points only** — those that have no tenant context
+to declare (magic link, password reset). While the schema enforces global
+uniqueness this resolution is **exact**: at most one row can hold the address.
+It is not an abandonment of pool discipline:
+
+- it takes a `preferred_tenant_id` — the organization of the OAuth client that
+  owns the request's redirect host — consulted first, so it still resolves
+  correctly the day 013 lands;
+- with several matches and no preference it **raises** rather than returning an
+  arbitrary row; the handler answers **400**, never a silent cross-tenant login.
+
+Every caller that *does* know its tenant (OAuth end-user flows, SCIM, SSO,
+admin, provisioning) must keep using pool-scoped `get_user_by_email()`.
+
+### Entry points audited 2026-09-03
+
+| Entry point | Pool | Why |
+| --- | --- | --- |
+| `POST /auth/magic-link` | untenanted, then across-pools bridge | Has a create branch; the bug above |
+| `_dispatch_password_reset` | untenanted, then across-pools bridge | Same silent miss; no create branch, enumeration-safe |
+| `POST /auth/signin` | untenanted only | No create branch; authenticates by password hash, which provisioning never sets |
+| hosted `login-form` | untenanted only | Same reasoning as `/signin` |
+
+### Follow-ups for the owner (not decided here)
+
+1. **Apply migration 013 in production, or retire it.** The code and the schema
+   must stop disagreeing. Note the deploy pipeline **promotes images and runs no
+   alembic**, so this is a deliberate operator action either way.
+2. **Should org STAFF carry `users.tenant_id` at all?** Under Phase-1 semantics
+   `tenant_id` marks an *end-user pool*; organization staff arguably belong in
+   the untenanted pool with their org membership expressed by
+   `organization_members` / app roles instead. If so, the internal provisioning
+   API should stop setting `users.tenant_id` for STAFF — which would also have
+   prevented this outage. **Deliberately not changed in this PR**; it is a
+   semantics decision for the owner, and the stopgap already moved the affected
+   rows that way.
+3. **Reconcile the `ops_untenant_2026_09_03` stopgap** with whichever of the
+   above is chosen.
+
 ## Related Documentation
 
 - [Rate Limiting](/docs/api/RATE_LIMITING.md)

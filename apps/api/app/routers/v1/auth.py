@@ -456,6 +456,13 @@ async def sign_in(credentials: SignInRequest, request: Request, db: Session = De
     # tenant-aware entry via the OIDC flow; keeping this pool-scoped means a
     # tenant's end-user can never be returned here (post-013 email is per-tenant,
     # so a global lookup could otherwise match the wrong pool's user).
+    #
+    # AUDITED 2026-09-03 alongside the magic-link outage and deliberately left
+    # pool-scoped: unlike magic link this path has no create branch (a miss is
+    # an ordinary 401), and it authenticates with a password hash, which the
+    # internal provisioning API never sets. Widening it to other pools would
+    # therefore admit no one who cannot sign in today, while giving a bare
+    # credential pair a cross-tenant reach it should not have.
     if credentials.email:
         user = await get_user_by_email(db, credentials.email, tenant_id=None)
     else:
@@ -1370,6 +1377,8 @@ async def login_form(
 
     # Find user by email (without status filter to check lockout first).
     # Untenanted / staff pool (see /signin note) — this hosted flow is platform.
+    # Audited 2026-09-03 with the magic-link outage: same reasoning as /signin,
+    # password-authenticated and no create branch, so it stays pool-scoped.
     user = await get_user_by_email(db, email, tenant_id=None)
 
     if not user:
@@ -1760,7 +1769,19 @@ async def _dispatch_password_reset(
     matches: enumeration safety is both callers' contract, so absence must be
     indistinguishable from success at every transport."""
     # Untenanted / staff pool (see /signin note); enumeration-safe either way.
+    # Same silent-miss as the magic-link handler had: a user the internal
+    # provisioning API created WITH a tenant_id is invisible here, so recovery
+    # quietly did nothing for them. Fall back to the across-pools bridge (exact
+    # while prod's ix_users_email is global). No redirect_url is available here
+    # to name a preferred pool, so genuine ambiguity simply declines to send —
+    # which is also the enumeration-safe answer this function already gives for
+    # "no match".
     user = await get_user_by_email(db, email, tenant_id=None, active_only=True)
+    if not user:
+        try:
+            user = await resolve_user_by_email_across_pools(db, email, active_only=True)
+        except AmbiguousEmailAcrossPools:
+            return
     if not (user and settings.EMAIL_ENABLED):
         return
 
