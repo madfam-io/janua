@@ -50,6 +50,18 @@ class ProvisionUserRequest(BaseModel):
     # roster- and signature-visible consequences, not something a roster app
     # should be able to do as a side effect of a retry.
     is_service_account: bool = False
+    # Organization role for the membership this call ensures in `tenant_id`'s
+    # organization. Optional; defaults to the least-privileged role that still
+    # produces org claims.
+    #
+    # Constrained to the org-membership vocabulary (`OrganizationRole` in
+    # models/__init__.py:574-578) rather than a free string: `role` lands in the
+    # `madfam_org_roles` token claim, so an unvalidated value would let a roster
+    # app mint an arbitrary authorization string that a resource server might
+    # honour. `owner` is deliberately NOT offered — organization ownership is an
+    # operator decision (`Organization.owner_id`), not something a roster
+    # «Alta de integrante» should be able to grant over the internal API.
+    org_role: Literal["admin", "member", "viewer"] = "member"
 
 
 class ProvisionUserResponse(BaseModel):
@@ -65,6 +77,16 @@ class ProvisionUserResponse(BaseModel):
     # caller can detect the "already exists, and it is/is not a service
     # account" case without a second read.
     is_service_account: bool = False
+    # The role of the ACTIVE organization membership this identity holds in
+    # `tenant_id`'s organization, or None when it holds none (which is the case
+    # for a legacy row provisioned before memberships were written, and for any
+    # future caller that provisions into no organization).
+    #
+    # Reported so a roster app can verify — without a second read and without
+    # decoding a token — that the person will actually carry `org_id`. That is
+    # the whole point of this endpoint's contract with symbiosis-hcm: no active
+    # membership means no `org_id` claim means 403 at `/employees/me/`.
+    org_role: Optional[str] = None
 
 
 class UserLifecycleRequest(BaseModel):

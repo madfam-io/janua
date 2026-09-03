@@ -144,7 +144,8 @@ la otra mitad, la de los logins **con forma humana** que aun así no son humanos
   caché de Redis del servicio, para que una caché vieja nunca afirme que un
   login técnico es una persona.
 - **`POST /api/v1/internal/users/provision`** — acepta `is_service_account`
-  (por defecto `false`) y lo devuelve.
+  (por defecto `false`) y lo devuelve; acepta `org_role` (por defecto `member`)
+  y devuelve el rol de la membresía activa resultante en `org_role`.
 
 ### La regla del provisioning
 
@@ -154,6 +155,32 @@ intacta —igual que ya pasaba con el nombre—: cambiar una identidad viva entr
 documentos, y no debe ocurrir como efecto secundario del reintento de una app
 de roster. La respuesta echa el valor **almacenado**, para que quien llame
 detecte el caso sin una segunda lectura.
+
+### La membresía es la excepción a esa regla
+
+Escribir `tenant_id` en la fila del `User` **no otorga acceso**. El resolutor de
+claims cuenta únicamente membresías con `status == "active"`, así que una
+identidad con `tenant_id` y **sin** `OrganizationMember` recibe un token **sin
+`org_id`** — y HCM la rechaza con 403. Por eso `provision` crea (o reconcilia)
+la membresía activa en **la misma transacción** que el usuario, y lo hace en
+**ambas** ramas, la de creación y la de «ya existía»: reconciliarla en la rama
+de 200 es lo que **repara a quienes se provisionaron antes de este cambio**, que
+de otro modo quedarían fuera de «Mi espacio (RH)» para siempre.
+
+- **`org_role`** (opcional, por defecto `member`) elige el rol de la membresía.
+  Está acotado a `admin` · `member` · `viewer`: el valor viaja al claim
+  `madfam_org_roles`, y una cadena libre dejaría que una app de roster acuñe una
+  autorización arbitraria. **`owner` no se ofrece**: la propiedad de una
+  organización es una decisión de operador, no algo que conceda un «Alta de
+  integrante».
+- **No degrada un rol existente.** Si ya hay membresía activa se devuelve tal
+  cual: un ascenso hecho por un operador sobrevive al reintento del roster,
+  igual que sobrevive el nombre.
+- **Re-alta.** Una membresía `removed`/`inactive` se **revive** (no se duplica),
+  porque el reintento del roster es precisamente la re-alta.
+- La respuesta trae **`org_role`** (o `null` si no hay membresía), para que la
+  app de roster verifique que la persona llevará `org_id` sin decodificar un
+  token.
 
 ### Cómo leerlo (para consumidores)
 

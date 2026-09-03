@@ -18,7 +18,8 @@ from app.config import settings
 from app.core.redis import get_redis
 from app.database import get_db
 from app.main import app
-from app.models import Base, User, UserStatus
+from app.models import Base, Organization, OrganizationMember, User, UserStatus
+from app.services.org_claims_service import ORG_ROLES_CLAIM, get_user_org_claims
 
 INTERNAL_KEY = "test-internal-api-key-provisioning"
 PROVISION_URL = "/api/v1/internal/users/provision"
@@ -402,3 +403,253 @@ async def test_tenant_id_is_required(provisioning_client: AsyncClient):
         headers=AUTH,
     )
     assert response.status_code == 422
+
+
+# ------------------------------------------------- provision: org membership
+#
+# The point of these: writing `tenant_id` on the user row is NOT what grants
+# access. `org_claims_service.get_user_org_claims` counts only memberships with
+# `status == "active"`, so a user with a tenant_id but no membership gets a
+# token WITHOUT `org_id` — and symbiosis-hcm's `TenantRolePermission` rejects a
+# token without one. Before this change every identity provisioned from the MAP
+# was in exactly that state, so «Mi espacio (RH)» 403'd for the whole CTM team.
+
+
+async def _memberships(session_factory, user_id: str) -> list[OrganizationMember]:
+    async with session_factory() as session:
+        result = await session.execute(
+            select(OrganizationMember).where(OrganizationMember.user_id == uuid.UUID(user_id))
+        )
+        return list(result.scalars().all())
+
+
+async def _seed_org(session_factory, org_id: str, slug: str) -> None:
+    """An `organizations` row for `org_id`, so the claims join can resolve it."""
+    async with session_factory() as session:
+        session.add(Organization(id=uuid.UUID(org_id), name=slug, slug=slug))
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_provision_creates_active_org_membership(provisioning_env):
+    client, session_factory = provisioning_env
+    response = await client.post(
+        PROVISION_URL, json=_provision_payload(email="conmembresia@crea.example.com"), headers=AUTH
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    # Reported in the response so the roster app can verify the person will
+    # actually carry `org_id`, without decoding a token.
+    assert body["org_role"] == "member"
+
+    rows = await _memberships(session_factory, body["id"])
+    assert len(rows) == 1
+    assert str(rows[0].organization_id) == TENANT_A
+    assert rows[0].status == "active"
+    assert rows[0].role == "member"
+
+
+@pytest.mark.asyncio
+async def test_provisioned_user_resolves_org_claims(provisioning_env):
+    """The end-to-end assertion this whole change exists for.
+
+    Provision through the internal API, then run the REAL claims resolver over
+    the resulting rows: the token must carry `org_id` / `org_slug`. Without the
+    membership this returns `{}` and HCM answers 403.
+    """
+    client, session_factory = provisioning_env
+    await _seed_org(session_factory, TENANT_A, "crea-tu-mundo")
+
+    response = await client.post(
+        PROVISION_URL, json=_provision_payload(email="claims@crea.example.com"), headers=AUTH
+    )
+    assert response.status_code == 201
+    user_id = response.json()["id"]
+
+    async with session_factory() as session:
+        user = (
+            await session.execute(select(User).where(User.id == uuid.UUID(user_id)))
+        ).scalar_one()
+        claims = await get_user_org_claims(user, session)
+
+    assert claims["org_id"] == TENANT_A
+    assert claims["tenant_id"] == TENANT_A
+    assert claims["org_slug"] == "crea-tu-mundo"
+    assert claims[ORG_ROLES_CLAIM] == ["member"]
+    assert claims["orgs"] == [{"id": TENANT_A, "slug": "crea-tu-mundo", "role": "member"}]
+
+
+@pytest.mark.asyncio
+async def test_provision_membership_is_idempotent(provisioning_env):
+    """A retry must converge on ONE membership, not stack rows."""
+    client, session_factory = provisioning_env
+    payload = _provision_payload(email="reintento@crea.example.com")
+
+    first = await client.post(PROVISION_URL, json=payload, headers=AUTH)
+    assert first.status_code == 201
+    second = await client.post(PROVISION_URL, json=payload, headers=AUTH)
+    assert second.status_code == 200
+    assert second.json()["created"] is False
+    assert second.json()["org_role"] == "member"
+
+    rows = await _memberships(session_factory, first.json()["id"])
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_provision_backfills_membership_for_a_preexisting_user(provisioning_env):
+    """The repair path for everyone provisioned BEFORE this change.
+
+    Those identities already exist, so the create branch never runs for them.
+    If the 200 path did not reconcile the membership they would stay locked out
+    of «Mi espacio (RH)» permanently.
+    """
+    client, session_factory = provisioning_env
+    email = "legacy@crea.example.com"
+
+    # A user row exactly as the old endpoint left it: tenant_id set, no membership.
+    async with session_factory() as session:
+        legacy = User(
+            email=email,
+            first_name="Legacy",
+            status=UserStatus.ACTIVE,
+            tenant_id=uuid.UUID(TENANT_A),
+            user_metadata={},
+        )
+        session.add(legacy)
+        await session.commit()
+        legacy_id = str(legacy.id)
+
+    assert await _memberships(session_factory, legacy_id) == []
+
+    response = await client.post(PROVISION_URL, json=_provision_payload(email=email), headers=AUTH)
+    assert response.status_code == 200
+    assert response.json()["created"] is False
+    assert response.json()["id"] == legacy_id
+    assert response.json()["org_role"] == "member"
+
+    rows = await _memberships(session_factory, legacy_id)
+    assert len(rows) == 1
+    assert rows[0].status == "active"
+
+
+@pytest.mark.asyncio
+async def test_provision_honours_an_explicit_org_role(provisioning_env):
+    client, session_factory = provisioning_env
+    payload = _provision_payload(email="coordinadora@crea.example.com")
+    payload["org_role"] = "admin"
+
+    response = await client.post(PROVISION_URL, json=payload, headers=AUTH)
+    assert response.status_code == 201
+    assert response.json()["org_role"] == "admin"
+
+    rows = await _memberships(session_factory, response.json()["id"])
+    assert rows[0].role == "admin"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_role", ["owner", "hcm:hr", "superuser", ""])
+async def test_provision_rejects_an_unknown_org_role(provisioning_client: AsyncClient, bad_role):
+    """`org_role` lands in `madfam_org_roles`, so it must not be a free string.
+
+    `owner` is rejected too, and on purpose: organization ownership is an
+    operator decision, not something a roster «Alta de integrante» grants.
+    """
+    payload = _provision_payload(email=f"rechazado-{bad_role or 'vacio'}@crea.example.com")
+    payload["org_role"] = bad_role
+
+    response = await provisioning_client.post(PROVISION_URL, json=payload, headers=AUTH)
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_provision_does_not_downgrade_an_existing_membership_role(provisioning_env):
+    """An operator promotion must survive a roster retry.
+
+    Same rule the user row already follows: a re-provision reconciles EXISTENCE,
+    never overwrites a value someone with more authority set in janua.
+    """
+    client, session_factory = provisioning_env
+    payload = _provision_payload(email="promovida@crea.example.com")
+    payload["org_role"] = "admin"
+
+    created = await client.post(PROVISION_URL, json=payload, headers=AUTH)
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    # Roster retries with its default role; the promotion must stand.
+    retry_payload = _provision_payload(email="promovida@crea.example.com")
+    retry = await client.post(PROVISION_URL, json=retry_payload, headers=AUTH)
+    assert retry.status_code == 200
+    assert retry.json()["org_role"] == "admin"
+
+    rows = await _memberships(session_factory, user_id)
+    assert len(rows) == 1
+    assert rows[0].role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_provision_reactivates_a_removed_membership(provisioning_env):
+    """Re-alta: a returning member gets access back, without a duplicate row."""
+    client, session_factory = provisioning_env
+    payload = _provision_payload(email="realta@crea.example.com")
+
+    created = await client.post(PROVISION_URL, json=payload, headers=AUTH)
+    user_id = created.json()["id"]
+
+    async with session_factory() as session:
+        row = (
+            await session.execute(
+                select(OrganizationMember).where(
+                    OrganizationMember.user_id == uuid.UUID(user_id)
+                )
+            )
+        ).scalar_one()
+        row.status = "removed"
+        await session.commit()
+
+    again = await client.post(PROVISION_URL, json=payload, headers=AUTH)
+    assert again.status_code == 200
+    assert again.json()["org_role"] == "member"
+
+    rows = await _memberships(session_factory, user_id)
+    assert len(rows) == 1
+    assert rows[0].status == "active"
+
+
+@pytest.mark.asyncio
+async def test_provision_membership_is_scoped_to_the_requested_tenant(provisioning_env):
+    """The membership goes to the org the caller named — never to another one."""
+    client, session_factory = provisioning_env
+
+    response = await client.post(
+        PROVISION_URL,
+        json=_provision_payload(email="scoped@crea.example.com", tenant_id=TENANT_B),
+        headers=AUTH,
+    )
+    assert response.status_code == 201
+
+    rows = await _memberships(session_factory, response.json()["id"])
+    assert len(rows) == 1
+    assert str(rows[0].organization_id) == TENANT_B
+    assert str(rows[0].organization_id) != TENANT_A
+
+
+@pytest.mark.asyncio
+async def test_service_account_provisioning_still_works_with_membership(provisioning_env):
+    """#590's `is_service_account` handling is untouched by the membership write."""
+    client, session_factory = provisioning_env
+    payload = _provision_payload(email="robot@crea.example.com")
+    payload["is_service_account"] = True
+
+    response = await client.post(PROVISION_URL, json=payload, headers=AUTH)
+    assert response.status_code == 201
+    assert response.json()["is_service_account"] is True
+    assert response.json()["org_role"] == "member"
+
+    user = await _get_user(session_factory, response.json()["id"])
+    assert user.is_service_account is True
+
+    rows = await _memberships(session_factory, response.json()["id"])
+    assert len(rows) == 1
