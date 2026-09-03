@@ -160,6 +160,44 @@ documentos, y no debe ocurrir como efecto secundario del reintento de una app
 de roster. La respuesta echa el valor **almacenado**, para que quien llame
 detecte el caso sin una segunda lectura.
 
+### Pool de identidad vs. organización (decisión del 2026-09-03)
+
+`provision` recibe **dos** cosas distintas, y confundirlas causó una caída:
+
+| Campo | Qué decide |
+| --- | --- |
+| `organization_id` (preferido) · `tenant_id` (alias **deprecado**) | **A qué organización** pertenece la persona. Se registra como `OrganizationMember`. Exactamente uno de los dos; si van ambos, deben coincidir. |
+| `identity_pool` — `"platform"` (por defecto) · `"tenant"` | **En qué pool de unicidad de correo vive la IDENTIDAD**, es decir si `users.tenant_id` queda en NULL o no. |
+
+- **Personal (STAFF) ⇒ `"platform"` + membresía.** `users.tenant_id` queda
+  **NULL**. La liga con la organización es la fila de `organization_members`,
+  no una columna en `users`. Es la forma correcta para todo el que llama hoy,
+  incluida el «Alta de integrante» de crea-map.
+- **Usuarios finales (BaaS Fase 1) ⇒ `"tenant"`.** `users.tenant_id` sí se
+  escribe: son los usuarios de un cliente, aislados en el pool de ese cliente,
+  y no se espera que resuelvan por las entradas por correo de la plataforma.
+
+**Por qué.** Hasta el 2026-09-03 `tenant_id` hacía **los dos trabajos a la vez**,
+así que cada integrante del CTM que crea-map aprovisionaba caía en un pool de
+tenant. Ahí las entradas por correo desnudo —magic link, recuperación de
+contraseña— **no podían verlo**: `send_magic_link` busca en el pool sin tenant,
+no lo encontraba, tomaba su rama de creación y el INSERT chocaba con
+`ix_users_email`, que en producción sigue siendo el índice único **global**
+(migración 013 sin aplicar; `alembic_version` = 011) → `IntegrityError` → 503.
+21 personas quedaron sin poder entrar. Ver ADR-001, «Email lookup pools and the
+013 schema/code drift».
+
+**Ciclo de vida.** `suspend` / `reactivate` **no** reciben `identity_pool`:
+resuelven a la persona primero en el pool de plataforma y luego entre pools, así
+que siguen funcionando tanto para las identidades nuevas como para las que se
+crearon con el comportamiento anterior. El alcance por organización —que antes
+daba `users.tenant_id`— ahora lo impone la **membresía**: sólo se puede actuar
+sobre alguien que tenga membresía en la organización indicada.
+
+**Compatibilidad.** `tenant_id` se sigue aceptando con el mismo significado, de
+modo que el llamador actual (crea-map, que sólo envía `tenant_id`) no requiere
+cambio alguno en este despliegue; migrará a `organization_id` en un seguimiento.
+
 ### La membresía es la excepción a esa regla
 
 Escribir `tenant_id` en la fila del `User` **no otorga acceso**. El resolutor de

@@ -64,3 +64,72 @@ async def get_user_by_email(
         stmt = stmt.where(User.status == UserStatus.ACTIVE)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+class AmbiguousEmailAcrossPools(Exception):
+    """More than one ACTIVE user holds this email and no preference resolved it.
+
+    Raised by :func:`resolve_user_by_email_across_pools` only in the world
+    migration 013 creates. Callers must surface this as a 4xx — picking a row
+    arbitrarily is the cross-tenant identity confusion the module docstring
+    warns about.
+    """
+
+    def __init__(self, email: str, count: int):
+        self.email = email
+        self.count = count
+        super().__init__(f"{count} active users share the email {email!r} across pools")
+
+
+async def resolve_user_by_email_across_pools(
+    db: AsyncSession,
+    email: str,
+    *,
+    preferred_tenant_id: Optional[UUID] = None,
+    active_only: bool = True,
+) -> Optional[User]:
+    """BRIDGE helper: find the one user holding ``email`` in ANY pool.
+
+    WHY THIS EXISTS, given the module docstring says there is deliberately no
+    "search every pool" helper. Migration 013 was written but NEVER APPLIED in
+    production: prod's ``alembic_version`` is 011, the DB is hand-migrated, and
+    ``users.email`` still carries the GLOBAL unique index ``ix_users_email``
+    from 000_init. So the code assumed per-tenant pools while the schema
+    enforced one global namespace, and the two disagreed with a user-visible
+    outage: the bare-email entry points (magic link, /signin) look only in the
+    untenanted pool, missed every user the internal provisioning API had
+    created WITH a ``tenant_id`` (CTM staff via crea-map), and the "not found →
+    create" branch then hit ``ix_users_email`` → IntegrityError → 503. Nobody
+    got a magic link (2026-09-03, 21 users).
+
+    WHILE THE SCHEMA IS GLOBALLY UNIQUE this lookup is EXACT: at most one row
+    can hold the address, so "across pools" and "the user" are the same thing.
+    It is therefore not an abandonment of pool discipline but its bridge:
+
+    - ``preferred_tenant_id`` (the pool of the OAuth client owning the request's
+      redirect host) is consulted FIRST, so the day 013 does land and two pools
+      may legitimately hold the address, this resolves to the right one.
+    - If no preference matches and MORE THAN ONE row remains, it raises
+      :class:`AmbiguousEmailAcrossPools` rather than returning an arbitrary row.
+
+    Callers that know their tenant context must keep using
+    :func:`get_user_by_email`; this is only for the bare-email entry points that
+    have no tenant to declare.
+    """
+    stmt = select(User).where(User.email == email)
+    if active_only:
+        stmt = stmt.where(User.status == UserStatus.ACTIVE)
+    result = await db.execute(stmt)
+    users = list(result.scalars().all())
+
+    if not users:
+        return None
+    if len(users) == 1:
+        return users[0]
+
+    if preferred_tenant_id is not None:
+        preferred = [u for u in users if u.tenant_id == preferred_tenant_id]
+        if len(preferred) == 1:
+            return preferred[0]
+
+    raise AmbiguousEmailAcrossPools(email, len(users))

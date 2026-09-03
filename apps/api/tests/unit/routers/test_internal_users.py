@@ -115,7 +115,10 @@ async def test_provision_creates_active_passwordless_user(provisioning_env):
     assert user.email_verified_at is None
     assert user.is_admin is False
     assert user.status == UserStatus.ACTIVE
-    assert str(user.tenant_id) == TENANT_A
+    # Org STAFF live in the PLATFORM pool: the organization binding is the
+    # membership row, not a column on `users`. Setting users.tenant_id here is
+    # what hid 21 CTM accounts from the magic-link lookup (see ADR-001).
+    assert user.tenant_id is None
     assert user.first_name == "Ana"
     assert user.last_name == "Ruiz"
     assert user.user_metadata == {}
@@ -170,7 +173,10 @@ async def test_provision_idempotency_is_case_insensitive(provisioning_env):
 
 @pytest.mark.asyncio
 async def test_provision_same_email_different_tenant_is_a_separate_user(provisioning_env):
-    """Email is unique PER TENANT, so the same address is two distinct people.
+    """With identity_pool="tenant", email is unique PER TENANT.
+
+    This is the BaaS end-user shape, now reached explicitly rather than as a
+    side effect of naming an organization.
 
     IMPORTANT — SQLite cannot express migration 013's PARTIAL unique indexes: it
     drops the `WHERE tenant_id IS NULL` predicate from `uq_users_email_global`
@@ -184,7 +190,9 @@ async def test_provision_same_email_different_tenant_is_a_separate_user(provisio
     email = "shared@crea.example.com"
 
     in_a = await client.post(
-        PROVISION_URL, json=_provision_payload(email=email, tenant_id=TENANT_A), headers=AUTH
+        PROVISION_URL,
+        json={**_provision_payload(email=email, tenant_id=TENANT_A), "identity_pool": "tenant"},
+        headers=AUTH,
     )
     assert in_a.status_code == 201
     user_a_id = in_a.json()["id"]
@@ -297,7 +305,13 @@ async def test_suspend_unknown_email_is_404(provisioning_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_suspend_is_tenant_scoped(provisioning_client: AsyncClient):
-    """A user in tenant A must not be suspendable via tenant B."""
+    """A user in org A must not be suspendable via org B.
+
+    Staff are platform-pooled (users.tenant_id IS NULL), so this scope check is
+    enforced by the ORGANIZATION MEMBERSHIP rather than by the users column —
+    see `_resolve_provisioned_user`. The guarantee is unchanged; only the
+    mechanism moved.
+    """
     email = "scoped@crea.example.com"
     await provisioning_client.post(
         PROVISION_URL, json=_provision_payload(email=email, tenant_id=TENANT_A), headers=AUTH

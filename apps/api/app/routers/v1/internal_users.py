@@ -18,6 +18,26 @@ The ratified long-term direction is janua-issued **service tokens** per the
 declared once per route and nothing in the handler bodies depends on the shared
 key, so migrating to service tokens is a dependency swap, not a rewrite.
 
+Identity pool vs organization
+-----------------------------
+These are two different things and this module keeps them apart:
+
+- **Which organization** the person belongs to — ``organization_id`` on the
+  request (``tenant_id`` is the deprecated alias for the same value). It is
+  recorded as an ``organization_members`` row, and that membership is what
+  makes ``org_id`` resolvable in the person's token.
+- **Which email-uniqueness pool the IDENTITY lives in** — ``identity_pool``.
+  ``"platform"`` (the default) leaves ``users.tenant_id`` NULL; ``"tenant"``
+  sets it, and is reserved for real BaaS end-user provisioning.
+
+Org STAFF are ``"platform"``: colleagues who sign in to MADFAM products belong
+to the untenanted pool, with an organization membership. Conflating the two —
+using the organization id as the identity pool, which is what this endpoint did
+before — put 21 CTM staff accounts in a tenant pool where the bare-email entry
+points (magic link, password reset) could not find them, and the magic-link
+handler's create branch then collided with the still-global ``ix_users_email``
+and 503'd. See ADR-001 «Email lookup pools and the 013 schema/code drift».
+
 Scope guarantee
 ---------------
 This surface provisions and toggles lifecycle state. It has NO delete/purge
@@ -46,7 +66,11 @@ from app.schemas.internal import (
     UserLifecycleResponse,
 )
 from app.services.audit_logger import AuditEventType, AuditLogger
-from app.services.user_lookup import get_user_by_email
+from app.services.user_lookup import (
+    AmbiguousEmailAcrossPools,
+    get_user_by_email,
+    resolve_user_by_email_across_pools,
+)
 
 logger = structlog.get_logger()
 
@@ -147,6 +171,81 @@ async def _ensure_org_membership(
     return role
 
 
+async def _resolve_provisioned_user(db: AsyncSession, email: str, organization_id):
+    """Find an already-provisioned identity, whichever pool it lives in.
+
+    Lifecycle calls (suspend / reactivate) name a person who already exists, so
+    they must not have to guess the pool — and crucially they must keep working
+    for BOTH shapes at once:
+
+      - identities created under the OLD default, which carry
+        ``users.tenant_id = <org id>`` (the 21 CTM accounts, and anything
+        provisioned before this change), and
+      - identities created under the NEW default, which sit in the platform
+        pool with ``users.tenant_id IS NULL``.
+
+    Platform pool first (the new default and the larger pool going forward),
+    then the organization's own pool, then the cross-pool resolver as the
+    backstop. Ambiguity is surfaced as a 409 rather than resolved by guessing.
+
+    CROSS-ORG SCOPING. Under the old model ``users.tenant_id`` was itself the
+    scope check: a lifecycle call naming org B simply could not see org A's
+    user. Platform-pooled staff have ``tenant_id IS NULL``, so that check has
+    to move to where the org binding now actually lives — the
+    ``organization_members`` row. A caller may only act on someone who holds a
+    membership in the organization it named. Without this, any holder of the
+    internal key could suspend any staff identity by naming their own org,
+    which would be a REGRESSION against the old tenant-scoped behaviour.
+    Callers that name no organization are not scoped (they cannot be), but
+    ``org_id`` is required on the request, so that case does not arise today.
+    """
+    user = await get_user_by_email(db, email, tenant_id=None)
+    if user is None and organization_id is not None:
+        user = await get_user_by_email(db, email, tenant_id=organization_id)
+
+    if user is None:
+        try:
+            user = await resolve_user_by_email_across_pools(
+                db, email, preferred_tenant_id=organization_id, active_only=False
+            )
+        except AmbiguousEmailAcrossPools as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "That email exists in more than one identity pool; "
+                    "send organization_id so the right one can be selected"
+                ),
+            ) from exc
+
+    if user is None:
+        return None
+
+    if organization_id is not None and not await _has_membership(
+        db, user_id=user.id, organization_id=organization_id
+    ):
+        # Found, but not this caller's person. Report it as absent: whether an
+        # address exists in another organization is not this caller's business.
+        return None
+
+    return user
+
+
+async def _has_membership(db: AsyncSession, *, user_id, organization_id) -> bool:
+    """Whether the user holds ANY membership row in that organization.
+
+    Deliberately not restricted to ``status == "active"``: a suspended member's
+    membership may itself be inactive, and reactivate must still be able to
+    reach them. This is an authorization scope check, not a liveness check.
+    """
+    result = await db.execute(
+        select(OrganizationMember).where(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == organization_id,
+        )
+    )
+    return result.scalars().first() is not None
+
+
 @router.post(
     "/provision",
     response_model=ProvisionUserResponse,
@@ -180,15 +279,30 @@ async def provision_user(
     of «Mi espacio (RH)» forever.
     """
     email = _normalize_email(body.email)
+    organization_id = body.org_id
 
-    # Pool-scoped lookup is mandatory: since migration 013 email is unique PER
-    # TENANT, so a bare email select can match several rows across tenants.
-    existing = await get_user_by_email(db, email, tenant_id=body.tenant_id)
+    # The identity pool is now `identity_pool`'s job, NOT the organization's.
+    # "platform" (the default) means users.tenant_id stays NULL and the person
+    # belongs to the org through their membership row; "tenant" reproduces the
+    # old behaviour for real BaaS end-user provisioning.
+    pool_tenant_id = organization_id if body.identity_pool == "tenant" else None
+
+    # Idempotency is by lower(email) WITHIN the selected pool.
+    existing = await get_user_by_email(db, email, tenant_id=pool_tenant_id)
+
+    # Re-provisioning someone who was created under the OLD tenant-pooled
+    # default must converge on that SAME row, not mint a duplicate in the
+    # platform pool — the duplicate would collide with prod's still-global
+    # ix_users_email and 503 the caller (this PR's outage, from the other
+    # direction). So a platform-pool miss also checks the organization's pool.
+    if existing is None and body.identity_pool == "platform" and organization_id is not None:
+        existing = await get_user_by_email(db, email, tenant_id=organization_id)
+
     if existing is not None:
         org_role = await _ensure_org_membership(
             db,
             user_id=existing.id,
-            organization_id=body.tenant_id,
+            organization_id=organization_id,
             role=body.org_role,
         )
         await db.commit()
@@ -224,7 +338,9 @@ async def provision_user(
         # Set explicitly rather than relying on the column default so the row has
         # a known dict shape for the suspend/reactivate metadata writes below.
         user_metadata={},
-        tenant_id=body.tenant_id,
+        # NULL for org staff (the default). See ProvisionUserRequest.identity_pool:
+        # membership, not a column on `users`, is what binds staff to an org.
+        tenant_id=pool_tenant_id,
         # Honoured on CREATE only; see ProvisionUserRequest. A technical login
         # provisioned here rides `is_service_account: true` in its tokens and
         # reports it on the user/membership APIs, so consuming apps can keep it
@@ -244,7 +360,7 @@ async def provision_user(
     org_role = await _ensure_org_membership(
         db,
         user_id=user.id,
-        organization_id=body.tenant_id,
+        organization_id=organization_id,
         role=body.org_role,
     )
 
@@ -256,7 +372,7 @@ async def provision_user(
         audit_logger = AuditLogger(db)
         await audit_logger.log(
             event_type=AuditEventType.USER_CREATE,
-            tenant_id=str(body.tenant_id),
+            tenant_id=str(organization_id),
             identity_id=None,
             resource_type="user",
             resource_id=_user_id,
@@ -267,6 +383,7 @@ async def provision_user(
                 "passwordless": True,
                 "is_service_account": bool(body.is_service_account),
                 "org_role": org_role,
+                "identity_pool": body.identity_pool,
             },
             severity="info",
         )
@@ -279,7 +396,8 @@ async def provision_user(
     logger.info(
         "Provisioned user via internal API",
         user_id=_user_id,
-        tenant_id=str(body.tenant_id),
+        organization_id=str(organization_id),
+        identity_pool=body.identity_pool,
         org_role=org_role,
     )
 
@@ -309,11 +427,11 @@ async def suspend_user(
     the one that suspended them. 404 only when there is no such user in the pool.
     """
     email = _normalize_email(body.email)
-    user = await get_user_by_email(db, email, tenant_id=body.tenant_id)
+    user = await _resolve_provisioned_user(db, email, body.org_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No janua user for that email in this tenant",
+            detail="No janua user for that email",
         )
 
     if user.status == UserStatus.SUSPENDED:
@@ -347,7 +465,7 @@ async def suspend_user(
         audit_logger = AuditLogger(db)
         await audit_logger.log(
             event_type=AuditEventType.USER_SUSPEND,
-            tenant_id=str(body.tenant_id),
+            tenant_id=str(body.org_id),
             identity_id=None,
             resource_type="user",
             resource_id=str(user.id),
@@ -385,11 +503,11 @@ async def reactivate_user(
     desired end state, so it is SUCCESS with ``changed: false``, not an error.
     """
     email = _normalize_email(body.email)
-    user = await get_user_by_email(db, email, tenant_id=body.tenant_id)
+    user = await _resolve_provisioned_user(db, email, body.org_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No janua user for that email in this tenant",
+            detail="No janua user for that email",
         )
 
     if user.status == UserStatus.ACTIVE:
@@ -417,7 +535,7 @@ async def reactivate_user(
         audit_logger = AuditLogger(db)
         await audit_logger.log(
             event_type=AuditEventType.USER_REACTIVATE,
-            tenant_id=str(body.tenant_id),
+            tenant_id=str(body.org_id),
             identity_id=None,
             resource_type="user",
             resource_id=str(user.id),
