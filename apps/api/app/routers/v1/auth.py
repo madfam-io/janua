@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional
 from urllib.parse import urlencode, urlparse
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from slowapi import Limiter
@@ -2443,7 +2443,7 @@ async def magic_link_callback(
     # session must never produce a second one.
     magic_link.used_at = datetime.utcnow()
 
-    access_token, _refresh_token, _session = await AuthService.create_session(
+    access_token, refresh_token, _session = await AuthService.create_session(
         db, user, ip_address=req.client.host if req and req.client else None,
         user_agent=req.headers.get("user-agent") if req else None,
         audience=await _session_audience_for_redirect(db, magic_link.redirect_url),
@@ -2471,14 +2471,35 @@ async def magic_link_callback(
         )
 
     separator = "&" if "?" in destination else "?"
-    return RedirectResponse(url=f"{destination}{separator}token={access_token}", status_code=302)
+    redirect = RedirectResponse(
+        url=f"{destination}{separator}token={access_token}", status_code=302
+    )
+    # SSO (B1): also leave an issuer-side browser session behind. The redirect
+    # keeps `?token=` exactly as products expect — nothing about the contract
+    # changes — but the browser IS on auth.madfam.io for this hop, so this is
+    # the one moment the issuer can set its own cookie on a magic-link login.
+    # Without it `/authorize?prompt=none` has no session to recognise and every
+    # silent hop between products falls back to a fresh magic link.
+    _set_session_cookies(redirect, access_token, refresh_token)
+    return redirect
 
 
 @router.post("/magic-link/verify", response_model=SignInResponse)
 async def verify_magic_link(
-    request: VerifyMagicLinkRequest, req: Request, db: Session = Depends(get_db)
+    request: VerifyMagicLinkRequest,
+    req: Request,
+    response: Response,
+    db: Session = Depends(get_db),
 ):
-    """Sign in with magic link token"""
+    """Sign in with magic link token.
+
+    SSO (B1): besides returning the tokens in the body — the contract
+    `@madfam/janua-next` and nauta's integration package depend on, unchanged —
+    this also sets the issuer session cookies on the response. That costs
+    nothing when the caller is a server (Node keeps the Set-Cookie and drops
+    it), and it is what makes `/authorize?prompt=none` work when a browser
+    posts here directly.
+    """
     # Find valid magic link
     result = await db.execute(
         select(MagicLink).where(
@@ -2542,6 +2563,10 @@ async def verify_magic_link(
 
     # Log activity
     await log_activity(db, str(user.id), "signin", {"method": "magic_link"}, req)
+
+    # SSO (B1): same tokens the body carries, also as issuer session cookies.
+    # The response body below is byte-for-byte what it was before.
+    _set_session_cookies(response, access_token, refresh_token)
 
     return SignInResponse(
         user=UserResponse(
