@@ -14,6 +14,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import structlog
@@ -26,7 +27,11 @@ from app.database import AsyncSessionLocal, get_db
 from app.dependencies import get_current_user
 from app.services.account_lockout_service import AccountLockoutService
 from app.services.auth_service import AuthService
-from app.services.user_lookup import get_user_by_email
+from app.services.user_lookup import (
+    AmbiguousEmailAcrossPools,
+    get_user_by_email,
+    resolve_user_by_email_across_pools,
+)
 from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.email import EmailService
 from app.services.email_service import (
@@ -2251,12 +2256,45 @@ async def send_magic_link(
     if not settings.EMAIL_ENABLED:
         raise HTTPException(status_code=400, detail="Email service not configured")
 
-    # Find or create user — untenanted / staff pool (see /signin note). This
-    # bare-email magic link is a platform entry; both the lookup and the created
-    # row below stay in the NULL-tenant pool, agreeing with uq_users_email_global.
+    # Find or create user. The untenanted / staff pool is still the primary
+    # meaning of this bare-email platform entry (see /signin note), but a MISS
+    # there may not mean "no such user":
+    #
+    #   Production runs the GLOBAL unique index ix_users_email (migration 013's
+    #   per-tenant partial indexes are unapplied; prod alembic_version is 011),
+    #   while the internal provisioning API writes users WITH a tenant_id — CTM
+    #   staff, provisioned by crea-map. Those rows are invisible to the
+    #   untenanted lookup, so this handler fell through to the create branch and
+    #   the INSERT hit ix_users_email → IntegrityError → 503. The requesting
+    #   product showed «revisa tu correo» and no link was ever sent
+    #   (2026-09-03, 21 users).
+    #
+    # So on a miss, resolve across pools before considering a create. While the
+    # schema is globally unique that resolution is exact; the redirect host's
+    # OAuth client supplies the preferred pool for the day 013 does land.
     user = await get_user_by_email(
         db, magic_link_data.email, tenant_id=None, active_only=True
     )
+
+    if not user:
+        try:
+            user = await resolve_user_by_email_across_pools(
+                db,
+                magic_link_data.email,
+                preferred_tenant_id=await _preferred_pool_for_redirect(
+                    db, magic_link_data.redirect_url
+                ),
+                active_only=True,
+            )
+        except AmbiguousEmailAcrossPools as exc:
+            # Refuse rather than sign someone into an arbitrary tenant.
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This email exists in more than one tenant pool; "
+                    "request the link from the product that owns the account"
+                ),
+            ) from exc
 
     if not user:
         # Create user without password for magic link only.
@@ -2270,8 +2308,39 @@ async def send_magic_link(
             locale=locale_from_request(request),
         )
         db.add(user)
-        await db.commit()
-        await db.refresh(user)
+        try:
+            await db.commit()
+            await db.refresh(user)
+        except IntegrityError:
+            # Lost a race, or the row exists in a state the lookups above do not
+            # see (a non-ACTIVE row still occupies the global unique index).
+            # Re-select instead of 503ing: the address is taken, so the user
+            # exists — find them rather than telling the product the service is
+            # down.
+            await db.rollback()
+            user = await get_user_by_email(
+                db, magic_link_data.email, tenant_id=None, active_only=True
+            )
+            if not user:
+                try:
+                    user = await resolve_user_by_email_across_pools(
+                        db, magic_link_data.email, active_only=True
+                    )
+                except AmbiguousEmailAcrossPools as exc:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "This email exists in more than one tenant pool; "
+                            "request the link from the product that owns the account"
+                        ),
+                    ) from exc
+            if not user:
+                # The colliding row is not ACTIVE — a disabled or pending
+                # account. Say so; do not retry the insert forever.
+                raise HTTPException(
+                    status_code=400,
+                    detail="An account with this email exists but is not active",
+                )
 
     # SECURITY: Validate the redirect URL to prevent open redirect attacks.
     # A supplied-but-disallowed destination is a 400 HERE, not a silent None:
@@ -2339,6 +2408,23 @@ async def _session_audience_for_redirect(db: Session, redirect_url: Optional[str
     None (no redirect, no host match, or client without an audience) keeps the
     platform default — exactly what every session minted before this existed.
     """
+    client = await _oauth_client_for_redirect(db, redirect_url, require_audience=True)
+    return client.audience if client else None
+
+
+async def _oauth_client_for_redirect(
+    db: Session, redirect_url: Optional[str], *, require_audience: bool = False
+):
+    """The active OAuth client whose redirect_uris share the destination's host.
+
+    Factored out of :func:`_session_audience_for_redirect` so the same host →
+    client mapping can answer two questions: which audience a session carries,
+    and which ORGANIZATION owns the requesting product (the preferred user pool
+    when an email could exist in more than one). ``require_audience`` keeps the
+    audience resolver's original filter — a client without an audience never
+    changed the session's audience — while the pool resolver wants any active
+    client for the host.
+    """
     if not redirect_url:
         return None
     host = urlparse(redirect_url).hostname
@@ -2347,12 +2433,12 @@ async def _session_audience_for_redirect(db: Session, redirect_url: Optional[str
 
     from ...models import OAuthClient as _OAuthClient
 
-    result = await db.execute(
-        select(_OAuthClient).where(
-            _OAuthClient.is_active == True,  # noqa: E712 — SQLAlchemy comparator
-            _OAuthClient.audience.isnot(None),
-        )
+    stmt = select(_OAuthClient).where(
+        _OAuthClient.is_active == True,  # noqa: E712 — SQLAlchemy comparator
     )
+    if require_audience:
+        stmt = stmt.where(_OAuthClient.audience.isnot(None))
+    result = await db.execute(stmt)
     for client in result.scalars():
         uris = client.redirect_uris or []
         # Some prod rows store the array double-encoded — a JSON string
@@ -2366,8 +2452,14 @@ async def _session_audience_for_redirect(db: Session, redirect_url: Optional[str
                 uris = []
         for uri in uris:
             if isinstance(uri, str) and urlparse(uri).hostname == host:
-                return client.audience
+                return client
     return None
+
+
+async def _preferred_pool_for_redirect(db: Session, redirect_url: Optional[str]):
+    """The organization id to prefer when an email matches more than one pool."""
+    client = await _oauth_client_for_redirect(db, redirect_url)
+    return getattr(client, "organization_id", None) if client else None
 
 
 @router.get("/magic-link/callback")
