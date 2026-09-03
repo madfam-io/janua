@@ -35,7 +35,7 @@ from app.routers.v1.auth import MagicLinkRequest, send_magic_link
 
 pytestmark = pytest.mark.asyncio
 
-EMAIL = "staff@creatumundo.test"
+EMAIL = "staff@creatumundo.example.com"
 
 
 def _request():
