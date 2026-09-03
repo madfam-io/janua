@@ -2,17 +2,20 @@
 Organization Members API Routes
 Complete member lifecycle management endpoints
 """
+
 from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...dependencies import get_current_user, get_db, get_redis
 from ...models import User
 from ...services.organization_member_service import OrganizationMemberService
 from ...services.rbac_service import RBACService
+from ...services.service_principal import is_service_principal
 
 
 # Pydantic schemas
@@ -44,6 +47,14 @@ class MemberResponse(BaseModel):
     status: str
     joined_at: str
     metadata: Optional[dict] = None
+    # Is the member's identity a technical/service account rather than a
+    # person? Sourced from `User.is_service_account`, not from the membership
+    # row — being a service principal is a fact about the IDENTITY, true in
+    # every org it belongs to, so one org cannot disagree with another about
+    # it. Consuming apps use this to keep technical logins out of rosters and
+    # assignee pickers. Optional so a caller reading a cached/older
+    # serialization is unaffected.
+    is_service_account: bool = False
 
     class Config:
         from_attributes = True
@@ -83,7 +94,36 @@ async def get_members(
     service = OrganizationMemberService(db, redis)
     members = await service.get_members(organization_id, include_removed)
 
-    return members
+    # Enrich each membership with its identity's service-principal flag.
+    # Resolved HERE rather than inside the service because the service caches
+    # its rows in Redis; deriving the flag after the cache read keeps a stale
+    # cache from ever asserting that a technical login is a person (or the
+    # reverse) after an operator flips it. One query for the whole page.
+    return await _with_service_principal_flags(members, db)
+
+
+async def _with_service_principal_flags(members, db) -> List[MemberResponse]:
+    """Attach `is_service_account` to each membership from its `User` row.
+
+    Tolerant by design: identities that cannot be resolved (a cached row whose
+    user is gone) fall back to False — "person" — which is the pre-existing
+    rendering, never a surprise disappearance from a roster.
+    """
+    responses = [MemberResponse.model_validate(m, from_attributes=True) for m in members]
+    user_ids = {r.user_id for r in responses}
+    if not user_ids:
+        return responses
+
+    try:
+        result = await db.execute(select(User).where(User.id.in_(user_ids)))
+        by_id = {u.id: u for u in result.scalars().all()}
+    except Exception:
+        # Never fail a roster read on this enrichment; degrade to "person".
+        return responses
+
+    for response in responses:
+        response.is_service_account = is_service_principal(by_id.get(response.user_id))
+    return responses
 
 
 @router.post("/add", response_model=MemberResponse)

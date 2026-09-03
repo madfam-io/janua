@@ -103,6 +103,9 @@ async def provision_user(
             status=existing.status.value if existing.status else UserStatus.ACTIVE.value,
             created=False,
             created_at=existing.created_at,
+            # The STORED value, not the requested one — see the schema comment:
+            # an existing identity is never re-flagged by a provisioning call.
+            is_service_account=bool(getattr(existing, "is_service_account", False)),
         )
 
     user = User(
@@ -122,6 +125,11 @@ async def provision_user(
         # a known dict shape for the suspend/reactivate metadata writes below.
         user_metadata={},
         tenant_id=body.tenant_id,
+        # Honoured on CREATE only; see ProvisionUserRequest. A technical login
+        # provisioned here rides `is_service_account: true` in its tokens and
+        # reports it on the user/membership APIs, so consuming apps can keep it
+        # out of rosters and off document signatures.
+        is_service_account=bool(body.is_service_account),
         # `is_active` is deliberately left to the column default (True), matching
         # the admin create-user path which does not set it either.
     )
@@ -148,6 +156,7 @@ async def provision_user(
                 "actor": INTERNAL_API_KEY_PRINCIPAL,
                 "via": "internal.users.provision",
                 "passwordless": True,
+                "is_service_account": bool(body.is_service_account),
             },
             severity="info",
         )
@@ -169,6 +178,7 @@ async def provision_user(
         status=user.status.value if user.status else UserStatus.ACTIVE.value,
         created=True,
         created_at=user.created_at or _created_at,
+        is_service_account=bool(user.is_service_account),
     )
 
 

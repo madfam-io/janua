@@ -17,8 +17,9 @@ from app.config import settings
 from app.database import get_db
 from app.routers.v1.auth import get_current_user
 from app.services.auth_service import AuthService
+from app.services.service_principal import is_service_principal
 
-from ...models import Organization, OrganizationMember, User, UserStatus, UserConsent
+from ...models import Organization, OrganizationMember, User, UserConsent, UserStatus
 from ...models import Session as UserSession
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -58,8 +59,14 @@ class UserResponse(BaseModel):
     updated_at: datetime
     last_sign_in_at: Optional[datetime]
     user_metadata: dict
+    # Is this identity a technical/service account rather than a person?
+    # Consuming apps (crea-map first) read this to keep technical logins out
+    # of rosters, assignee pickers and document-signature fields. Defaults to
+    # False so a caller reading an older serialization sees "person" — the
+    # same answer migration 015 gives every pre-existing row.
+    is_service_account: bool = False
 
-    @field_validator("email_verified", "phone_verified", mode="before")
+    @field_validator("email_verified", "phone_verified", "is_service_account", mode="before")
     @classmethod
     def _null_bool_is_false(cls, v):
         # Nullable-without-backfill boolean columns surface None for old rows
@@ -98,6 +105,7 @@ async def get_current_user_profile(current_user: User = Depends(get_current_user
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         last_sign_in_at=current_user.last_sign_in_at,
+        is_service_account=is_service_principal(current_user),
         user_metadata=current_user.user_metadata or {},
     )
 
@@ -148,6 +156,7 @@ async def update_current_user_profile(
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         last_sign_in_at=current_user.last_sign_in_at,
+        is_service_account=is_service_principal(current_user),
         user_metadata=current_user.user_metadata or {},
     )
 
@@ -271,6 +280,7 @@ async def get_user_by_id(
         created_at=user.created_at,
         updated_at=user.updated_at,
         last_sign_in_at=user.last_sign_in_at,
+        is_service_account=is_service_principal(user),
         user_metadata=user.user_metadata or {},
     )
 
@@ -357,6 +367,7 @@ async def list_users(
                 created_at=user.created_at,
                 updated_at=user.updated_at,
                 last_sign_in_at=user.last_sign_in_at,
+                is_service_account=is_service_principal(user),
                 user_metadata=user.user_metadata or {},
             )
         )

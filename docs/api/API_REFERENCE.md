@@ -234,9 +234,20 @@ GET /users/me
     }
   },
   "created_at": "2025-01-18T12:00:00Z",
-  "updated_at": "2025-01-18T14:00:00Z"
+  "updated_at": "2025-01-18T14:00:00Z",
+  "is_service_account": false
 }
 ```
+
+`is_service_account` marks an identity as a technical/service account rather
+than a person — a development access login, an importer, an integration
+principal. Consuming apps read it to keep such identities out of rosters,
+assignee pickers and document-signature fields. It is `false` for every person,
+and reported on `/users/{id}`, `/users/` and
+`/organizations/{id}/members` as well. Not to be confused with
+`client_credentials` service tokens, which have no user row at all (see
+`docs/service-tokens.md`). Full contract:
+[`docs/architecture/CLAIMS_DE_ORGANIZACION_Y_SERVICE_PRINCIPALS.md`](../architecture/CLAIMS_DE_ORGANIZACION_Y_SERVICE_PRINCIPALS.md).
 
 ### Update User Profile
 

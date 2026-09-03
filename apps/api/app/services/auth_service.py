@@ -461,13 +461,42 @@ class AuthService:
             )
             madfam_entitled_products = []
 
+        # Resolve organization claims through the SAME SSOT the OIDC path uses
+        # (app/services/org_claims_service.py). Until this landed, a session
+        # token — every magic-link login, every password login — carried no
+        # `org_id`, so org-scoped resource servers (symbiosis-hcm 403s any token
+        # without it) could not authorize anyone who arrived by magic link.
+        #
+        # SECURITY, and the reason this is not just "add org_id": the roles this
+        # stamps go under the NAMESPACED key `madfam_org_roles`, never a bare
+        # `roles`. Organization roles are owner/admin/member — permissions over
+        # the ACCOUNT — and symbiosis-hcm's HR_ROLES set contains the literal
+        # string "admin". Stamping org roles as `roles` alongside a working
+        # `org_id` would have promoted every janua org admin to HR admin over
+        # payroll and labour files. The namespace is the fix; see the
+        # org_claims_service docstring.
+        #
+        # Ambiguity is silence: a user in several orgs with no tenant pin gets
+        # `orgs` and no `org_id`, so no consumer can guess a tenant. Resolution
+        # never blocks login — failure stamps no org claims at all.
+        from app.services.org_claims_service import get_user_org_claims_safe
+        from app.services.service_principal import service_principal_claims
+
+        org_claims = await get_user_org_claims_safe(user, db)
+
         # Create tokens
         access_token, access_jti, access_expires = AuthService.create_access_token(
             user_id=str(user.id),
             tenant_id=str(user.tenant_id),
             email=user.email,
             audience=audience,
-            additional_claims={"madfam_entitled_products": madfam_entitled_products},
+            additional_claims={
+                "madfam_entitled_products": madfam_entitled_products,
+                **org_claims,
+                # `is_service_account: true` only for technical logins; absent
+                # for everyone else, so a person's token shape is unchanged.
+                **service_principal_claims(user),
+            },
         )
 
         refresh_token, refresh_jti, family, refresh_expires = AuthService.create_refresh_token(
@@ -620,12 +649,26 @@ class AuthService:
             )
             madfam_entitled_products = []
 
+        # Re-resolve organization claims on refresh too, through the same SSOT.
+        # This is what makes membership revocation reach a live session: a
+        # member whose status stops being `active` loses org_id (and the
+        # namespaced role) on the next rotation, exactly as the OIDC refresh
+        # grant behaves. Same fail-closed degradation as create_session.
+        from app.services.org_claims_service import get_user_org_claims_safe
+        from app.services.service_principal import service_principal_claims
+
+        org_claims = await get_user_org_claims_safe(user, db)
+
         # Create new tokens
         access_token, access_jti, access_expires = AuthService.create_access_token(
             user_id=str(user.id),
             tenant_id=str(user.tenant_id),
             email=user.email,
-            additional_claims={"madfam_entitled_products": madfam_entitled_products},
+            additional_claims={
+                "madfam_entitled_products": madfam_entitled_products,
+                **org_claims,
+                **service_principal_claims(user),
+            },
         )
 
         refresh_token, refresh_jti, family, refresh_expires = AuthService.create_refresh_token(

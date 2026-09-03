@@ -38,6 +38,18 @@ class ProvisionUserRequest(BaseModel):
     # field create or mutate a user in the WRONG organization — a cross-tenant
     # identity bug that reads as success. The caller must state the pool.
     tenant_id: UUID
+    # Mark the provisioned identity as a technical/service account rather than
+    # a person. Defaults to False: a roster app that says nothing is
+    # provisioning a colleague, which is the overwhelmingly common case and
+    # today's only behaviour.
+    #
+    # Honoured ONLY on creation. An existing row is returned untouched by this
+    # endpoint (see the handler docstring: this is provisioning, not
+    # synchronization), and that rule holds for this field too — flipping a
+    # live identity between "person" and "service" is an operator decision with
+    # roster- and signature-visible consequences, not something a roster app
+    # should be able to do as a side effect of a retry.
+    is_service_account: bool = False
 
 
 class ProvisionUserResponse(BaseModel):
@@ -48,6 +60,11 @@ class ProvisionUserResponse(BaseModel):
     status: str
     created: bool
     created_at: datetime
+    # Echoes the identity's stored flag — for a pre-existing row this is the
+    # STORED value, which may differ from what the caller requested, so a
+    # caller can detect the "already exists, and it is/is not a service
+    # account" case without a second read.
+    is_service_account: bool = False
 
 
 class UserLifecycleRequest(BaseModel):

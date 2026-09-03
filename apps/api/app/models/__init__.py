@@ -74,6 +74,30 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)  # Admin flag for system-wide admin access
 
+    # Is this identity a technical/service account rather than a person?
+    #
+    # Nothing else on this model answers that question: `status`, `is_active`
+    # and `is_admin` are all about what the row may DO, never about what it IS.
+    # So consuming apps render technical logins — a development access account,
+    # an importer, an integration principal — in rosters, assignee pickers and
+    # document-signature fields as though they were colleagues.
+    #
+    # Rides tokens as the `is_service_account` claim (see auth_service and
+    # oauth_provider) and is exposed on the user/membership APIs, so an app
+    # binding to a janua `sub` reads the fact from identity instead of
+    # inventing a local boolean per app. crea-map is the first consumer: it
+    # hides such rows from team rosters and refuses to sign clinical documents
+    # with them.
+    #
+    # NOT the same as machine-to-machine identity, which has no user row at
+    # all — that is `client_credentials` OAuth clients, see
+    # docs/service-tokens.md. This flag is for the human-SHAPED logins (they
+    # have an email, a session, a magic link) that are nonetheless not humans.
+    #
+    # NOT NULL default False: every existing row is a person until an operator
+    # says otherwise. See migration 015_user_is_service_acct.
+    is_service_account = Column(Boolean, nullable=False, default=False, server_default=sa.false())
+
     # MFA fields
     mfa_enabled = Column(Boolean, default=False)
     mfa_secret = Column(EncryptedString())
