@@ -758,6 +758,25 @@ def _is_silent_auth_allowed(client: OAuthClient) -> bool:
     return False
 
 
+def _is_first_party_preconsented(client: OAuthClient) -> bool:
+    """First-party clients do not need a visible consent screen (B6).
+
+    Consent exists so a person can refuse a THIRD party access to their Janua
+    account. `selva-office*`, `madfam-*`, and any client an operator has
+    explicitly marked with `madfam:silent_auth` are surfaces of MADFAM itself:
+    asking someone to authorize MADFAM to MADFAM communicates nothing and, on
+    the silent path, is not even askable — `prompt=none` cannot render a
+    screen, so a missing consent row turns into `consent_required` and the
+    silent hop fails for a client that was never going to be refused.
+
+    Deliberately the SAME predicate as `_is_silent_auth_allowed`, not a looser
+    one: exactly the clients trusted to skip the consent UI silently are the
+    clients treated as pre-consented, so widening one can never quietly widen
+    the other. A third-party client is unaffected and still sees the screen.
+    """
+    return _is_silent_auth_allowed(client)
+
+
 def _redirect_with_oauth_error(
     redirect_uri: str,
     error: str,
@@ -992,9 +1011,28 @@ async def authorize_get(
     requested_scopes = ConsentService.parse_scopes(scope)
     has_consent = await ConsentService.has_consent(db, current_user.id, client_id, requested_scopes)
 
+    # B6: first-party surfaces are pre-consented. Without this, the silent path
+    # answers consent_required for a client nobody would have been asked about,
+    # and the interactive path shows "MADFAM would like access to MADFAM".
+    if not has_consent and _is_first_party_preconsented(client):
+        logger.info(
+            "First-party client pre-consented — skipping consent screen",
+            client_id=client_id,
+            client_name=client.name,
+            user_id=str(current_user.id),
+        )
+        has_consent = True
+
     if not has_consent:
         # OIDC prompt=none: never show an interactive consent screen. If the
         # user hasn't pre-consented, signal consent_required to the caller.
+        #
+        # Since B6 this branch is unreachable on the silent path by
+        # construction: `silent_auth` already required
+        # `_is_silent_auth_allowed(client)`, and B6 pre-consents exactly those
+        # clients. It stays as defense in depth — if the two predicates ever
+        # diverge, the spec-correct answer is still emitted rather than a
+        # consent screen a silent caller cannot render.
         if silent_auth:
             logger.info(
                 "prompt=none but consent missing — emitting consent_required",
