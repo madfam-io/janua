@@ -231,15 +231,32 @@ class JWTManager:
         token: str,
         token_type: str = "access",
         audience: Optional[str | Sequence[str]] = None,
+        verify_audience: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        """Verify and decode a JWT token"""
+        """Verify and decode a JWT token.
+
+        `verify_audience=False` skips ONLY the audience check; signature,
+        issuer, expiry and token type stay enforced. It exists for the case
+        where Janua reads a token it minted itself and therefore accepts every
+        audience it issues — a magic-link session carries the audience of the
+        product it forwards to, not the platform default. Callers must still
+        decide what an audience-less token means to them; this method does not
+        infer it. Default is unchanged, so every existing caller keeps strict
+        audience validation.
+        """
         try:
+            decode_kwargs: Dict[str, Any] = {
+                "algorithms": [self.algorithm],
+                "issuer": self.issuer,
+            }
+            if verify_audience:
+                decode_kwargs["audience"] = audience or self.audience
+            else:
+                decode_kwargs["options"] = {"verify_aud": False}
             payload = jwt.decode(
                 token,
                 self._get_verification_key(),
-                algorithms=[self.algorithm],
-                issuer=self.issuer,
-                audience=audience or self.audience,
+                **decode_kwargs,
             )
 
             # Verify token type

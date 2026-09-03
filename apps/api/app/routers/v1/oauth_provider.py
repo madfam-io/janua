@@ -292,6 +292,42 @@ _get_user_org_claims = get_user_org_claims
 # ============================================================================
 
 
+def _verify_own_access_token(token: str) -> Optional[dict]:
+    """Verify an access token Janua itself minted, tolerating any audience it mints.
+
+    `jwt_manager.verify_token` validates against the single platform audience
+    (`JWT_AUDIENCE`), which is right for a resource server deciding which
+    tokens to accept. Here Janua is the ISSUER reading its own session, and it
+    mints more than one audience: a magic-link session carries the audience of
+    the product the link forwards to (`crea-map`, `nauta-portal`, ...) — see
+    `_session_audience_for_redirect` in routers/v1/auth.py. Rejecting those
+    would mean the session cookie written on a magic-link login (B1) is
+    invisible to `/authorize`, so `prompt=none` would answer `login_required`
+    for every product session with no error anywhere in the happy path.
+
+    This mirrors the tolerance `AuthService.verify_token`
+    (services/auth_service.py) already has, adapted to how `jwt_manager`
+    reports failure: it SWALLOWS `InvalidTokenError` — of which
+    `InvalidAudienceError` is a subclass — and returns None rather than
+    raising, so the retry is driven by a None result, not by an except clause.
+    The second pass turns off ONLY the audience check; signature, issuer,
+    expiry and token type stay enforced both times, and a token with no usable
+    `aud` claim is still refused, exactly as AuthService does.
+    """
+    payload = jwt_manager.verify_token(token, token_type="access")
+    if payload:
+        return payload
+
+    payload = jwt_manager.verify_token(token, token_type="access", verify_audience=False)
+    if not payload:
+        return None
+    aud = payload.get("aud")
+    if not isinstance(aud, str) or not aud:
+        logger.warning("Session token carries no usable audience claim")
+        return None
+    return payload
+
+
 async def get_user_from_cookie_or_header(
     request: Request,
     db: AsyncSession,
@@ -302,14 +338,16 @@ async def get_user_from_cookie_or_header(
     2. janua_access_token cookie (browser-based OAuth flow)
 
     This enables the OAuth authorize endpoint to work with browser sessions
-    after the user logs in via the login form.
+    after the user logs in via the login form, or after a magic link (B1).
+    Both paths accept any audience Janua minted — see
+    `_verify_own_access_token`.
     """
     # First, try to get user from Authorization header via dependency
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
         try:
-            payload = jwt_manager.verify_token(token, token_type="access")
+            payload = _verify_own_access_token(token)
             if payload and payload.get("sub"):
                 result = await db.execute(select(User).where(User.id == payload.get("sub")))
                 user = result.scalar_one_or_none()
@@ -322,7 +360,7 @@ async def get_user_from_cookie_or_header(
     access_token = request.cookies.get("janua_access_token")
     if access_token:
         try:
-            payload = jwt_manager.verify_token(access_token, token_type="access")
+            payload = _verify_own_access_token(access_token)
             if payload and payload.get("sub"):
                 result = await db.execute(select(User).where(User.id == payload.get("sub")))
                 user = result.scalar_one_or_none()
