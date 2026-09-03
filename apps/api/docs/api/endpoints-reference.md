@@ -180,6 +180,42 @@ Authorization: Bearer {access_token}
 | GET | `/ServiceProviderConfig` | Get SCIM configuration | No |
 | GET | `/Schemas` | Get SCIM schemas | No |
 
+## Internal Service-to-Service
+
+### Internal Users Router (`/api/v1/internal/users`)
+
+Called by sibling MADFAM apps that own a roster but not identity (crea-map's
+«Alta de integrante»). Auth is `X-Internal-API-Key`, not a user token.
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/provision` | Ensure a janua user exists for a roster member (idempotent; 201 created / 200 existed) | Internal API key |
+| POST | `/suspend` | Suspend a roster member's access (idempotent) | Internal API key |
+| POST | `/reactivate` | Restore a suspended member's access (idempotent) | Internal API key |
+
+#### Identity pool vs. organization
+
+`provision` takes two independent things. Conflating them caused the
+2026-09-03 magic-link outage — see
+[ADR-001](/docs/architecture/ADR-001_AUTH_FLOW.md#email-lookup-pools-and-the-013-schemacode-drift).
+
+| Field | Decides |
+|-------|---------|
+| `organization_id` (preferred) / `tenant_id` (**deprecated alias**) | Which **organization** the person belongs to, recorded as an `organization_members` row. Exactly one of the two is required; if both are sent they must match. |
+| `identity_pool`: `"platform"` (default) \| `"tenant"` | Which **email-uniqueness pool the identity lives in**, i.e. whether `users.tenant_id` is NULL. |
+
+- **Org STAFF ⇒ `"platform"`** (the default). `users.tenant_id` stays NULL; the
+  organization binding is the membership row. This is what keeps the bare-email
+  entry points — magic link, password reset — able to find the person.
+- **BaaS end users ⇒ `"tenant"`.** `users.tenant_id` is set to the organization;
+  the identity lives in that client's isolated pool.
+
+`suspend` / `reactivate` take no `identity_pool`: they resolve the person in the
+platform pool first and then across pools, so they keep working for identities
+created under either default. Their cross-organization scoping is enforced by
+the **membership** row, so a caller can only act on someone who belongs to the
+organization it named.
+
 ## Webhooks
 
 ### Webhooks Router (`/api/v1/webhooks`)

@@ -296,14 +296,15 @@ admin, provisioning) must keep using pool-scoped `get_user_by_email()`.
 1. **Apply migration 013 in production, or retire it.** The code and the schema
    must stop disagreeing. Note the deploy pipeline **promotes images and runs no
    alembic**, so this is a deliberate operator action either way.
-2. **Should org STAFF carry `users.tenant_id` at all?** Under Phase-1 semantics
-   `tenant_id` marks an *end-user pool*; organization staff arguably belong in
-   the untenanted pool with their org membership expressed by
-   `organization_members` / app roles instead. If so, the internal provisioning
-   API should stop setting `users.tenant_id` for STAFF — which would also have
-   prevented this outage. **Deliberately not changed in this PR**; it is a
-   semantics decision for the owner, and the stopgap already moved the affected
-   rows that way.
+2. ~~**Should org STAFF carry `users.tenant_id` at all?**~~ **DECIDED by the
+   owner 2026-09-03 17:00Z: no.** Under Phase-1 semantics `tenant_id` marks an
+   *end-user pool*; organization staff belong in the untenanted (platform) pool
+   with their org membership expressed by `organization_members`. The internal
+   provisioning API now separates the two concerns — `organization_id` names the
+   organization, `identity_pool` (default `"platform"`) selects the pool — and
+   STAFF no longer get a `users.tenant_id`. Implemented in this PR's second
+   commit; see the internal-users section of the
+   [endpoints reference](/apps/api/docs/api/endpoints-reference.md#identity-pool-vs-organization).
 3. **Reconcile the `ops_untenant_2026_09_03` stopgap** with whichever of the
    above is chosen.
 

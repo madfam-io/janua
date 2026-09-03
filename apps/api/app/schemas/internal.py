@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class TierSyncRequest(BaseModel):
@@ -26,18 +26,65 @@ class TierSyncResponse(BaseModel):
     new_tier: str
 
 
+def _validate_org_alias(model):
+    """Enforce "exactly one of organization_id / tenant_id" on a request model.
+
+    `tenant_id` is the DEPRECATED spelling, kept accepted so the current
+    crea-map caller (which sends `tenant_id` only) keeps working unchanged
+    across this deploy; it will move to `organization_id` in a follow-up.
+
+    Both-with-the-SAME-value is allowed and harmless — a caller mid-migration
+    may legitimately send both. Both with DIFFERENT values is rejected: there
+    is no defensible way to pick one, and silently preferring either could
+    provision a person into the wrong organization.
+    """
+    org, tenant = model.organization_id, model.tenant_id
+    if org is None and tenant is None:
+        raise ValueError("one of organization_id (preferred) or tenant_id is required")
+    if org is not None and tenant is not None and org != tenant:
+        raise ValueError(
+            "organization_id and tenant_id name the same organization; "
+            "they must match (send organization_id alone)"
+        )
+    return model
+
+
 class ProvisionUserRequest(BaseModel):
     """Request to ensure a janua user exists for a sibling app's roster member."""
 
     email: EmailStr
     first_name: str = Field(min_length=1, max_length=255)
     last_name: Optional[str] = Field(default=None, max_length=255)
-    # REQUIRED and never defaulted. Since migration 013 email is unique PER
-    # TENANT, so `tenant_id` is what selects the identity pool. Defaulting it
-    # (to None, or to any "current" tenant) would let a caller that forgot the
-    # field create or mutate a user in the WRONG organization — a cross-tenant
-    # identity bug that reads as success. The caller must state the pool.
-    tenant_id: UUID
+    # The ORGANIZATION this person belongs to. Exactly one of `organization_id`
+    # (preferred) or `tenant_id` (deprecated alias) must be sent; both name the
+    # same `organizations.id`, and `organization_id` is authoritative when both
+    # appear with the same value. Read it through `org_id`, never directly.
+    #
+    # The rename is the point: this field used to do TWO jobs — name the
+    # organization for the membership AND select the identity pool — and
+    # conflating them is what put 21 CTM staff accounts in a tenant pool, where
+    # the magic-link lookup could not find them (see the outage in this PR).
+    # Which pool the identity lives in is now `identity_pool`'s job alone.
+    organization_id: Optional[UUID] = None
+    tenant_id: Optional[UUID] = None
+    # WHICH EMAIL-UNIQUENESS POOL the identity itself lives in.
+    #
+    #   "platform" (DEFAULT) — `users.tenant_id` is NULL. The person is org
+    #       STAFF: a colleague who signs in to MADFAM products. They belong to
+    #       the organization through their `organization_members` row, which
+    #       this endpoint still ensures, NOT through a column on `users`. This
+    #       is the correct shape for every caller today (crea-map's «Alta de
+    #       integrante» included), and it is what keeps the bare-email entry
+    #       points — magic link, password reset — able to find them.
+    #
+    #   "tenant" — `users.tenant_id` is set to the organization. Reserved for
+    #       real BaaS end-user provisioning (Phase 1): a client's own end users,
+    #       who live in that client's isolated pool and are never expected to
+    #       resolve through MADFAM's platform entry points.
+    #
+    # Defaulting to "platform" deliberately changes the behaviour of existing
+    # callers that omit the field, because their existing behaviour is the bug.
+    identity_pool: Literal["platform", "tenant"] = "platform"
     # Mark the provisioned identity as a technical/service account rather than
     # a person. Defaults to False: a roster app that says nothing is
     # provisioning a colleague, which is the overwhelmingly common case and
@@ -62,6 +109,15 @@ class ProvisionUserRequest(BaseModel):
     # operator decision (`Organization.owner_id`), not something a roster
     # «Alta de integrante» should be able to grant over the internal API.
     org_role: Literal["admin", "member", "viewer"] = "member"
+
+    @model_validator(mode="after")
+    def _exactly_one_org_field(self) -> "ProvisionUserRequest":
+        return _validate_org_alias(self)
+
+    @property
+    def org_id(self) -> UUID:
+        """The organization, from whichever of the two spellings was sent."""
+        return self.organization_id or self.tenant_id  # type: ignore[return-value]
 
 
 class ProvisionUserResponse(BaseModel):
@@ -93,9 +149,26 @@ class UserLifecycleRequest(BaseModel):
     """Request to suspend or reactivate a roster member's janua access."""
 
     email: EmailStr
-    # Required for the same reason as on ProvisionUserRequest: it selects the
-    # per-tenant email pool. Guessing would suspend another org's user.
-    tenant_id: UUID
+    # Same alias rule as ProvisionUserRequest: exactly one of these, both
+    # naming the same `organizations.id`. Read through `org_id`.
+    #
+    # There is deliberately NO `identity_pool` here. A lifecycle call names a
+    # person who already exists, and the handler resolves them across pools
+    # (platform first, then the cross-pool resolver) so it keeps working for
+    # identities provisioned under the OLD tenant-pooled default as well as
+    # new platform-pooled ones. Making the caller declare the pool would
+    # reintroduce exactly the guessing this change removes.
+    organization_id: Optional[UUID] = None
+    tenant_id: Optional[UUID] = None
+
+    @model_validator(mode="after")
+    def _exactly_one_org_field(self) -> "UserLifecycleRequest":
+        return _validate_org_alias(self)
+
+    @property
+    def org_id(self) -> UUID:
+        """The organization, from whichever of the two spellings was sent."""
+        return self.organization_id or self.tenant_id  # type: ignore[return-value]
 
 
 class UserLifecycleResponse(BaseModel):
