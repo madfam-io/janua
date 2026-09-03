@@ -55,7 +55,19 @@ class OrganizationMemberService:
                 detail="User is already a member of this organization",
             )
 
-        # Create member
+        # Create member.
+        #
+        # `invited_by` and `metadata` are NOT columns of OrganizationMember
+        # (models/__init__.py:180-192 — id, organization_id, user_id, role,
+        # status, joined_at, created_at, updated_at). Passing them to a
+        # SQLAlchemy 2.0 declarative constructor raises
+        # `TypeError: 'invited_by' is an invalid keyword argument`, so this call
+        # could never have succeeded at runtime. They are dropped rather than
+        # added as columns: adding them would be a migration, and nothing reads
+        # them — `metadata` is additionally a RESERVED declarative attribute
+        # (Base.metadata), so it could never carry that name on the model.
+        # The caller's arguments are kept in the signature so the router calling
+        # this method (organization_members.py) does not change.
         member = OrganizationMember(
             id=uuid4(),
             organization_id=organization_id,
@@ -63,8 +75,6 @@ class OrganizationMemberService:
             role=role,
             status="active",
             joined_at=datetime.utcnow(),
-            invited_by=invited_by,
-            metadata=metadata or {},
         )
 
         self.db.add(member)

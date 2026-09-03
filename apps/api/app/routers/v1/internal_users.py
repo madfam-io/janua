@@ -31,13 +31,13 @@ from datetime import datetime
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import verify_internal_api_key
+from app.models import OrganizationMember, User, UserStatus
 from app.models import Session as UserSession
-from app.models import User, UserStatus
 from app.routers.v1.oauth_clients import INTERNAL_API_KEY_PRINCIPAL
 from app.schemas.internal import (
     ProvisionUserRequest,
@@ -66,6 +66,87 @@ def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+async def _ensure_org_membership(
+    db: AsyncSession,
+    *,
+    user_id,
+    organization_id,
+    role: str,
+) -> str | None:
+    """Ensure an ACTIVE ``OrganizationMember`` row, idempotently. Returns its role.
+
+    Why this exists
+    ---------------
+    ``org_claims_service.get_user_org_claims`` counts only memberships with
+    ``status == "active"``. A user row carrying ``tenant_id`` but holding no
+    membership therefore gets a token with NO ``org_id``, and symbiosis-hcm's
+    ``TenantRolePermission`` (``core/permissions.py:125-126``) rejects a token
+    without one — so a person provisioned from the MAP could sign in to janua
+    and still get 403 at «Mi espacio (RH)». Writing ``tenant_id`` alone is not
+    provisioning access; the membership is what makes the claim resolvable.
+
+    Shape mirrors the signup path (``routers/v1/auth.py:355-364``), which is the
+    existing precedent for "tenant-bound identity ⇒ also record membership":
+    ``tenant_id`` names an ``organizations.id``.
+
+    Idempotency
+    -----------
+    Matching the endpoint's contract, a re-provision must converge on ONE
+    membership rather than stacking rows. An existing ACTIVE membership is
+    returned untouched — its role is NOT rewritten to the requested one, for
+    the same reason the user row is not re-synchronized: an operator may have
+    promoted or demoted the person in janua, and a roster retry must not
+    silently undo that. A non-active membership (pending/inactive/removed) IS
+    reactivated with the requested role: re-provisioning is the roster's
+    «re-alta», and leaving it removed would mean the endpoint reports success
+    while the person still cannot work.
+
+    Errors are NOT swallowed
+    ------------------------
+    Unlike the audit-log write below, a membership failure propagates. The
+    audit log is a side record; the membership IS the access this endpoint
+    exists to grant, and a call that returned 201 while leaving the person
+    without ``org_id`` would be exactly the silent failure this change fixes.
+    Because the write shares the handler's transaction, a raised error also
+    rolls back the user row — the caller retries and converges, rather than
+    being left with a half-provisioned identity that reports success.
+    """
+    if organization_id is None:
+        return None
+
+    result = await db.execute(
+        select(OrganizationMember).where(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == organization_id,
+        )
+    )
+    membership = result.scalars().first()
+
+    if membership is not None:
+        if membership.status == "active":
+            return membership.role or "member"
+        # Re-alta: revive the existing row rather than adding a second one.
+        membership.status = "active"
+        membership.role = role
+        membership.joined_at = datetime.utcnow()
+        membership.updated_at = datetime.utcnow()
+        await db.flush()
+        return membership.role
+
+    membership = OrganizationMember(
+        organization_id=organization_id,
+        user_id=user_id,
+        role=role,
+        status="active",
+    )
+    db.add(membership)
+    # Flush inside the caller's transaction: the membership must commit together
+    # with the user row, never as a second commit that can leave a user
+    # provisioned without the access the call promised.
+    await db.flush()
+    return role
+
+
 @router.post(
     "/provision",
     response_model=ProvisionUserResponse,
@@ -84,9 +165,19 @@ async def provision_user(
 
     Returns 201 when it created the user, 200 when one already existed.
 
-    An existing row is returned UNTOUCHED — not even the name is refreshed. This
-    is provisioning, not synchronization: the person may have edited their own
-    profile in janua, and a roster-side value must not silently overwrite that.
+    An existing USER row is returned UNTOUCHED — not even the name is refreshed.
+    This is provisioning, not synchronization: the person may have edited their
+    own profile in janua, and a roster-side value must not silently overwrite
+    that.
+
+    The ORGANIZATION MEMBERSHIP is the deliberate exception, and is reconciled on
+    both the create and the already-exists path. It is not profile data the
+    person can own — it is the access this endpoint's whole purpose is to grant,
+    and without an ACTIVE membership the resulting token carries no ``org_id``
+    (see ``_ensure_org_membership``). Reconciling it on the 200 path is also what
+    repairs the identities provisioned before this change: they already exist, so
+    the create branch would never run for them, and they would stay locked out
+    of «Mi espacio (RH)» forever.
     """
     email = _normalize_email(body.email)
 
@@ -94,6 +185,14 @@ async def provision_user(
     # TENANT, so a bare email select can match several rows across tenants.
     existing = await get_user_by_email(db, email, tenant_id=body.tenant_id)
     if existing is not None:
+        org_role = await _ensure_org_membership(
+            db,
+            user_id=existing.id,
+            organization_id=body.tenant_id,
+            role=body.org_role,
+        )
+        await db.commit()
+
         response.status_code = status.HTTP_200_OK
         return ProvisionUserResponse(
             id=str(existing.id),
@@ -106,6 +205,7 @@ async def provision_user(
             # The STORED value, not the requested one — see the schema comment:
             # an existing identity is never re-flagged by a provisioning call.
             is_service_account=bool(getattr(existing, "is_service_account", False)),
+            org_role=org_role,
         )
 
     user = User(
@@ -139,6 +239,15 @@ async def provision_user(
     _created_at = user.created_at
     _user_id = str(user.id)
 
+    # Same transaction as the user row: a person is either provisioned WITH the
+    # access this call promises, or not provisioned at all.
+    org_role = await _ensure_org_membership(
+        db,
+        user_id=user.id,
+        organization_id=body.tenant_id,
+        role=body.org_role,
+    )
+
     # Best-effort audit on the working AuditLogger hash-chain trail. We do NOT
     # use AuthService.create_audit_log: it references AuditLog columns that do
     # not exist and raises AttributeError (documented at admin.py:602-607).
@@ -157,6 +266,7 @@ async def provision_user(
                 "via": "internal.users.provision",
                 "passwordless": True,
                 "is_service_account": bool(body.is_service_account),
+                "org_role": org_role,
             },
             severity="info",
         )
@@ -170,6 +280,7 @@ async def provision_user(
         "Provisioned user via internal API",
         user_id=_user_id,
         tenant_id=str(body.tenant_id),
+        org_role=org_role,
     )
 
     return ProvisionUserResponse(
@@ -179,6 +290,7 @@ async def provision_user(
         created=True,
         created_at=user.created_at or _created_at,
         is_service_account=bool(user.is_service_account),
+        org_role=org_role,
     )
 
 
