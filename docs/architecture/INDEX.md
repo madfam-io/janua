@@ -10,6 +10,7 @@
 | [API Structure](./API_STRUCTURE.md) | FastAPI router organization and patterns |
 | [Subdomain Architecture](./SUBDOMAIN_ARCHITECTURE.md) | Multi-domain deployment strategy |
 | [Universal Keyring (ADR-002)](./ADR-002_UNIVERSAL_KEYRING.md) | Cross-project authentication design |
+| [Silent SSO Session](./SILENT_SSO_SESSION.md) | Where the browser session comes from on a magic-link login (B1-B7) |
 
 ## System Overview
 
