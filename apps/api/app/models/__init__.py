@@ -1094,6 +1094,10 @@ class Translation(Base):
 
 
 # Import enterprise models
+from app.models.app_role import (  # noqa: E402,F401
+    OrganizationMemberAppRole,
+    format_app_role,
+)
 from app.models.capability_link import (  # noqa: E402,F401
     CapabilityLink,
     CapabilityLinkUseMode,
