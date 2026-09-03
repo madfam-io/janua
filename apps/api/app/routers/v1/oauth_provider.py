@@ -46,7 +46,10 @@ from app.services.entitlements_service import (
     entitlements_to_claim,
     get_user_entitlements,
 )
-from app.services.org_claims_service import get_user_org_claims
+from app.services.org_claims_service import (
+    get_user_org_claims,
+    merge_app_roles_into_claims,
+)
 from app.services.service_principal import service_principal_claims
 
 logger = structlog.get_logger()
@@ -1673,6 +1676,19 @@ async def _handle_authorization_code_grant(
     # unambiguous org_id or none — see _get_user_org_claims.
     org_claims = await _get_user_org_claims(user, db)
 
+    # APPLICATION roles (`hcm:hr` and friends) are UNIONED onto the legacy
+    # organization-role list rather than replacing it: `roles` has been an OIDC
+    # claim for years and existing clients still read it, so nothing is removed
+    # — they gain the namespaced application roles alongside what they had.
+    # This merge must happen BEFORE the spread below, because `**org_claims`
+    # lands AFTER `"roles": entitlements["roles"]` in the dict literal: an
+    # unmerged `roles` key would silently clobber the legacy claim by ordering
+    # alone. The shared helper also pops the resolver's private transport key,
+    # so it can never reach a token.
+    org_claims = merge_app_roles_into_claims(
+        org_claims, existing_roles=entitlements["roles"]
+    )
+
     # Resolve per-client audience (falls back to global JWT_AUDIENCE)
     client_audience = client.audience or settings.JWT_AUDIENCE
 
@@ -1687,6 +1703,9 @@ async def _handle_authorization_code_grant(
             "scope": scope,
             # Galaxy membership claims
             "tier": entitlements["tier"],
+            # Legacy organization roles. When the user holds application-role
+            # grants, `**org_claims` below overrides this key with the UNION of
+            # both lists (see the merge above) — a superset, never a removal.
             "roles": entitlements["roles"],
             "sub_status": entitlements["sub_status"],
             "is_admin": entitlements["is_admin"],
@@ -1797,6 +1816,19 @@ async def _handle_refresh_token_grant(
     # unambiguous org_id or none — see _get_user_org_claims.
     org_claims = await _get_user_org_claims(user, db)
 
+    # APPLICATION roles (`hcm:hr` and friends) are UNIONED onto the legacy
+    # organization-role list rather than replacing it: `roles` has been an OIDC
+    # claim for years and existing clients still read it, so nothing is removed
+    # — they gain the namespaced application roles alongside what they had.
+    # This merge must happen BEFORE the spread below, because `**org_claims`
+    # lands AFTER `"roles": entitlements["roles"]` in the dict literal: an
+    # unmerged `roles` key would silently clobber the legacy claim by ordering
+    # alone. The shared helper also pops the resolver's private transport key,
+    # so it can never reach a token.
+    org_claims = merge_app_roles_into_claims(
+        org_claims, existing_roles=entitlements["roles"]
+    )
+
     # Resolve per-client audience (falls back to global JWT_AUDIENCE)
     client_audience = client.audience or settings.JWT_AUDIENCE
 
@@ -1811,6 +1843,9 @@ async def _handle_refresh_token_grant(
             "scope": scope,
             # Galaxy membership claims
             "tier": entitlements["tier"],
+            # Legacy organization roles. When the user holds application-role
+            # grants, `**org_claims` below overrides this key with the UNION of
+            # both lists (see the merge above) — a superset, never a removal.
             "roles": entitlements["roles"],
             "sub_status": entitlements["sub_status"],
             "is_admin": entitlements["is_admin"],
