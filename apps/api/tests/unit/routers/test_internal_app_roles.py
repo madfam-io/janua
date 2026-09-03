@@ -126,17 +126,19 @@ def _payload(org_id: str, user_id: str, app_slug: str = "hcm", role: str = "hr")
 
 
 @pytest.mark.asyncio
-async def test_grant_requires_the_internal_api_key(app_roles_env):
+async def test_grant_without_the_internal_key_header_is_422(app_roles_env):
+    """Missing header is FastAPI validation (the dependency never runs); a
+    WRONG key is 401. Same split the sibling internal routers already pin."""
     client, session_factory = app_roles_env
     org_id, user_id = await _seed_member(session_factory)
 
     response = await client.post(GRANT_URL, json=_payload(org_id, user_id))
 
-    assert response.status_code in (401, 403)
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_grant_rejects_a_wrong_internal_api_key(app_roles_env):
+async def test_grant_with_a_wrong_internal_key_is_401(app_roles_env):
     client, session_factory = app_roles_env
     org_id, user_id = await _seed_member(session_factory)
 
@@ -146,7 +148,7 @@ async def test_grant_rejects_a_wrong_internal_api_key(app_roles_env):
         headers={"X-Internal-API-Key": "not-the-key"},
     )
 
-    assert response.status_code in (401, 403)
+    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------
@@ -382,13 +384,26 @@ async def test_list_never_reports_another_organizations_grants(app_roles_env):
 
 
 @pytest.mark.asyncio
-async def test_list_requires_the_internal_api_key(app_roles_env):
+async def test_list_without_the_internal_key_header_is_422(app_roles_env):
     client, session_factory = app_roles_env
     org_id, user_id = await _seed_member(session_factory)
 
     response = await client.get(f"/api/v1/internal/app-roles/{org_id}/{user_id}")
 
-    assert response.status_code in (401, 403)
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_list_with_a_wrong_internal_key_is_401(app_roles_env):
+    client, session_factory = app_roles_env
+    org_id, user_id = await _seed_member(session_factory)
+
+    response = await client.get(
+        f"/api/v1/internal/app-roles/{org_id}/{user_id}",
+        headers={"X-Internal-API-Key": "not-the-key"},
+    )
+
+    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------

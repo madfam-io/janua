@@ -98,7 +98,7 @@ def _db(membership_rows, grants_by_member_id=None):
         # Which membership did the resolver bind? Read it off the statement's
         # bound parameters rather than assuming, so the assertion is about what
         # the query really asked.
-        bound = [v for v in stmt.compile().params.values()]
+        bound = list(stmt.compile().params.values())
         matched = []
         for member_id, grants in grants_by_member_id.items():
             if member_id in bound:

@@ -106,6 +106,13 @@ class OrganizationMemberAppRole(Base):
         # person being granted the same role again later, and the re-grant has
         # to be a new row (history is the point) rather than an UPDATE that
         # rewrites when and by whom it was first given.
+        # `sqlite_where` mirrors `postgresql_where` on purpose. SQLite supports
+        # partial indexes, but SQLAlchemy emits the predicate only for the
+        # dialect it is named for — so with the Postgres clause alone the test
+        # suite (SQLite) built an UNCONDITIONAL unique index and refused to
+        # re-grant a role that had been revoked, which production would have
+        # allowed. A test bed that disagrees with prod about an authorization
+        # constraint is worse than no test, so both dialects carry the predicate.
         sa.Index(
             "uq_org_member_app_roles_live",
             "organization_member_id",
@@ -113,6 +120,7 @@ class OrganizationMemberAppRole(Base):
             "role",
             unique=True,
             postgresql_where=sa.text("revoked_at IS NULL"),
+            sqlite_where=sa.text("revoked_at IS NULL"),
         ),
     )
 
