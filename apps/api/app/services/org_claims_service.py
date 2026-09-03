@@ -35,6 +35,69 @@ Claim contract
     resolved primary org, under a namespace that says *which* authority issued
     them. **This is not, and must never be read as, an application role.**
 
+``roles`` (application roles)
+    ``"<app>:<role>"`` strings such as ``hcm:hr``, granted explicitly per
+    organization member (``organization_member_app_roles``, migration 016).
+    Emitted ONLY for the resolved primary org's own membership, and omitted
+    entirely when there are no live grants. See the next section.
+
+Application roles, and why they are the other half of the namespacing fix
+-------------------------------------------------------------------------
+
+Namespacing ``madfam_org_roles`` was right and it left a hole. symbiosis-hcm
+authorizes on application roles read from ``roles`` — ``hcm:hr``, ``hcm:admin``,
+``employee`` (``symbiosis-hcm/apps/api/core/permissions.py``) — and nothing in
+janua emitted a single ``hcm:*`` string. So CTM's Dirección could hold a valid
+membership, receive a token with a correct ``org_id``, and still be refused
+every HR feature: membership answered *which tenant*, and nothing answered
+*which product authority*.
+
+The claim is populated from EXPLICIT GRANTS ONLY. There is no derivation from
+``member.role``, no default set, and no mapping table that turns an org
+``admin`` into an ``hcm:admin``. Any such rule would rebuild, by the back door,
+precisely the org-role-to-payroll bridge the namespacing exists to prevent — an
+account admin would gain HR authority as a side effect of being an account
+admin. If someone is to read payroll, an operator granted it, and there is a row
+saying who and when.
+
+Three scoping rules the resolver holds:
+
+* **Only the resolved primary org's membership contributes.** Grants are keyed
+  by ``organization_member_id``, so the query starts from ONE membership row and
+  structurally cannot reach another org's grants. A multi-org user with no
+  unambiguous primary org gets ``orgs`` and no ``roles``, for the same reason
+  they get no ``org_id``.
+* **Nothing is implicit for service accounts.** A service principal receives
+  application roles on exactly the same terms as a person: those explicitly
+  granted to its membership, and no others.
+* **Revocation reaches a live session at refresh.** The query filters
+  ``revoked_at IS NULL`` and every mint path re-resolves, so a revoked grant
+  stops feeding the claim on the next rotation — the same property the
+  ``status == "active"`` membership filter gives.
+
+HOW THE CLAIM IS MERGED, and why the resolver does not return a ``roles`` key
+itself. The OIDC path ALREADY emits a ``roles`` claim of its own — organization
+roles, for clients that have read it for years, and it contains the bare string
+``"admin"`` (``oauth_provider._get_user_entitlements``). In that handler
+``**org_claims`` is spread AFTER ``"roles": entitlements["roles"]``, so a
+``roles`` key coming out of this resolver would silently CLOBBER the legacy
+claim — breaking existing consumers through nothing but dict ordering.
+
+So the resolver returns application roles under the private key
+``APP_ROLES_KEY``, and each minting seam merges them into ``roles`` explicitly:
+
+* Session tokens (magic link, password, MFA, passkey) stamp application roles
+  as ``roles`` and nothing else. A session token still carries NO organization
+  role under that key — the invariant test in
+  ``tests/unit/services/test_org_claims_service.py`` is unchanged and still
+  passes, because what lands there is ``hcm:hr``, never ``admin``.
+* The OIDC path UNIONS them onto the legacy list, so existing clients keep
+  every string they read today and gain the namespaced application roles.
+
+``merge_app_roles_into_claims`` below is that merge, written once so the two
+seams cannot drift. Callers never see ``APP_ROLES_KEY`` in a token: the merge
+pops it.
+
 Why ``madfam_org_roles`` and not ``roles``
 -----------------------------------------
 
@@ -68,6 +131,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Organization, OrganizationMember, User
+from app.models.app_role import OrganizationMemberAppRole, format_app_role
 
 logger = structlog.get_logger()
 
@@ -75,6 +139,17 @@ logger = structlog.get_logger()
 #: purpose: see the module docstring. Do not rename without a coordinated
 #: change in every consumer — the name IS the contract about the authority.
 ORG_ROLES_CLAIM = "madfam_org_roles"
+
+#: The claim key application roles ultimately ride under. This is the name
+#: symbiosis-hcm reads (`core/permissions.py`) and it is NOT ours to choose.
+APP_ROLES_CLAIM = "roles"
+
+#: PRIVATE transport key. `get_user_org_claims` returns resolved application
+#: roles under this name, never under `roles` — the OIDC handler spreads the
+#: claims dict AFTER its own `"roles": entitlements["roles"]`, so a `roles` key
+#: here would clobber the legacy organization-role claim by dict ordering
+#: alone. `merge_app_roles_into_claims` pops it, so it never reaches a token.
+APP_ROLES_KEY = "_app_roles"
 
 
 async def get_user_org_claims(user: User, db: AsyncSession) -> dict[str, Any]:
@@ -148,7 +223,105 @@ async def get_user_org_claims(user: User, db: AsyncSession) -> dict[str, Any]:
             }
         )
 
+        # Application roles ride ONLY with an unambiguous primary org. Without
+        # one there is no single membership to read grants from, and picking
+        # any of several would hand one tenant's HR authority to a session the
+        # user opened for another.
+        if primary_member is not None:
+            app_roles = await _get_member_app_roles(primary_member, db)
+            if app_roles:
+                claims[APP_ROLES_KEY] = app_roles
+
     return claims
+
+
+async def _get_member_app_roles(member: Any, db: AsyncSession) -> list[str]:
+    """Live application-role grants for ONE membership, as ``"<app>:<role>"``.
+
+    Keyed by ``organization_member_id``, so this cannot reach another
+    organization's grants even if asked to — the cross-org leak is prevented by
+    the shape of the query, not by a filter someone could drop.
+
+    Degrades to ``[]`` on any read failure, matching the fail-closed rule the
+    rest of this module holds: an unreachable grants table (a database that has
+    not yet had migration 016 applied by hand, per the deploy note) yields a
+    token with no application roles — today's behaviour exactly — never a token
+    with guessed ones, and never a failed login.
+    """
+    member_id = getattr(member, "id", None)
+    if member_id is None:
+        return []
+
+    try:
+        result = await db.execute(
+            select(OrganizationMemberAppRole)
+            .where(
+                OrganizationMemberAppRole.organization_member_id == member_id,
+                # Retired grants stop contributing on the very next mint, which
+                # is what makes a revocation reach a live session at refresh.
+                OrganizationMemberAppRole.revoked_at.is_(None),
+            )
+            .order_by(
+                OrganizationMemberAppRole.app,
+                OrganizationMemberAppRole.role,
+            )
+        )
+        grants = result.scalars().all()
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch application roles, omitting from token",
+            member_id=str(member_id),
+            error=str(e),
+        )
+        try:
+            await db.rollback()
+        except Exception:  # pragma: no cover - defensive; rollback may itself fail
+            pass
+        return []
+
+    # Deduplicated and sorted so the claim is stable across mints: a token whose
+    # role list reorders between refreshes is a diff that means nothing and that
+    # someone will eventually try to debug.
+    return sorted({format_app_role(g.app, g.role) for g in grants if g.app and g.role})
+
+
+def merge_app_roles_into_claims(
+    claims: dict[str, Any],
+    *,
+    existing_roles: list[str] | None = None,
+) -> dict[str, Any]:
+    """Fold resolved application roles into the public ``roles`` claim.
+
+    Written once and used by BOTH minting seams so they cannot drift about what
+    ``roles`` means:
+
+    * Session tokens pass no ``existing_roles``: what lands under ``roles`` is
+      application roles alone. A session token still carries no ORGANIZATION
+      role under that key — the strings are ``hcm:hr``, never ``admin`` — so
+      the invariant that motivated the ``madfam_org_roles`` namespace holds
+      unchanged.
+    * The OIDC path passes its legacy organization-role list, and the result is
+      the UNION: every string existing clients read today, plus the namespaced
+      application roles. Nothing is removed from an established claim.
+
+    Always pops the private transport key, so ``APP_ROLES_KEY`` can never reach
+    a token. Returns a NEW dict; the input is not mutated.
+    """
+    merged = dict(claims)
+    app_roles = merged.pop(APP_ROLES_KEY, None) or []
+
+    if not app_roles and not existing_roles:
+        # Nothing to say. Emit no `roles` key at all rather than an empty list,
+        # so a user with no grants gets a token shaped exactly as before.
+        return merged
+
+    combined = list(existing_roles or [])
+    for role in app_roles:
+        if role not in combined:
+            combined.append(role)
+
+    merged[APP_ROLES_CLAIM] = combined
+    return merged
 
 
 async def get_user_org_claims_safe(user: User, db: AsyncSession) -> dict[str, Any]:
@@ -169,4 +342,11 @@ async def get_user_org_claims_safe(user: User, db: AsyncSession) -> dict[str, An
         return {}
 
 
-__all__ = ["ORG_ROLES_CLAIM", "get_user_org_claims", "get_user_org_claims_safe"]
+__all__ = [
+    "APP_ROLES_CLAIM",
+    "APP_ROLES_KEY",
+    "ORG_ROLES_CLAIM",
+    "get_user_org_claims",
+    "get_user_org_claims_safe",
+    "merge_app_roles_into_claims",
+]

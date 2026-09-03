@@ -55,7 +55,8 @@ alguien deja de trabajar— o abierta — alguien gana un tenant).
 | `tenant_id` | string (UUID) | igual que `org_id` | alias de `org_id` |
 | `org_slug` | string | igual que `org_id` | slug del tenant primario |
 | `madfam_org_roles` | lista de strings | igual que `org_id` | rol de organización **en esa org** |
-| `is_service_account` | `true` | **solo** si la identidad es técnica | ver §5 |
+| `roles` | lista de strings | **solo** con concesiones vivas | roles de **aplicación** (`hcm:hr`), ver §5 |
+| `is_service_account` | `true` | **solo** si la identidad es técnica | ver §6 |
 
 **«Sin ambigüedad»** significa: exactamente una membresía activa, o
 `user.tenant_id` nombra una de ellas. Con varias organizaciones y sin ancla, se
@@ -97,10 +98,13 @@ Ejemplo (token de sesión de un integrante de CTM):
 
 ### Para quien consume
 
-Si tu servicio necesita roles de **aplicación**, pídelos a tu propia autoridad.
 `madfam_org_roles` describe autoridad sobre la **cuenta de janua** y no debe
-autorizar nada dentro de un producto. symbiosis-hcm ya hace exactamente esto
-(`apps/api/core/roles.py`).
+autorizar nada dentro de un producto. Los roles de **aplicación** —los que sí
+autorizan dentro de un producto— viajan bajo `roles` y se conceden
+explícitamente por organización: ver §5. La regla que no cambia es que el
+**vocabulario** de roles lo sigue definiendo el servidor de recursos
+(`symbiosis-hcm/apps/api/core/roles.py`); janua sólo registra **a quién** se le
+concedió **qué**, por quién y cuándo.
 
 ---
 
@@ -196,7 +200,111 @@ tener una.
 
 ---
 
-## 5. Pasos de operador
+## 5. Roles de aplicación (`hcm:hr` y compañía)
+
+### El hueco que quedaba
+
+Poner espacio de nombres a `madfam_org_roles` (§2) era lo correcto y **dejó la
+otra mitad sin construir**. symbiosis-hcm autoriza con roles de **aplicación**
+que lee del claim `roles` —`hcm:hr`, `hcm:admin`, `employee`
+(`apps/api/core/permissions.py`)— y **janua no emitía ni una sola cadena
+`hcm:*`**. Es decir: la Dirección de CTM podía tener una membresía válida,
+recibir un token con `org_id` correcto (§4 y janua#591)… y aun así ser rechazada
+en todas las funciones de RH. La membresía respondía *cuál inquilino*; nada
+respondía *cuál autoridad dentro del producto*.
+
+### La forma
+
+Una concesión = una fila en `organization_member_app_roles` (migración `016`),
+colgada de la **membresía**, no del usuario:
+
+| Columna | Para qué |
+|---|---|
+| `organization_member_id` | la membresía que la porta (FK, `ON DELETE CASCADE`) |
+| `app` · `role` | **opacos** para janua: `hcm` · `hr` |
+| `granted_by` · `granted_at` | quién la concedió y cuándo |
+| `revoked_at` · `revoked_by` | quién la retiró y cuándo |
+
+El resolutor las convierte en `"<app>:<role>"` y las sella bajo `roles`.
+
+**Por qué una tabla y no un JSONB en la membresía.** Esto concede autoridad
+sobre **nómina y expedientes laborales**, así que los dos datos que un auditor
+pide —quién la dio y cuándo se quitó— tienen que sobrevivir a la concesión. Una
+lista JSONB guarda sólo el estado actual: revocar es una reescritura en sitio
+que **borra la evidencia** de que la concesión existió. Las filas se retiran con
+`revoked_at`, nunca se borran, igual que `capability_links` (§ADR-004) y por la
+misma razón por la que `internal_users` no tiene endpoint de purga.
+
+**Por qué cuelga de la membresía y no del usuario.** Una concesión no significa
+nada fuera de la membresía que la porta: si alguien sale de la organización, su
+autoridad de RH se va con el inquilino en vez de quedar como fila huérfana que
+un futuro re-alta reanimaría en silencio. Además hace que la fuga entre
+organizaciones sea **estructuralmente difícil de escribir**: el resolutor parte
+de UNA fila de membresía y no puede alcanzar las concesiones de otra org.
+
+### Las tres reglas de alcance
+
+- **Sólo la org primaria resuelta aporta.** Sin `org_id` inequívoco no hay
+  `roles` tampoco: elegir una de varias membresías entregaría la autoridad de RH
+  de un inquilino a una sesión que la persona abrió para otro.
+- **Nada es implícito.** No hay derivación desde `member.role`, ni conjunto por
+  defecto, ni tabla que convierta un `admin` de organización en `hcm:admin`.
+  Cualquiera de esas reconstruiría **por la puerta de atrás** el puente
+  rol-de-cuenta → nómina que el espacio de nombres existe para impedir. Una
+  cuenta de servicio se trata igual que una persona: lo que se le concedió
+  explícitamente, y nada más.
+- **La revocación llega al refresh.** El resolutor filtra `revoked_at IS NULL` y
+  todos los caminos de emisión re-resuelven.
+
+### La trampa del `roles` heredado
+
+El camino OIDC **ya emitía** su propio `roles` (roles de organización, para
+clientes que lo leen desde hace años, y que contiene la cadena `"admin"`). En
+ese handler `**org_claims` se expande **después** de `"roles": entitlements[...]`,
+así que una clave `roles` saliendo del resolutor **habría pisado el claim
+heredado** por puro orden de diccionario. Por eso el resolutor devuelve la clave
+privada `_app_roles` y `merge_app_roles_into_claims` la integra una sola vez
+para ambos caminos:
+
+- **Tokens de sesión**: sólo roles de aplicación. Siguen sin llevar ningún rol de
+  organización bajo `roles` — lo que aterriza ahí es `hcm:hr`, jamás `admin`.
+- **OIDC**: la **unión** con la lista heredada. Nadie pierde una cadena que ya leía.
+
+Sin concesiones **no se emite la clave `roles` en absoluto**, así que el token de
+quien no tiene nada concedido conserva exactamente su forma anterior.
+
+### Superficie de administración
+
+Misma autenticación que el resto de los endpoints internos
+(`X-Internal-API-Key`), y misma costura reemplazable hacia service tokens.
+
+| Endpoint | Qué hace |
+|---|---|
+| `POST /api/v1/internal/app-roles/grant` | concede `(org, user, app, role)`. **201** si la creó, **200** si ya existía |
+| `POST /api/v1/internal/app-roles/revoke` | la retira. `changed: false` si no había nada que retirar |
+| `GET /api/v1/internal/app-roles/{organization_id}/{user_id}` | `claim_values` vivos + historial completo, incluidas las revocadas |
+
+- **Idempotente en ambos sentidos.** Un `grant` repetido devuelve el
+  `granted_at` **original**: la respuesta a «¿cuándo se le dio acceso a nómina?»
+  es la primera vez, no el último reintento. Volver a conceder tras revocar crea
+  una fila **nueva** (el historial es el punto).
+- **404 si no hay membresía activa** en esa organización — el mismo filtro que
+  aplica el resolutor, así que una concesión que nunca alimentaría un token se
+  señala en vez de aceptarse en silencio. Un solo mensaje para «no existe la
+  org» y «no es miembro», para que la superficie no sirva de sonda.
+- **Se valida la forma, no el significado.** `app` y `role` son opacos, pero se
+  rechaza un separador dentro de un componente: el claim es `f"{app}:{role}"`, y
+  un `app` igual a `"hcm:hr"` emitiría `"hcm:hr:x"` y podría **fabricar** un rol
+  que el servidor de recursos sí reconoce.
+- **No hay endpoint de borrado**, y no debe haberlo.
+
+> **Alcance:** estos roles **no** gobiernan la puerta del ERP de Crea. Una
+> auditoría de SSO resolvió que ese control vive en el `WorkspaceMember` de
+> nauta. `hcm:*` autoriza dentro de symbiosis-hcm y nada más.
+
+---
+
+## 6. Pasos de operador
 
 1. **Aplicar la migración `015_user_is_service_acct`** deliberadamente contra la
    base de datos objetivo. `promote` **no corre migraciones** en este
@@ -214,10 +322,28 @@ tener una.
    organización.
 5. **Marcar el login técnico** de crea-map como service principal, cuando ese
    camino se ejecute (ver el handoff del PR).
+6. **Aplicar la migración `016_org_member_app_roles` A MANO** antes de promover
+   el cambio de roles de aplicación (§5). `promote` **no corre migraciones**: el
+   SQL exacto va en el cuerpo del PR. Es aditiva (una tabla nueva y dos índices;
+   nada se altera ni se borra) y re-entrante. Hasta aplicarla, el resolutor
+   degrada **fail-closed** —no sella ningún rol de aplicación, que es el
+   comportamiento de hoy— y los endpoints de concesión fallan ruidosamente
+   contra la relación ausente.
+7. **Conceder los roles de aplicación** que hagan falta, ya con la tabla puesta:
+   para la Dirección de CTM, `hcm:hr` en la organización de Crea. Sin este paso
+   la tabla está vacía y **nada cambia para nadie** — que es justamente lo que
+   hace seguro promover el código antes de decidir las concesiones.
+8. **Verificar** en un token real que `roles` trae `hcm:hr` y que
+   `madfam_org_roles` sigue trayendo el rol de organización por separado.
 
-## 6. Referencias
+## 7. Referencias
 
 - `apps/api/app/services/org_claims_service.py` — el resolvedor, fuente única
+- `apps/api/app/models/app_role.py` — la tabla de concesiones (§5)
+- `apps/api/app/routers/v1/internal_app_roles.py` — conceder / revocar / listar
+- `apps/api/alembic/versions/016_org_member_app_roles.py` — la migración de §5
+- `apps/api/tests/unit/services/test_app_role_claims.py`
+- `apps/api/tests/unit/routers/test_internal_app_roles.py`
 - `apps/api/app/services/service_principal.py` — el predicado y el claim
 - `apps/api/alembic/versions/015_user_is_service_account.py` — la migración
 - `apps/api/tests/unit/services/test_org_claims_service.py`

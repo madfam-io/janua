@@ -479,10 +479,20 @@ class AuthService:
         # Ambiguity is silence: a user in several orgs with no tenant pin gets
         # `orgs` and no `org_id`, so no consumer can guess a tenant. Resolution
         # never blocks login — failure stamps no org claims at all.
-        from app.services.org_claims_service import get_user_org_claims_safe
+        # APPLICATION roles (`hcm:hr` and friends) ride under `roles`, folded in
+        # by the shared merge so this seam and the OIDC one cannot drift. A
+        # session token passes NO existing roles, so what lands under `roles` is
+        # application roles alone — never an organization role, which is exactly
+        # the invariant the namespace above exists to protect. No grants ⇒ no
+        # `roles` key at all, so a token's shape is unchanged for everyone who
+        # has not been granted anything.
+        from app.services.org_claims_service import (
+            get_user_org_claims_safe,
+            merge_app_roles_into_claims,
+        )
         from app.services.service_principal import service_principal_claims
 
-        org_claims = await get_user_org_claims_safe(user, db)
+        org_claims = merge_app_roles_into_claims(await get_user_org_claims_safe(user, db))
 
         # Create tokens
         access_token, access_jti, access_expires = AuthService.create_access_token(
@@ -654,10 +664,16 @@ class AuthService:
         # member whose status stops being `active` loses org_id (and the
         # namespaced role) on the next rotation, exactly as the OIDC refresh
         # grant behaves. Same fail-closed degradation as create_session.
-        from app.services.org_claims_service import get_user_org_claims_safe
+        # Application roles are re-resolved here for the same reason: a grant
+        # revoked between mint and refresh stops feeding `roles` on the next
+        # rotation, so revoking HR authority reaches a live session.
+        from app.services.org_claims_service import (
+            get_user_org_claims_safe,
+            merge_app_roles_into_claims,
+        )
         from app.services.service_principal import service_principal_claims
 
-        org_claims = await get_user_org_claims_safe(user, db)
+        org_claims = merge_app_roles_into_claims(await get_user_org_claims_safe(user, db))
 
         # Create new tokens
         access_token, access_jti, access_expires = AuthService.create_access_token(

@@ -1130,6 +1130,15 @@ try:
 except Exception as e:
     logger.warning(f"Internal capability links router not available: {e}")
 
+# Internal application roles (per-org `hcm:*` grants that reach the `roles` claim)
+try:
+    from app.routers.v1 import internal_app_roles as internal_app_roles_v1
+
+    app.include_router(internal_app_roles_v1.router, prefix="/api/v1/internal")
+    logger.info("Registered internal app roles router successfully")
+except Exception as e:
+    logger.warning(f"Internal app roles router not available: {e}")
+
 # Internal role/tier sync router (Dhanam → Janua hub-and-spoke)
 try:
     from app.routers.internal import roles as internal_roles

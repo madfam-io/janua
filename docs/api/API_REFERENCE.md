@@ -765,6 +765,114 @@ const isValid = verifyWebhookSignature(
 
 ---
 
+## Internal API — Application Roles
+
+Service-to-service surface for sibling MADFAM apps. Authenticated with the
+`X-Internal-API-Key` header (**not** a user JWT), the same trust boundary as the
+other `/api/v1/internal/*` endpoints. A missing header is `422`; a wrong key is
+`401`.
+
+An **application role** is authority *inside a product* — `hcm:hr`, `hcm:admin` —
+granted to one person in one organization. It is resolved into the token's
+`roles` claim as `"<app>:<role>"`. It is deliberately NOT an organization role
+(`owner`/`admin`/`member`), which describes authority over the janua account and
+rides under `madfam_org_roles`. See
+`docs/architecture/CLAIMS_DE_ORGANIZACION_Y_SERVICE_PRINCIPALS.md` §5.
+
+`app` and `role` are **opaque to janua**: there is no enum of valid apps and no
+vocabulary of role names, so a new role in a consuming product needs no janua
+deploy. Janua validates shape only — no blank strings, no whitespace, and no `:`
+inside a component (the claim is `f"{app}:{role}"`, so a separator inside one
+could fabricate a role string the resource server matches).
+
+> Requires migration `016_org_member_app_roles`. `promote` runs no migrations —
+> it must be applied by hand first.
+
+### Grant an Application Role
+
+```http
+POST /api/v1/internal/app-roles/grant
+```
+
+**Request Body:**
+```json
+{
+  "organization_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+  "user_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+  "app": "hcm",
+  "role": "hr"
+}
+```
+
+**Response** — `201` when this call created the grant, `200` when a live one
+already existed (idempotent; the original `granted_at` is preserved):
+```json
+{
+  "id": "9f8e7d6c-5b4a-4392-8180-7f6e5d4c3b2a",
+  "organization_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+  "user_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+  "app": "hcm",
+  "role": "hr",
+  "claim_value": "hcm:hr",
+  "granted_at": "2026-09-03T12:00:00Z",
+  "revoked_at": null,
+  "changed": true
+}
+```
+
+`404` when the user has no **active** membership in that organization — the same
+filter the claims resolver applies, so a grant that could never feed a token is
+surfaced rather than silently accepted.
+
+### Revoke an Application Role
+
+```http
+POST /api/v1/internal/app-roles/revoke
+```
+
+Same request body as grant. Always `200` when the membership exists; `changed`
+reports whether this call was the one that revoked it. Revoking a role that was
+never granted is success with `changed: false`, not an error.
+
+The row is **retired, never deleted** (`revoked_at` is stamped), so the grant
+history stays auditable. A later re-grant creates a NEW row. The revocation
+reaches a live session at its next token refresh.
+
+### List Application Roles
+
+```http
+GET /api/v1/internal/app-roles/{organization_id}/{user_id}
+```
+
+**Response:**
+```json
+{
+  "organization_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+  "user_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+  "claim_values": ["hcm:hr"],
+  "grants": [
+    {
+      "id": "9f8e7d6c-5b4a-4392-8180-7f6e5d4c3b2a",
+      "app": "hcm",
+      "role": "hr",
+      "claim_value": "hcm:hr",
+      "granted_by": "internal-api-key",
+      "granted_at": "2026-09-03T12:00:00Z",
+      "revoked_at": null,
+      "revoked_by": null
+    }
+  ]
+}
+```
+
+`claim_values` is the resolved **live** set — exactly what this person's next
+token carries under `roles` — so an operator can answer "why can they not see
+HR?" without decoding a JWT. `grants` includes revoked rows, because who removed
+an authority and when is the question the table exists to answer. Scoped to one
+membership, so it never reports another organization's grants.
+
+---
+
 ## Status Codes
 
 | Status | Description |

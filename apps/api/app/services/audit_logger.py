@@ -100,6 +100,15 @@ class AuditEventType(str, Enum):
     ENTITLEMENT_GRANT = "entitlement.grant"
     ENTITLEMENT_REVOKE = "entitlement.revoke"
 
+    # Application-role events. Grant/revoke of a per-organization-member
+    # application role (`hcm:hr` and friends) via the internal app-roles API.
+    # Distinct from ROLE_ASSIGN/ROLE_UNASSIGN, which are janua's own RBAC:
+    # these grant authority INSIDE ANOTHER PRODUCT — payroll and labour files
+    # in symbiosis-hcm's case — so they get their own event names rather than
+    # being indistinguishable from an account-role change in the trail.
+    APP_ROLE_GRANT = "app_role.grant"
+    APP_ROLE_REVOKE = "app_role.revoke"
+
     # Compliance events - GDPR
     GDPR_CONSENT_GIVEN = "gdpr.consent_given"
     GDPR_CONSENT_WITHDRAWN = "gdpr.consent_withdrawn"
