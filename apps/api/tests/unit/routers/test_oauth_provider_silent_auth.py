@@ -164,7 +164,12 @@ class TestAuthorizeGetSilentAuth:
         assert resp.status_code == 302
         assert "error=interaction_required" in resp.headers["location"]
 
-    async def test_consent_missing_emits_consent_required(self, base_kwargs):
+    async def test_first_party_without_consent_row_is_preconsented(self, base_kwargs):
+        """CHANGED BY B6. This test previously asserted `consent_required` for a
+        first-party client with no consent row. That was the bug: `prompt=none`
+        cannot render a consent screen, so a MADFAM surface asking a person to
+        authorize MADFAM to MADFAM could only ever fail the silent hop. A client
+        trusted enough to skip the consent UI silently is pre-consented."""
         client = _client()
         user = SimpleNamespace(
             id=uuid4(),
@@ -194,13 +199,20 @@ class TestAuthorizeGetSilentAuth:
                 AsyncMock(return_value=False),
             ),
             patch(
+                "app.routers.v1.oauth_provider._store_auth_code",
+                AsyncMock(),
+            ),
+            patch(
                 "app.routers.v1.oauth_provider.settings",
                 MagicMock(REQUIRE_EMAIL_VERIFICATION=False),
             ),
         ):
+            base_kwargs["db"].commit = AsyncMock()
             resp = await authorize_get(**base_kwargs)
         assert resp.status_code == 302
-        assert "error=consent_required" in resp.headers["location"]
+        loc = resp.headers["location"]
+        assert "error=consent_required" not in loc
+        assert "code=" in loc
 
     async def test_session_and_consent_present_issues_code(self, base_kwargs):
         """Happy path — silent auth succeeds when both session + consent exist."""

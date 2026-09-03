@@ -295,6 +295,42 @@ _get_user_org_claims = get_user_org_claims
 # ============================================================================
 
 
+def _verify_own_access_token(token: str) -> Optional[dict]:
+    """Verify an access token Janua itself minted, tolerating any audience it mints.
+
+    `jwt_manager.verify_token` validates against the single platform audience
+    (`JWT_AUDIENCE`), which is right for a resource server deciding which
+    tokens to accept. Here Janua is the ISSUER reading its own session, and it
+    mints more than one audience: a magic-link session carries the audience of
+    the product the link forwards to (`crea-map`, `nauta-portal`, ...) — see
+    `_session_audience_for_redirect` in routers/v1/auth.py. Rejecting those
+    would mean the session cookie written on a magic-link login (B1) is
+    invisible to `/authorize`, so `prompt=none` would answer `login_required`
+    for every product session with no error anywhere in the happy path.
+
+    This mirrors the tolerance `AuthService.verify_token`
+    (services/auth_service.py) already has, adapted to how `jwt_manager`
+    reports failure: it SWALLOWS `InvalidTokenError` — of which
+    `InvalidAudienceError` is a subclass — and returns None rather than
+    raising, so the retry is driven by a None result, not by an except clause.
+    The second pass turns off ONLY the audience check; signature, issuer,
+    expiry and token type stay enforced both times, and a token with no usable
+    `aud` claim is still refused, exactly as AuthService does.
+    """
+    payload = jwt_manager.verify_token(token, token_type="access")
+    if payload:
+        return payload
+
+    payload = jwt_manager.verify_token(token, token_type="access", verify_audience=False)
+    if not payload:
+        return None
+    aud = payload.get("aud")
+    if not isinstance(aud, str) or not aud:
+        logger.warning("Session token carries no usable audience claim")
+        return None
+    return payload
+
+
 async def get_user_from_cookie_or_header(
     request: Request,
     db: AsyncSession,
@@ -305,14 +341,16 @@ async def get_user_from_cookie_or_header(
     2. janua_access_token cookie (browser-based OAuth flow)
 
     This enables the OAuth authorize endpoint to work with browser sessions
-    after the user logs in via the login form.
+    after the user logs in via the login form, or after a magic link (B1).
+    Both paths accept any audience Janua minted — see
+    `_verify_own_access_token`.
     """
     # First, try to get user from Authorization header via dependency
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
         try:
-            payload = jwt_manager.verify_token(token, token_type="access")
+            payload = _verify_own_access_token(token)
             if payload and payload.get("sub"):
                 result = await db.execute(select(User).where(User.id == payload.get("sub")))
                 user = result.scalar_one_or_none()
@@ -325,7 +363,7 @@ async def get_user_from_cookie_or_header(
     access_token = request.cookies.get("janua_access_token")
     if access_token:
         try:
-            payload = jwt_manager.verify_token(access_token, token_type="access")
+            payload = _verify_own_access_token(access_token)
             if payload and payload.get("sub"):
                 result = await db.execute(select(User).where(User.id == payload.get("sub")))
                 user = result.scalar_one_or_none()
@@ -723,6 +761,25 @@ def _is_silent_auth_allowed(client: OAuthClient) -> bool:
     return False
 
 
+def _is_first_party_preconsented(client: OAuthClient) -> bool:
+    """First-party clients do not need a visible consent screen (B6).
+
+    Consent exists so a person can refuse a THIRD party access to their Janua
+    account. `selva-office*`, `madfam-*`, and any client an operator has
+    explicitly marked with `madfam:silent_auth` are surfaces of MADFAM itself:
+    asking someone to authorize MADFAM to MADFAM communicates nothing and, on
+    the silent path, is not even askable — `prompt=none` cannot render a
+    screen, so a missing consent row turns into `consent_required` and the
+    silent hop fails for a client that was never going to be refused.
+
+    Deliberately the SAME predicate as `_is_silent_auth_allowed`, not a looser
+    one: exactly the clients trusted to skip the consent UI silently are the
+    clients treated as pre-consented, so widening one can never quietly widen
+    the other. A third-party client is unaffected and still sees the screen.
+    """
+    return _is_silent_auth_allowed(client)
+
+
 def _redirect_with_oauth_error(
     redirect_uri: str,
     error: str,
@@ -957,9 +1014,28 @@ async def authorize_get(
     requested_scopes = ConsentService.parse_scopes(scope)
     has_consent = await ConsentService.has_consent(db, current_user.id, client_id, requested_scopes)
 
+    # B6: first-party surfaces are pre-consented. Without this, the silent path
+    # answers consent_required for a client nobody would have been asked about,
+    # and the interactive path shows "MADFAM would like access to MADFAM".
+    if not has_consent and _is_first_party_preconsented(client):
+        logger.info(
+            "First-party client pre-consented — skipping consent screen",
+            client_id=client_id,
+            client_name=client.name,
+            user_id=str(current_user.id),
+        )
+        has_consent = True
+
     if not has_consent:
         # OIDC prompt=none: never show an interactive consent screen. If the
         # user hasn't pre-consented, signal consent_required to the caller.
+        #
+        # Since B6 this branch is unreachable on the silent path by
+        # construction: `silent_auth` already required
+        # `_is_silent_auth_allowed(client)`, and B6 pre-consents exactly those
+        # clients. It stays as defense in depth — if the two predicates ever
+        # diverge, the spec-correct answer is still emitted rather than a
+        # consent screen a silent caller cannot render.
         if silent_auth:
             logger.info(
                 "prompt=none but consent missing — emitting consent_required",
