@@ -18,13 +18,15 @@
   ],
   "recorded_revision": "011_invitation_columns",
   "schema_revision": "016_org_member_app_roles",
-  "verified_at": "2026-09-03",
-  "verified_by": "operator (read-only measurement, janua-api pod)",
+  "verified_at": "2026-09-04",
+  "verified_by": "Dirección Tecnológica (read-only measurement, postgres pod: alembic_version=011, capability_links absent, organization_member_app_roles present)",
   "notes": [
     "012, 013, 015 and 016 were applied BY HAND and never stamped.",
-    "014 (capability_links) was applied via generated SQL by the operator's bootstrap,",
-    "deliberately without touching alembic_version.",
-    "Convergence has NOT been performed yet: run scripts/alembic_converge.py --stamp,",
-    "then set recorded_revision to the value it reports and refresh verified_at."
+    "014 (capability_links) is NOT applied in production as of 2026-09-04 08:25 CDMX",
+    "(`capability_links` does not exist); it will be applied via the operator's bootstrap",
+    "(step janua-014, generated SQL) deliberately without touching alembic_version.",
+    "Convergence has NOT been performed yet: after 014 exists, run",
+    "scripts/alembic_converge.py --stamp, then set recorded_revision to the value it",
+    "reports and refresh verified_at."
   ]
 }
