@@ -595,7 +595,14 @@ class TestTokenEndpointValidation:
         assert claims["aud"] == "madfam-ecosystem"
         assert claims["org_id"] == str(org_id)
         assert claims["tenant_id"] == str(org_id)
-        assert claims["roles"] == ["admin", "service_account"]
+        # The pinned shape GREW deliberately. `yantra4d:quote` is a namespaced
+        # app-role-shaped scope, it is in this client's `allowed_scopes`, it was
+        # requested, and the client is org-bound — so it is now emitted VERBATIM
+        # for the resource server to match, alongside every string this claim
+        # carried before. `admin` and `service_account` are untouched: the
+        # change is additive, never a replacement. See
+        # `tests/unit/routers/test_service_client_app_roles.py` for the rule.
+        assert claims["roles"] == ["admin", "service_account", "yantra4d:quote"]
         assert claims["is_admin"] is True
         assert claims["yantra4d_tier"] == "madfam"
         assert claims["cotiza_tier"] == "madfam"
@@ -838,6 +845,7 @@ class TestPreLoginRedisStorage:
         """Verify the authorize endpoint code path stores OAuth params in Redis
         instead of encoding them into the redirect URL."""
         import inspect
+
         from app.routers.v1.oauth_provider import authorize_get
 
         source = inspect.getsource(authorize_get)
@@ -860,6 +868,7 @@ class TestPreLoginRedisStorage:
         """The stored pre_login_data must include all OAuth authorize parameters
         so the authorize URL can be reconstructed after login."""
         import inspect
+
         from app.routers.v1.oauth_provider import authorize_get
 
         source = inspect.getsource(authorize_get)
@@ -897,6 +906,7 @@ class TestPreLoginRedisStorage:
         """The redirect to login must use auth_request_id, not a 'next' param
         containing the full authorize URL (which caused double-encoding)."""
         import inspect
+
         from app.routers.v1.oauth_provider import authorize_get
 
         source = inspect.getsource(authorize_get)
@@ -944,6 +954,7 @@ class TestOidcEndSession:
 
     async def test_logout_rejects_unknown_client(self, mock_db):
         from fastapi import HTTPException
+
         from app.routers.v1.oauth_provider import oidc_end_session
 
         result = mock_db.execute.return_value
@@ -962,6 +973,7 @@ class TestOidcEndSession:
 
     async def test_logout_rejects_unregistered_post_logout_uri(self, mock_db):
         from fastapi import HTTPException
+
         from app.routers.v1.oauth_provider import oidc_end_session
 
         with pytest.raises(HTTPException) as exc_info:

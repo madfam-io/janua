@@ -1139,6 +1139,18 @@ try:
 except Exception as e:
     logger.warning(f"Internal app roles router not available: {e}")
 
+# Internal OAuth-client scope grants (`allowed_scopes` IS a service client's
+# grant record: an org-bound client's namespaced scopes become `roles` app roles)
+try:
+    from app.routers.v1 import (
+        internal_oauth_client_scopes as internal_oauth_client_scopes_v1,
+    )
+
+    app.include_router(internal_oauth_client_scopes_v1.router, prefix="/api/v1/internal")
+    logger.info("Registered internal oauth client scopes router successfully")
+except Exception as e:
+    logger.warning(f"Internal oauth client scopes router not available: {e}")
+
 # Internal role/tier sync router (Dhanam → Janua hub-and-spoke)
 try:
     from app.routers.internal import roles as internal_roles

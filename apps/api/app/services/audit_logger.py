@@ -109,6 +109,15 @@ class AuditEventType(str, Enum):
     APP_ROLE_GRANT = "app_role.grant"
     APP_ROLE_REVOKE = "app_role.revoke"
 
+    # A machine token was minted CARRYING application roles — authority inside
+    # another product, held by a service client rather than a person. Logged
+    # separately from the human grant events because the grant record is
+    # different (`oauth_clients.allowed_scopes`, not a membership row) and
+    # because "which service read payroll, when" is a question an auditor asks
+    # in its own right. Only emitted when the token actually carries app roles:
+    # an ordinary service token writes nothing and its cost is unchanged.
+    SERVICE_TOKEN_APP_ROLES = "service_token.app_roles"
+
     # Compliance events - GDPR
     GDPR_CONSENT_GIVEN = "gdpr.consent_given"
     GDPR_CONSENT_WITHDRAWN = "gdpr.consent_withdrawn"
