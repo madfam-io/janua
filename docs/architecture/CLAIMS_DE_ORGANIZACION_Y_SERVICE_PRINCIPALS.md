@@ -1,6 +1,6 @@
 # Claims de organización y service principals
 
-> Contrato de claims para las apps del ecosistema. Última revisión: 2026-09-02.
+> Contrato de claims para las apps del ecosistema. Última revisión: 2026-09-03.
 
 Dos cambios que van juntos y **no deben separarse**:
 
@@ -133,6 +133,129 @@ campo del modelo que describe **qué es** la fila, no qué puede hacer.
 
 Son problemas distintos. Los tokens de servicio ya estaban resueltos; esto es
 la otra mitad, la de los logins **con forma humana** que aun así no son humanos.
+
+### Roles de aplicación en tokens de servicio (2026-09-03)
+
+**La concesión de un cliente de servicio son sus `allowed_scopes`, y el
+servidor de recursos ve el rol namespaced VERBATIM.**
+
+Los roles de aplicación de una **persona** salen de
+`organization_member_app_roles` (migración 016), colgados de una fila de
+membresía. Un principal **máquina no tiene membresía**, así que la columna que
+un operador ya controla —y que ya decide qué puede pedir ese cliente— es su
+registro de concesión.
+
+En el camino `client_credentials`, para un cliente con `organization_id`, cada
+scope **solicitado** que:
+
+1. está en los `allowed_scopes` del cliente,
+2. tiene la forma namespaced `^[a-z][a-z0-9-]*:[a-z][a-z0-9_-]*$`
+   (`hcm:hr`, `hcm:employee`, `kalya:manage`), y
+3. **no** es un rol de membresía de organización (`owner`/`admin`/`member`) ni
+   un alias heredado `admin` / `*:admin`,
+
+se emite **verbatim, con los dos puntos**, dentro del claim `roles`.
+
+**El hueco que cierra.** `symbiosis-hcm` autoriza **solo** con roles de
+aplicación leídos de `roles` (`apps/api/core/permissions.py`). janua sí sellaba
+`org_id`/`tenant_id`/`org_slug` desde `client.organization_id` para estos
+tokens, pero construía `roles` **a partir de los scopes**, como
+`["service_account"]` + `admin` + `<scope>.replace(":", "_")` — así que
+`hcm:admin` llegaba como `hcm_admin`, **con el separador equivocado**, y
+`hcm:hr` no se emitía nunca. Un cliente de servicio ligado a una organización
+(el de nauta, el gestor de kalya) **no podía satisfacer a HCM jamás**.
+
+**Es aditivo, no un reemplazo.** `service_account`, el `admin` heredado y las
+formas con guion bajo se siguen emitiendo exactamente igual; ningún consumidor
+vivo ve cambiar la forma de un claim. Los scopes pedidos y **no** concedidos
+siguen fallando igual que hoy (`invalid_scope`, 400).
+
+**Sin organización, sin roles de aplicación.** Un cliente sin
+`organization_id` no recibe ninguno: su token no lleva `org_id` que acote el
+rol, así que un `hcm:hr` ahí sería autoridad sobre **cualquier** tenant que HCM
+llegue a consultar. Falla cerrado.
+
+**`madfam_org_roles` para un token de servicio trae `["service_account"]`.**
+Los roles de aplicación viajan **solo** en `roles`. Un principal máquina no
+tiene membresía de organización; poner ahí un rol de aplicación le diría al
+consumidor que lo concedió la **cuenta** de janua, que es exactamente la
+confusión que el espacio de nombres existe para evitar (ver §5, «La trampa del
+`roles` heredado»).
+
+**Ejemplo — `nauta` pidiendo `hcm:hr`** (cliente con `organization_id` = la org
+de Crea, `allowed_scopes` con `hcm:hr`):
+
+```jsonc
+{
+  "sub": "service-account:jnc_nauta",
+  "token_use": "client_credentials",
+  "actor_type": "service_account",
+  "client_id": "jnc_nauta",
+  "scope": "hcm:hr openid",
+  "roles": ["hcm:hr", "service_account"],   // ← lo que HCM lee
+  "madfam_org_roles": ["service_account"],  // ← NUNCA un rol de aplicación
+  "org_id": "<uuid de la org de Crea>",
+  "tenant_id": "<uuid de la org de Crea>",
+  "org_slug": "crea",
+  "is_admin": false
+}
+```
+
+**Auditoría.** Cada token de servicio acuñado **con** roles de aplicación
+escribe un evento `service_token.app_roles` (`client_id`, `org_id`, los roles;
+**nunca** el secreto). Un token de servicio ordinario no escribe nada y su
+costo no cambia. `allowed_scopes` dice qué **puede** pedir un cliente; este
+evento dice qué **pidió**, y cuándo.
+
+#### Cómo conceder el scope (operador)
+
+Superficie dedicada, con la misma autenticación que el resto de los endpoints
+internos (`X-Internal-API-Key`):
+
+| Endpoint | Qué hace |
+|---|---|
+| `POST /api/v1/internal/oauth-clients/{client_id}/scopes` | añade **un** scope. **201** si lo añadió, **200** si ya estaba |
+| `POST /api/v1/internal/oauth-clients/{client_id}/scopes/revoke` | lo retira. `changed: false` si no había nada que retirar |
+| `GET /api/v1/internal/oauth-clients/{client_id}/scopes` | `allowed_scopes` + `app_role_scopes` (los que **sí** llegarán a `roles`) |
+
+```bash
+curl -sS -X POST \
+  "$JANUA_URL/api/v1/internal/oauth-clients/jnc_nauta/scopes" \
+  -H "X-Internal-API-Key: $INTERNAL_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"scope": "hcm:hr"}'
+```
+
+- **Aditivo e idempotente.** Toca **un** scope; los demás quedan intactos, así
+  que un reintento nunca es destructivo.
+- **`emits_app_role` en la respuesta.** Contesta la pregunta que el operador
+  realmente tiene: *¿este scope llegará al claim `roles`?* Es `false` si el
+  cliente no tiene `organization_id` o si el scope está mal escrito (`hcm_hr`),
+  en lugar de descubrirlo como un 403 de HCM días después.
+- **404 si el cliente no existe**, con un solo mensaje para «no existe» e
+  «inactivo», para que la superficie no sirva de sonda.
+- **No hay endpoint que lea, devuelva ni registre un secreto.**
+
+**Por qué no las superficies que ya había.** `POST /oauth/clients/register`
+**reemplaza `allowed_scopes` entero** en su camino de convergencia: el manifiesto
+versionado de un consumidor, al re-ejecutarse, **borraría en silencio** un scope
+concedido a mano. `PATCH /oauth/clients/{id}` exige sesión humana
+(`get_current_user`) y también recibe la lista completa.
+
+**Vía SQL** (romper-cristal, si el endpoint no está disponible):
+
+```sql
+UPDATE oauth_clients
+   SET allowed_scopes = allowed_scopes || '["hcm:hr"]'::jsonb,
+       updated_at = now()
+ WHERE client_id = 'jnc_nauta'
+   AND NOT (allowed_scopes @> '["hcm:hr"]'::jsonb);
+```
+
+> **Alcance:** igual que en §5, estos roles **no** gobiernan la puerta del ERP
+> de Crea (eso vive en el `WorkspaceMember` de nauta). `hcm:*` autoriza dentro
+> de symbiosis-hcm y nada más. **No se requiere migración**: se reutiliza
+> `oauth_clients.allowed_scopes`, que ya existe.
 
 ### Superficies
 
@@ -373,12 +496,23 @@ Misma autenticación que el resto de los endpoints internos
    hace seguro promover el código antes de decidir las concesiones.
 8. **Verificar** en un token real que `roles` trae `hcm:hr` y que
    `madfam_org_roles` sigue trayendo el rol de organización por separado.
+9. **Para un cliente de SERVICIO** (nauta, el gestor de kalya), conceder el
+   scope con `POST /api/v1/internal/oauth-clients/{client_id}/scopes` (§4).
+   **No hay migración que aplicar**: se reutiliza `oauth_clients.allowed_scopes`.
+   Verificar en la respuesta que `emits_app_role` es `true` — si es `false`, o
+   el cliente no tiene `organization_id`, o el scope está mal escrito.
 
 ## 7. Referencias
 
 - `apps/api/app/services/org_claims_service.py` — el resolvedor, fuente única
 - `apps/api/app/models/app_role.py` — la tabla de concesiones (§5)
 - `apps/api/app/routers/v1/internal_app_roles.py` — conceder / revocar / listar
+- `apps/api/app/routers/v1/oauth_provider.py` — `_service_client_app_roles`, la
+  regla de §4 para clientes de servicio
+- `apps/api/app/routers/v1/internal_oauth_client_scopes.py` — conceder /
+  revocar / listar scopes de un cliente
+- `apps/api/tests/unit/routers/test_service_client_app_roles.py`
+- `apps/api/tests/unit/routers/test_internal_oauth_client_scopes.py`
 - `apps/api/alembic/versions/016_org_member_app_roles.py` — la migración de §5
 - `apps/api/tests/unit/services/test_app_role_claims.py`
 - `apps/api/tests/unit/routers/test_internal_app_roles.py`

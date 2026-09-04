@@ -41,12 +41,14 @@ from app.core.url_security import (
 )
 from app.dependencies import get_current_user
 from app.models import OAuthClient, Organization, OrganizationMember, User
+from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.consent_service import ConsentService
 from app.services.entitlements_service import (
     entitlements_to_claim,
     get_user_entitlements,
 )
 from app.services.org_claims_service import (
+    ORG_ROLES_CLAIM,
     get_user_org_claims,
     merge_app_roles_into_claims,
 )
@@ -663,6 +665,85 @@ def _service_account_email(client: OAuthClient) -> str:
     return f"{slug}@service.auth.madfam.io"
 
 
+# ---------------------------------------------------------------------------
+# Application roles for org-bound service clients
+# ---------------------------------------------------------------------------
+
+#: Shape of a namespaced application role, `"<app>:<role>"` — the vocabulary
+#: symbiosis-hcm reads (`hcm:hr`, `hcm:admin`, `hcm:employee`) and the same
+#: shape `models/app_role.format_app_role` produces for a human's grant. Janua
+#: validates SHAPE, never MEANING: it holds no table of valid apps and no
+#: vocabulary of role names, exactly as it holds none for capability-link
+#: scopes. A new HCM role must not require a janua deploy.
+APP_ROLE_SCOPE_PATTERN = re.compile(r"^[a-z][a-z0-9-]*:[a-z][a-z0-9_-]*$")
+
+#: Organization-MEMBERSHIP roles. These describe authority over the janua
+#: ACCOUNT (inviting a colleague, rotating a secret, paying the invoice) and
+#: must never authorize anything inside a product. They ride under the
+#: namespaced `madfam_org_roles` claim and are refused here even if an operator
+#: writes one into `allowed_scopes` — symbiosis-hcm's `HR_ROLES` set contains
+#: the literal string `"admin"`, so an org role reaching a bare `roles` claim is
+#: precisely the payroll leak the namespace exists to prevent.
+ORG_MEMBERSHIP_ROLE_SCOPES = frozenset({"owner", "admin", "member"})
+
+
+def _service_client_app_roles(client: OAuthClient, granted_scopes: set[str]) -> list[str]:
+    """Namespaced application roles a machine token may carry, from its grant.
+
+    THE GRANT FOR A SERVICE CLIENT IS ITS ``allowed_scopes``. A person's
+    application roles come from `organization_member_app_roles` (migration 016),
+    keyed by a membership row; a service client has no membership, so the
+    operator-controlled column that already says what this client may ask for is
+    the grant record. Nothing here is derived, defaulted, or inferred: a role
+    reaches a service token because an operator put that exact string in
+    `allowed_scopes` AND the client requested it.
+
+    Four conditions, all required:
+
+    1. **The client is org-bound** (`organization_id` is set). A service without
+       a tenant must not carry tenant authority — its token has no `org_id` to
+       scope the role to, so an `hcm:hr` on it would be authority over *every*
+       tenant HCM happens to ask about. Fail-closed: no org, no app roles.
+    2. **The scope was REQUESTED.** Least privilege survives: a client allowed
+       `hcm:hr` that asks only for `openid` gets a token that cannot read
+       payroll. (`_parse_requested_scopes` has already refused anything outside
+       `allowed_scopes`, and defaults an empty request to the full allowed set.)
+    3. **The scope is allowed** on the client. Belt-and-braces with (2): this
+       function never reads a string the operator did not grant, even if a
+       future caller reaches it with an unvalidated scope list.
+    4. **The scope has the namespaced app-role SHAPE** and is not an
+       organization-membership role nor a bare/`*:admin` legacy alias. The
+       legacy aliases keep their existing underscore treatment in the caller
+       (`hcm:admin` → `hcm_admin`) so no live consumer changes shape.
+
+    Emitted VERBATIM, colon kept, because the resource server matches the exact
+    string it publishes. Deduplicated and sorted so a token's role list is
+    stable across mints — a claim that reorders between refreshes is a diff that
+    means nothing and that someone will eventually try to debug.
+    """
+    if not client.organization_id:
+        return []
+
+    allowed = set(client.allowed_scopes or [])
+    roles = set()
+    for requested_scope in granted_scopes:
+        if requested_scope not in allowed:
+            continue
+        if requested_scope in ORG_MEMBERSHIP_ROLE_SCOPES:
+            continue
+        if requested_scope.endswith(":admin"):
+            # Legacy alias territory. The caller already emits the underscore
+            # form (`hcm_admin`) for these and has done for every existing
+            # consumer; minting the colon form here as well would quietly widen
+            # what an established `*:admin` scope authorizes.
+            continue
+        if not APP_ROLE_SCOPE_PATTERN.match(requested_scope):
+            continue
+        roles.add(requested_scope)
+
+    return sorted(roles)
+
+
 async def _get_client_credentials_claims(
     client: OAuthClient,
     scope: str,
@@ -682,6 +763,14 @@ async def _get_client_credentials_claims(
         if requested_scope.endswith(":admin"):
             roles.append(requested_scope.replace(":", "_"))
 
+    # Namespaced application roles from the client's grant (`allowed_scopes`).
+    # ADDITIVE: every string above is still emitted, so no existing consumer
+    # sees a claim change shape. See `_service_client_app_roles` for why the
+    # grant is `allowed_scopes` and why a client with no `organization_id`
+    # receives none of these.
+    app_roles = _service_client_app_roles(client, requested_scopes)
+    roles.extend(app_roles)
+
     claims = {
         "client_id": client.client_id,
         "scope": scope,
@@ -691,6 +780,15 @@ async def _get_client_credentials_claims(
         "is_admin": "admin" in requested_scopes,
         "tier": "community",
         "sub_status": "active",
+        # NAMESPACED organization roles, consistent with session and OIDC
+        # tokens. A machine principal holds no organization MEMBERSHIP, so the
+        # only truthful thing to say about its account authority is what it is:
+        # a service account. Application roles go ONLY in `roles`; putting one
+        # here would tell a consumer that the janua account granted it, which
+        # is exactly the conflation `madfam_org_roles` was namespaced to stop
+        # (see `services/org_claims_service.py`, «Why madfam_org_roles and not
+        # roles»).
+        ORG_ROLES_CLAIM: ["service_account"],
     }
 
     # Machine clients are explicitly provisioned by Janua admins. When a client
@@ -1595,6 +1693,53 @@ async def token(
         )
 
 
+async def _audit_service_token_app_roles(
+    client: OAuthClient,
+    claims: dict,
+    db: AsyncSession,
+) -> None:
+    """Record that a machine token was minted carrying application roles.
+
+    Only fires when the token ACTUALLY carries app roles, so an ordinary
+    service token writes no row and its mint cost is unchanged. A machine
+    reading payroll is the case worth a durable record: `allowed_scopes` says
+    what a client MAY ask for, and this says what it DID ask for, and when.
+
+    Never records the client secret — only the public `client_id`, the org the
+    token is scoped to, and the role strings themselves.
+
+    Best-effort and staged on the caller's transaction, matching
+    `internal_app_roles._audit`: a failure in the trail must not refuse a token
+    the client is entitled to. The `allowed_scopes` grant is the durable record
+    of the authority itself, so this row is evidence of USE, not of the grant.
+    """
+    app_roles = _service_client_app_roles(client, set((claims.get("scope") or "").split()))
+    if not app_roles:
+        return
+
+    try:
+        audit_logger = AuditLogger(db)
+        await audit_logger.log(
+            event_type=AuditEventType.SERVICE_TOKEN_APP_ROLES,
+            tenant_id=str(client.organization_id),
+            identity_id=None,
+            organization_id=str(client.organization_id),
+            resource_type="oauth_client",
+            resource_id=str(client.id),
+            details={
+                "via": "oauth.token.client_credentials",
+                "client_id": client.client_id,
+                "org_id": str(client.organization_id),
+                "app_roles": app_roles,
+            },
+            severity="info",
+        )
+    except Exception:
+        # Deliberately swallowed. See the docstring: the token is the caller's
+        # entitlement, not this row's.
+        pass
+
+
 async def _handle_client_credentials_grant(
     client: OAuthClient,
     requested_scope: Optional[str],
@@ -1622,6 +1767,9 @@ async def _handle_client_credentials_grant(
     )
 
     client.last_used_at = datetime.utcnow()
+
+    await _audit_service_token_app_roles(client, additional_claims, db)
+
     await db.commit()
 
     return TokenResponse(
