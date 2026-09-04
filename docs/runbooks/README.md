@@ -7,6 +7,7 @@ Operator guides for production GitOps, secrets rotation, and incident records.
 | Document | When to use |
 |----------|-------------|
 | [production-gitops-reconcile.md](./production-gitops-reconcile.md) | After promote, Argo OutOfSync, Kyverno blocks, GHCR pull failures |
+| [ALEMBIC_CONVERGENCE.md](./ALEMBIC_CONVERGENCE.md) (ES) | Before promoting with unapplied migrations; after applying a migration by hand |
 | [../PP_3B_STAGING_PIPELINE.md](../PP_3B_STAGING_PIPELINE.md) | Full staging → prod pipeline (Pattern B) |
 
 ## Incidents

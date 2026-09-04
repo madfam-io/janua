@@ -1,0 +1,32 @@
+{
+  "$comment": [
+    "What production's alembic_version is KNOWN to record, and when that was last verified.",
+    "",
+    "This file exists because promote-to-prod.yml runs on a GitHub-hosted runner with no",
+    "route to the production database: it cannot ask. So the guard compares the repo's",
+    "alembic head against this declared value instead, and the value is only trustworthy",
+    "because updating it is a reviewed commit — see docs/runbooks/ALEMBIC_CONVERGENCE.md.",
+    "",
+    "It is a LEDGER, not a source of truth. The database is the truth; this records the",
+    "last time a human read it with `alembic_converge.py --check` from the janua-api pod.",
+    "Stale is the expected failure mode, and it fails SAFE: a ledger left behind makes the",
+    "guard demand migrations_acknowledged=true on promotes that may not need it, which",
+    "costs an operator one checkbox and one look at the database. The opposite — a ledger",
+    "edited forward without running the check — defeats the guard entirely, which is why",
+    "verified_at and verified_by are required and why the runbook makes reading the",
+    "database the step that precedes editing this file."
+  ],
+  "recorded_revision": "011_invitation_columns",
+  "schema_revision": "016_org_member_app_roles",
+  "verified_at": "2026-09-04",
+  "verified_by": "Dirección Tecnológica (read-only measurement, postgres pod: alembic_version=011, capability_links absent, organization_member_app_roles present)",
+  "notes": [
+    "012, 013, 015 and 016 were applied BY HAND and never stamped.",
+    "014 (capability_links) is NOT applied in production as of 2026-09-04 08:25 CDMX",
+    "(`capability_links` does not exist); it will be applied via the operator's bootstrap",
+    "(step janua-014, generated SQL) deliberately without touching alembic_version.",
+    "Convergence has NOT been performed yet: after 014 exists, run",
+    "scripts/alembic_converge.py --stamp, then set recorded_revision to the value it",
+    "reports and refresh verified_at."
+  ]
+}

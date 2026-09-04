@@ -60,6 +60,11 @@ on:
         required: false
         default: false
         type: boolean
+      migrations_acknowledged:
+        description: "I have checked production's alembic_version (alembic_converge.py --check) and accept promoting with unapplied migrations."
+        required: false
+        default: false
+        type: boolean
 
   # Auto-promote is gated — Janua is Pattern B, so this job exits early
   # unless the repo variable AUTO_PROMOTE_ENABLED == "true".
@@ -73,8 +78,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Promote is a pointer update and runs NO migrations -- that is the design,
+  # not an oversight. The consequence is that the code being promoted can expect
+  # a schema production does not have, and today nothing says so out loud: the
+  # first signal is 500s from the ecosystem's auth floor.
+  #
+  # This job cannot ask the database. It runs on a GitHub-hosted runner with no
+  # route to prod, and handing the job that writes the prod manifest a
+  # production database credential to improve an error message is a trade we
+  # decline. So it compares the repo's alembic head against
+  # apps/api/alembic/PROD_ALEMBIC_STATE.json -- the last revision a human read
+  # out of production -- and makes the operator acknowledge the gap.
+  #
+  # The check against the REAL database is:
+  #   kubectl -n janua exec deploy/janua-api -- python scripts/alembic_converge.py --check
+  # See docs/runbooks/ALEMBIC_CONVERGENCE.md.
+  migrations-guard:
+    name: Migration drift guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      # No pip install: the guard parses alembic/versions/ with `ast` and reads
+      # one JSON file, precisely so it cannot be broken by a dependency.
+      # Note the acknowledgement is available ONLY on workflow_dispatch. The
+      # scheduled path (gated off today by AUTO_PROMOTE_ENABLED) has no operator
+      # to acknowledge anything, and an unattended promote over an unapplied
+      # migration is the case this guard exists for -- so a drifted ledger stops
+      # auto-promote outright rather than waving it through.
+      - name: Check repo head against production's recorded revision
+        working-directory: ./apps/api
+        env:
+          ACKNOWLEDGED: ${{ github.event_name == 'workflow_dispatch' && inputs.migrations_acknowledged || false }}
+        run: |
+          set -euo pipefail
+          ARGS="--format github"
+          if [[ "$ACKNOWLEDGED" == "true" ]]; then
+            ARGS="$ARGS --acknowledged"
+          fi
+          python scripts/alembic_promote_guard.py $ARGS
+
   validate:
     name: Validate promotion candidate(s)
+    needs: migrations-guard
     runs-on: ubuntu-latest
     outputs:
       should_promote: ${{ steps.resolve.outputs.should_promote }}
