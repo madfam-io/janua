@@ -471,8 +471,10 @@ def main(argv: Optional[list] = None) -> int:
             probe = SchemaProbe(sa_inspect(connection))
             statuses = inspect_revisions(probe)
             legacy_index_present = LEGACY_GLOBAL_EMAIL_INDEX in probe.indexes("users")
-    except Exception as exc:  # noqa: BLE001 - the message is the product here
-        # str(exc) can carry the URL for some drivers, so only the type is shown.
+    except Exception as exc:  # noqa: BLE001 - any driver error is a clean refusal here
+        # Only the exception TYPE is shown. Several drivers put the full DSN --
+        # password included -- into str(exc), and this output is meant to be
+        # pasteable into a ticket.
         print(
             f"No se pudo inspeccionar el esquema ({type(exc).__name__}). "
             "Revisa la conectividad y las credenciales.",
