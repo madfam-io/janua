@@ -115,9 +115,17 @@ def sso_cookie_delete_kwargs() -> dict[str, Any]:
 
     Domain and Path MUST match the ones the cookie was set with — a deletion that
     differs on either attribute addresses a different cookie and silently leaves
-    the real one in the browser.
+    the real one in the browser. (Cookie identity is `(name, domain, path)` per
+    RFC 6265; `Secure`/`HttpOnly` are not part of it, but they are mirrored here
+    anyway so the deletion line is the set line with `Max-Age=0` — which is what
+    the SDK relays, and the easiest shape to eyeball in a network trace.)
     """
-    kwargs: dict[str, Any] = {"path": "/"}
+    kwargs: dict[str, Any] = {
+        "path": "/",
+        "secure": True,
+        "httponly": True,
+        "samesite": "lax",
+    }
     if settings.COOKIE_DOMAIN:
         kwargs["domain"] = settings.COOKIE_DOMAIN
     return kwargs
