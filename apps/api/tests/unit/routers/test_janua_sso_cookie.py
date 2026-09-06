@@ -353,6 +353,23 @@ class TestResolution:
         value = mint_sso_cookie_value(str(user.id), str(session.id))
         assert await resolve_sso_cookie_user(value, _lookup_db(session, user)) is None
 
+    async def test_session_limit_eviction_stops_authenticating(self):
+        """Revocation reaches the cookie even when nobody logged out.
+
+        `AuthService.create_session` enforces MAX_SESSIONS_PER_IDENTITY by setting
+        `revoked = True` on the oldest row. Because resolution re-reads the row
+        rather than trusting the signature, that eviction invalidates the evicted
+        session's cookie too — which is the point of referencing the row instead
+        of carrying a self-contained credential.
+        """
+        user = _user()
+        session = _session_row(user.id)
+        value = mint_sso_cookie_value(str(user.id), str(session.id))
+        assert await resolve_sso_cookie_user(value, _lookup_db(session, user)) is user
+
+        session.revoked = True  # what the session-limit eviction writes
+        assert await resolve_sso_cookie_user(value, _lookup_db(session, user)) is None
+
     async def test_expired_session_row_stops_authenticating(self):
         user = _user()
         session = _session_row(user.id, expires_in_days=-1)

@@ -183,7 +183,10 @@ row is revoked (`revoked = True`, which `/signout` and `invalidate_user_sessions
 set), deactivated (`is_active = False`, which `revoke_token_family` sets on
 refresh-token theft detection), past `expires_at`, or owned by a non-active user.
 That is what makes the cookie revocable — and it means every revocation path
-Janua already has revokes this cookie too, for free. **No new table, no new
+Janua already has revokes this cookie too, for free. That includes the ones that
+are not "logout": the concurrent-session-limit eviction in
+`AuthService.create_session` sets `revoked = True` on the oldest row, so a session
+pushed out by the limit stops authenticating its cookie as well. **No new table, no new
 column, no alembic revision**, which matters while production is frozen behind
 the migration-drift guard.
 
@@ -200,6 +203,13 @@ callers are `GET /authorize` and its consent continuation `POST /consent`. It is
 `get_current_user`, which never reads it, and the token-type gate would refuse it
 anyway. A unit test pins both the reader count and the caller set, so widening
 the acceptance scope has to be a deliberate edit rather than a side effect.
+
+`POST /consent` accepts it for the same reason — it is the screen the interactive
+`/authorize` renders — and adding a cookie there widens nothing: that endpoint
+already requires a CSRF token bound to the person's own id **and** a server-side
+`auth_request_id` held in Redis, and `SameSite=Lax` means the cookie is not sent
+on a cross-site POST at all. Three independent reasons a `janua_sso` cookie alone
+cannot forge a consent grant.
 
 Within `/authorize` the cookie authenticates the person for **both** `prompt=none`
 and the interactive flow — a valid estate session skipping the login page is what
