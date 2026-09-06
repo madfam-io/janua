@@ -1,7 +1,9 @@
 # Silent SSO: where the browser session comes from
 
-**Status**: B1, B2 and B6 landed in Janua; B3/B4 are operator steps; B5 lives in
-nauta and B7 in crea-map.
+**Status**: B1, B2, B6 and R1 landed in Janua; B3/B4 are operator steps; B5 lives
+in nauta and B7 in crea-map. **R1 chose option 3 of the security note below** —
+a separate HttpOnly estate cookie, `janua_sso`; see "R1 — the `janua_sso` estate
+cookie".
 **Related**: `ADR-001_AUTH_FLOW.md`, ADR `2026-05-04-selva-unified-sso` (Phase 1
 = `prompt=none`, delivered earlier), `docs/guides/SSO_INTEGRATION_GUIDE.md`.
 
@@ -34,6 +36,9 @@ land, not a menu.
 | **B4** | `madfam:silent_auth` on the `crea-map` and nauta OIDC clients | operator (admin API / data) | pending |
 | **B5** | nauta sends `prompt=none` and falls back to interactive login | nauta `sso-launch.ts`, `auth.ts` | not started |
 | **B7** | The MAP links to `crea-erp` (optionally sends `prompt`) | crea-map | not started |
+| **R1** | `janua_sso`: an HttpOnly estate cookie the SDK can relay to the browser | Janua `auth/sso_cookie.py`, `routers/v1/auth.py`, `routers/v1/oauth_provider.py` | landed |
+| **R1s** | `@madfam/janua-next` relays `janua_sso` (and its deletion) | madfam-js `@madfam/janua-next@0.2.0` | landed |
+| **R1n** | nauta adds the same relay | nauta | in flight |
 
 **B2 is a silent prerequisite of B1.** A magic-link session carries the audience
 of the product the link forwards to (`_session_audience_for_redirect`) —
@@ -110,8 +115,112 @@ worth weighing before flipping it:
    design decision, not a mechanical change, and it was deliberately not made
    unilaterally.
 
+**Option 3 was ratified and is what shipped** — the cookie is `janua_sso`; see
+"R1 — the `janua_sso` estate cookie" below. `janua_access_token` is unchanged.
+
 Silent SSO does **not** work across hosts until one of these is chosen. B1/B2/B6
 make the mechanism correct; B3 is what makes it reach.
+
+## R1 — the `janua_sso` estate cookie
+
+### What B1 could not reach
+
+B1 made all four session-establishing paths call `_set_session_cookies`. That is
+correct, and it is not enough. The MAP and the nauta ERP portal exchange the
+magic link **server-to-server**: their Next process calls
+`POST /api/v1/auth/magic-link/verify` and reads the JSON. Node keeps the
+`Set-Cookie` headers on that fetch response and drops them. Nothing ever reaches
+a browser, so a person signed into the MAP was still asked for a second email at
+`crea-erp.madfam.io`.
+
+`@madfam/janua-next@0.2.0` closes the gap by relaying, **byte for byte**, any
+`Set-Cookie` line whose cookie is named exactly `janua_sso` and whose `Domain`
+covers the app's public host, appending it to the 303 it returns to the browser
+after the verify exchange. It relays the `Max-Age=0` deletion from
+`POST /api/v1/auth/logout` the same way. nauta adds the same relay (R1n). R1 is
+the Janua half: minting what the relay carries.
+
+### Why a separate cookie (option 3, ratified)
+
+The security note above listed three ways to make silent SSO reach across hosts
+and recommended the third. R1 implements it. `janua_access_token` stays exactly
+as it is — host-scoped by default, JS-readable because the browser SDK reads it
+— and the estate-wide cookie is a new, HttpOnly one that no script can read and
+that is useless as a bearer credential. Widening the access cookie (option 1)
+would have put a live bearer token within reach of an XSS on any host under
+`madfam.io`; option 2 would have broken every SDK consumer that reads the cookie.
+
+### The cookie
+
+```
+janua_sso=<signed reference>; Path=/; Domain=.madfam.io; HttpOnly; Secure; SameSite=Lax; Max-Age=604800
+```
+
+- **HttpOnly** — it is readable on every host in the estate, so no script
+  anywhere in the estate may read it.
+- **Secure**, **SameSite=Lax** — Lax because every silent hop arrives as a
+  top-level GET navigation to `/authorize`, which Lax sends.
+- **`Domain`** is `settings.COOKIE_DOMAIN` when set, host-only otherwise. **The
+  relay refuses a host-only cookie**, so estate SSO requires
+  `COOKIE_DOMAIN=.madfam.io` (B3 — already set in prod). Without it Janua still
+  emits the cookie and it still works on the issuer host; it just does not
+  travel, and the estate silently keeps two sessions.
+- **`Max-Age`** is the refresh-session lifetime
+  (`JWT_REFRESH_TOKEN_EXPIRE_DAYS`), because the row it references expires then.
+
+### Value, and why it is revocable without a migration
+
+The value is a signed JWT carrying `sub` and `sid` — the id of the `sessions`
+row `AuthService.create_session` already writes — with `type: "sso_session"`.
+
+That type is the security boundary. Every bearer path in Janua verifies
+`token_type="access"` (`get_current_user`, and `_verify_own_access_token` on the
+`/authorize` seam), so the cookie's value presented as `Authorization: Bearer …`
+fails verification everywhere. It is a **session reference**, not a credential.
+
+Resolution re-reads the `sessions` row on **every** use and refuses it when the
+row is revoked (`revoked = True`, which `/signout` and `invalidate_user_sessions`
+set), deactivated (`is_active = False`, which `revoke_token_family` sets on
+refresh-token theft detection), past `expires_at`, or owned by a non-active user.
+That is what makes the cookie revocable — and it means every revocation path
+Janua already has revokes this cookie too, for free. **No new table, no new
+column, no alembic revision**, which matters while production is frozen behind
+the migration-drift guard.
+
+Refresh rotation mutates `refresh_token_jti` on that same row and leaves
+`session.id` alone, so a rotation does not invalidate the cookie and nothing has
+to be re-issued on the `/authorize` response.
+
+### Where it is accepted — and where it is not
+
+`janua_sso` is read in exactly one function,
+`get_user_from_cookie_or_header` (`routers/v1/oauth_provider.py`), whose only
+callers are `GET /authorize` and its consent continuation `POST /consent`. It is
+**not** accepted at `/api/v1/auth/me` or any other API — those use
+`get_current_user`, which never reads it, and the token-type gate would refuse it
+anyway. A unit test pins both the reader count and the caller set, so widening
+the acceptance scope has to be a deliberate edit rather than a side effect.
+
+Within `/authorize` the cookie authenticates the person for **both** `prompt=none`
+and the interactive flow — a valid estate session skipping the login page is what
+SSO means. It resolves *who* the person is and never *whether they may proceed*:
+email verification, MFA and third-party consent are enforced exactly as before.
+
+### Logout
+
+Deleting the cookie is the cosmetic half; a copy taken before logout must stop
+working. Both `POST /api/v1/auth/logout` (and `/signout`) and the OIDC
+`end_session` endpoint therefore **revoke the `sessions` row** the cookie
+references and **then** delete the cookie with the same `Domain` and `Path` it was
+set with — a deletion differing on either attribute addresses a different cookie
+and leaves the live one in place. The cookie's signature is verified before
+anything is revoked, so a forged value cannot end someone else's session.
+
+### A failed exchange sets nothing
+
+An invalid or expired magic link, a wrong password, an MFA interrupt, or a
+destination the allowlist rejects at redemption all emit no `janua_sso` — there
+is no session, so there is nothing to reference.
 
 ## Operator steps
 
@@ -120,5 +229,11 @@ make the mechanism correct; B3 is what makes it reach.
   nauta OIDC clients. Their names ("MAP · Crea Tu Mundo") do not match the
   `selva-office*` / `madfam-*` prefixes, so the scope is the only way they
   qualify — for `prompt=none` and, since B6, for pre-consent.
-- **No migration.** B1/B2/B6 add no tables or columns, and promote runs no
-  alembic; nothing here waits on a schema change.
+- **R1**: nothing beyond B3. `COOKIE_DOMAIN=.madfam.io` is the single
+  prerequisite for `janua_sso` to travel, and it is already set in production.
+  Without it the cookie is emitted host-only, the relay refuses it, and the
+  estate keeps two sessions — working, but not shared.
+- **No migration.** B1/B2/B6 and R1 add no tables or columns, and promote runs no
+  alembic; nothing here waits on a schema change. R1 deliberately reuses the
+  existing `sessions` row rather than adding storage, because production is
+  frozen behind the migration-drift guard.
