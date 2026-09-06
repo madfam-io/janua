@@ -398,6 +398,25 @@ class TestResolution:
         value = mint_sso_cookie_value(str(user.id), str(session.id))
         assert await resolve_sso_cookie_user(value, _lookup_db(session, user)) is None
 
+    async def test_cookie_survives_a_refresh_rotation(self):
+        """Why no re-issue on the /authorize response is needed.
+
+        `AuthService.refresh_tokens` rotates `access_token_jti` /
+        `refresh_token_jti` on the SAME `sessions` row and leaves `id` alone. The
+        cookie references `id`, so a rotation cannot invalidate it — which is
+        exactly why it carries `sid` rather than the refresh token itself. If a
+        future change starts keying the cookie off a rotating value, this fails.
+        """
+        user = _user()
+        session = _session_row(user.id)
+        value = mint_sso_cookie_value(str(user.id), str(session.id))
+        assert await resolve_sso_cookie_user(value, _lookup_db(session, user)) is user
+
+        session.access_token_jti = "rotated-access-jti"
+        session.refresh_token_jti = "rotated-refresh-jti"
+        session.expires_at = datetime.utcnow() + timedelta(days=7)
+        assert await resolve_sso_cookie_user(value, _lookup_db(session, user)) is user
+
     async def test_sub_must_match_the_session_row(self):
         """Belt and braces behind the signature: never trust the claim over the row."""
         session = _session_row(uuid4())
