@@ -645,6 +645,45 @@ class TestLogout:
         assert body == {"message": "Successfully signed out"}
         assert "Max-Age=0" in _sso_header(response)
 
+    @pytest.mark.parametrize("path", ["/auth/logout", "/auth/signout"])
+    async def test_logout_routes_revoke_through_a_real_http_request(self, path):
+        """`sign_out` takes `req`/`response` with None defaults so its existing
+        direct callers keep working — which means a missing FastAPI injection
+        would silently skip revocation in production while the unit tests above
+        still passed. This drives both real ASGI routes.
+
+        `/auth/logout` is the endpoint `@madfam/janua-next` calls, and the
+        `Max-Age=0` line it relays back to the browser is what this asserts.
+        """
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        user = _user()
+        session = _session_row(user.id)
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: session)),
+            commit=AsyncMock(),
+        )
+
+        app = FastAPI()
+        app.include_router(auth_router.router)
+        app.dependency_overrides[auth_router.get_db] = lambda: db
+        app.dependency_overrides[auth_router.get_current_user] = lambda: user
+
+        with (
+            patch.object(auth_router.AuthService, "verify_token", AsyncMock(return_value=None)),
+            patch.object(auth_router, "log_activity", AsyncMock()),
+            patch.object(auth_router, "log_audit_event", AsyncMock()),
+        ):
+            http = TestClient(app)
+            http.cookies.set(SSO_COOKIE_NAME, mint_sso_cookie_value(str(user.id), str(session.id)))
+            resp = http.post(path, headers={"Authorization": "Bearer access-tok"})
+
+        assert resp.status_code == 200
+        assert session.revoked is True, "Request was not injected; revocation was skipped"
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert SSO_COOKIE_NAME in set_cookie and "Max-Age=0" in set_cookie
+
     async def test_a_forged_cookie_cannot_revoke_someone_elses_session(self):
         """The signature is verified before anything is revoked."""
         session = _session_row(uuid4())
@@ -681,6 +720,59 @@ class TestLogout:
         assert resp.status_code == 302
         assert session.revoked is True
         assert "Max-Age=0" in _sso_header(resp)
+
+    async def test_end_session_revokes_through_a_real_http_request(self):
+        """`request` is declared last and optional so the pre-existing
+        keyword-only callers of `oidc_end_session` keep working. That default
+        makes it possible for FastAPI to NOT inject the Request on the real
+        route — in which case revocation would silently never run in production
+        while every unit test still passed. This drives the actual ASGI route to
+        prove the injection happens.
+
+        (`Optional[Request] = None` does not work at all — FastAPI rejects it as
+        an invalid Pydantic field — so the bare annotation is load-bearing.)
+        """
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        user = _user()
+        session = _session_row(user.id)
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: session)),
+            commit=AsyncMock(),
+        )
+
+        app = FastAPI()
+        app.include_router(oauth_provider_router.logout_router)
+        app.dependency_overrides[oauth_provider_router.get_db] = lambda: db
+
+        client_row = SimpleNamespace(
+            is_active=True, redirect_uris=["https://erp.example.test/goodbye"]
+        )
+        with (
+            patch.object(
+                oauth_provider_router, "_get_oauth_client", AsyncMock(return_value=client_row)
+            ),
+            patch.object(
+                oauth_provider_router,
+                "validate_post_logout_redirect_uri",
+                MagicMock(return_value=True),
+            ),
+        ):
+            http = TestClient(app)
+            http.cookies.set(SSO_COOKIE_NAME, mint_sso_cookie_value(str(user.id), str(session.id)))
+            resp = http.get(
+                "/logout",
+                params={
+                    "client_id": "madfam-erp",
+                    "post_logout_redirect_uri": "https://erp.example.test/goodbye",
+                },
+                follow_redirects=False,
+            )
+
+        assert resp.status_code == 302
+        assert session.revoked is True, "FastAPI did not inject Request; revocation was skipped"
+        assert SSO_COOKIE_NAME in resp.headers.get("set-cookie", "")
 
     def test_oidc_cookie_clearing_includes_the_estate_cookie(self):
         from fastapi.responses import RedirectResponse

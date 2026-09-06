@@ -2382,13 +2382,13 @@ def _clear_janua_session_cookies(response: RedirectResponse) -> None:
 
 @logout_router.get("/logout")
 async def oidc_end_session(
-    request: Request,
     client_id: str = Query(..., description="OAuth client ID"),
     post_logout_redirect_uri: str = Query(
         ..., description="URI to redirect after logout (must match client registration)"
     ),
     state: Optional[str] = Query(None, description="Opaque state forwarded to redirect URI"),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """
     OIDC RP-Initiated Logout endpoint (end_session_endpoint).
@@ -2400,6 +2400,9 @@ async def oidc_end_session(
     before logout must stop working, not merely disappear from this browser. The
     cookie's signature is verified before anything is revoked, so a forged value
     cannot end someone else's session.
+
+    `request` is declared last and optional so FastAPI still injects it on the
+    real route while the existing keyword-only callers keep working unchanged.
     """
     client = await _get_oauth_client(client_id, db)
     if not client or not client.is_active:
@@ -2427,8 +2430,12 @@ async def oidc_end_session(
         redirect_url = f"{redirect_url}{separator}{urlencode({'state': state})}"
 
     # Revoke before clearing: the cookie is the only handle we have on the row.
+    # `request` is optional (and last) so the existing direct callers and tests,
+    # which invoke this as a plain coroutine with keyword args, keep working.
     try:
-        if await revoke_sso_cookie_session(request.cookies.get(SSO_COOKIE_NAME), db):
+        if request is not None and await revoke_sso_cookie_session(
+            request.cookies.get(SSO_COOKIE_NAME), db
+        ):
             await db.commit()
     except Exception:
         logger.warning("Failed to revoke janua_sso session on end_session", exc_info=True)
