@@ -5,7 +5,8 @@ Tests OAuth provider integration, authorization flow, and account linking.
 Target: 15% → 60% coverage.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -158,6 +159,42 @@ class TestOAuthCallback:
         )
 
         assert response.status_code in [400, 500]
+
+    def test_callback_success_threads_request_context_into_the_service(self):
+        """The happy path: a valid state, the service returns (user, tokens),
+        and the router hands the service the browser's address and user agent
+        so the session row records where the social login came from."""
+        with patch("app.routers.v1.oauth.OAuthService") as mock_service:
+            with patch("app.core.redis.get_redis") as mock_get_redis:
+                mock_redis = AsyncMock()
+                mock_redis.get = AsyncMock(return_value="github")
+                mock_redis.delete = AsyncMock(return_value=1)
+                mock_get_redis.return_value = mock_redis
+
+                user = MagicMock()
+                user.id = uuid4()
+                user.email = "persona@example.test"
+                user.first_name = "Persona"
+                user.last_name = "Prueba"
+                user.profile_image_url = None
+                mock_service.handle_oauth_callback = AsyncMock(
+                    return_value=(
+                        user,
+                        {"access_token": "a", "refresh_token": "r", "is_new_user": False},
+                    )
+                )
+
+                response = self.client.get(
+                    "/api/v1/auth/oauth/callback/github?code=c0de&state=st4te",
+                    headers={"user-agent": "pytest-ua"},
+                )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["user"]["email"] == "persona@example.test"
+        kwargs = mock_service.handle_oauth_callback.await_args.kwargs
+        assert kwargs["user_agent"] == "pytest-ua"
+        assert "ip_address" in kwargs
+        mock_redis.delete.assert_awaited_once_with("oauth_state:st4te")
 
 
 class TestLinkOAuthAccount:

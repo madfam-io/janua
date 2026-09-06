@@ -4,7 +4,7 @@ Tests OAuth provider configuration, authorization URL generation,
 token exchange, user info normalization, and user creation flows.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -341,9 +341,7 @@ class TestUserInfoRetrieval:
                     return_value=mock_response
                 )
 
-                user_info = await OAuthService.get_user_info(
-                    OAuthProvider.GOOGLE, "access_token"
-                )
+                user_info = await OAuthService.get_user_info(OAuthProvider.GOOGLE, "access_token")
 
                 assert user_info is not None
                 assert user_info["provider"] == "google"
@@ -387,9 +385,7 @@ class TestUserInfoRetrieval:
                     side_effect=[user_response, email_response]
                 )
 
-                user_info = await OAuthService.get_user_info(
-                    OAuthProvider.GITHUB, "access_token"
-                )
+                user_info = await OAuthService.get_user_info(OAuthProvider.GITHUB, "access_token")
 
                 assert user_info is not None
                 assert user_info["provider"] == "github"
@@ -413,9 +409,7 @@ class TestUserInfoRetrieval:
                     return_value=mock_response
                 )
 
-                user_info = await OAuthService.get_user_info(
-                    OAuthProvider.GOOGLE, "invalid_token"
-                )
+                user_info = await OAuthService.get_user_info(OAuthProvider.GOOGLE, "invalid_token")
 
                 assert user_info is None
 
@@ -574,30 +568,51 @@ class TestParseScopes:
             assert len(scopes) > 0  # Should have default scopes
 
 
+def _async_result(scalar=None, first=None):
+    """What `await db.execute(...)` hands back: `.scalar_one_or_none()` for the
+    single-row lookups and `.scalars().first()` for the email lookup."""
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = scalar
+    result.scalars.return_value.first.return_value = first
+    return result
+
+
 class TestFindOrCreateUser:
-    """Test user finding/creation from OAuth info"""
+    """Test user finding/creation from OAuth info.
+
+    The db is a SPEC'D `AsyncSession` on purpose: until 2026-09-06 this code
+    ran `db.query(...)` on the async session the router injects, which has no
+    `.query` at all, and a bare `MagicMock()` let that pass for months. With
+    the spec, any return to the sync API fails here before it fails in
+    production.
+    """
 
     @pytest.fixture
     def mock_db(self):
-        db = MagicMock()
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        db = MagicMock(spec=AsyncSession)
+        db.execute = AsyncMock()
+        db.get = AsyncMock()
         db.add = MagicMock()
-        db.commit = MagicMock()
-        db.flush = MagicMock()
+        db.commit = AsyncMock()
+        db.flush = AsyncMock()
         return db
 
-    def test_find_existing_oauth_account(self, mock_db):
+    async def test_find_existing_oauth_account(self, mock_db):
         """Should find existing user via OAuth account"""
         from app.models import OAuthProvider, User
         from app.services.oauth import OAuthService
 
         existing_user = MagicMock(spec=User)
         existing_oauth = MagicMock()
-        existing_oauth.user = existing_user
+        existing_oauth.user_id = uuid4()
         existing_oauth.access_token = "old_token"
 
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            existing_oauth
-        )
+        mock_db.execute.return_value = _async_result(scalar=existing_oauth)
+        # The owner is loaded explicitly: `oauth_account.user` is a lazy
+        # relationship and would raise MissingGreenlet on an AsyncSession.
+        mock_db.get.return_value = existing_user
 
         user_info = {
             "provider_user_id": "oauth_123",
@@ -606,15 +621,18 @@ class TestFindOrCreateUser:
         }
         tokens = {"access_token": "new_token", "expires_in": 3600}
 
-        user, is_new = OAuthService.find_or_create_user(
+        user, is_new = await OAuthService.find_or_create_user(
             mock_db, OAuthProvider.GOOGLE, user_info, tokens
         )
 
         assert user == existing_user
         assert is_new is False
         assert existing_oauth.access_token == "new_token"
+        mock_db.get.assert_awaited_once_with(User, existing_oauth.user_id)
+        mock_db.commit.assert_awaited_once()
+        mock_db.add.assert_not_called()
 
-    def test_link_oauth_to_existing_user(self, mock_db):
+    async def test_link_oauth_to_existing_user(self, mock_db):
         """Should link OAuth to existing user with same email"""
         from app.models import OAuthProvider, User
         from app.services.oauth import OAuthService
@@ -626,10 +644,9 @@ class TestFindOrCreateUser:
         existing_user.profile_image_url = None
         existing_user.email_verified = False
 
-        # No existing OAuth account
-        mock_db.query.return_value.filter.return_value.first.side_effect = [
-            None,  # No OAuth account
-            existing_user,  # Existing user with email
+        mock_db.execute.side_effect = [
+            _async_result(scalar=None),  # No OAuth account
+            _async_result(first=existing_user),  # Existing user with email
         ]
 
         user_info = {
@@ -643,13 +660,52 @@ class TestFindOrCreateUser:
         }
         tokens = {"access_token": "token", "expires_in": 3600}
 
-        user, is_new = OAuthService.find_or_create_user(
+        user, is_new = await OAuthService.find_or_create_user(
             mock_db, OAuthProvider.GOOGLE, user_info, tokens
         )
 
         assert user == existing_user
         assert is_new is False
         assert existing_user.first_name == "John"
+        assert existing_user.email_verified is True
+        # Only the OAuthAccount link is added; the user already existed.
+        assert mock_db.add.call_count == 1
+        mock_db.flush.assert_not_awaited()
+        mock_db.commit.assert_awaited_once()
+
+    async def test_create_new_user_when_nobody_matches(self, mock_db):
+        """Should create the user AND the link, flushing to obtain the id"""
+        from app.models import OAuthProvider, User
+        from app.services.oauth import OAuthService
+
+        mock_db.execute.side_effect = [
+            _async_result(scalar=None),  # No OAuth account
+            _async_result(first=None),  # Nobody with that email
+        ]
+
+        user_info = {
+            "provider_user_id": "oauth_new",
+            "email": "new@example.com",
+            "email_verified": True,
+            "first_name": "Nueva",
+            "last_name": "Persona",
+            "raw_data": {"locale": "es-MX"},
+        }
+        tokens = {"access_token": "token"}
+
+        user, is_new = await OAuthService.find_or_create_user(
+            mock_db, OAuthProvider.GOOGLE, user_info, tokens, locale="en"
+        )
+
+        assert is_new is True
+        assert isinstance(user, User)
+        assert user.email == "new@example.com"
+        # The provider's own claim beats the browser locale.
+        assert user.locale == "es"
+        # User first (flush to get an id), then the OAuthAccount link.
+        assert mock_db.add.call_count == 2
+        mock_db.flush.assert_awaited_once()
+        mock_db.commit.assert_awaited_once()
 
 
 class TestHandleOAuthCallback:
@@ -664,9 +720,9 @@ class TestHandleOAuthCallback:
         mock_user = MagicMock()
         mock_user.id = uuid4()
 
-        # Mock AuthService with the method the OAuth service expects
+        # AuthService's REAL session minting method, awaited.
         mock_auth_service = MagicMock()
-        mock_auth_service.create_user_session = MagicMock(
+        mock_auth_service.create_session = AsyncMock(
             return_value=("access", "refresh", MagicMock())
         )
 
@@ -683,7 +739,7 @@ class TestHandleOAuthCallback:
                     "raw_data": {},
                 }
             ),
-            find_or_create_user=MagicMock(return_value=(mock_user, False)),
+            find_or_create_user=AsyncMock(return_value=(mock_user, False)),
         ):
             with patch(
                 "app.services.oauth.AuthService",
@@ -695,12 +751,63 @@ class TestHandleOAuthCallback:
                     "auth_code",
                     "state",
                     "https://redirect.url",
+                    ip_address="203.0.113.7",
+                    user_agent="pytest-ua",
                 )
 
                 assert result is not None
                 user, auth_data = result
                 assert user == mock_user
-                assert "access_token" in auth_data
+                assert auth_data["access_token"] == "access"
+                assert auth_data["refresh_token"] == "refresh"
+                assert auth_data["is_new_user"] is False
+                mock_auth_service.create_session.assert_awaited_once_with(
+                    mock_db, mock_user, ip_address="203.0.113.7", user_agent="pytest-ua"
+                )
+
+    async def test_callback_mints_the_session_with_a_method_auth_service_actually_has(
+        self,
+    ):
+        """REGRESSION (2026-09-06): the callback used to call
+        `AuthService.create_user_session`, a method that never existed, so
+        every social login died with AttributeError -> 500. The previous test
+        mocked the phantom method into existence and stayed green. An
+        autospec with `spec_set=True` refuses any attribute AuthService does
+        not really have, so this test fails on the old code."""
+        from app.models import OAuthProvider
+        from app.services.auth_service import AuthService
+        from app.services.oauth import OAuthService
+
+        strict_auth_service = create_autospec(AuthService, spec_set=True)
+        strict_auth_service.create_session.return_value = ("access", "refresh", object())
+        mock_user = MagicMock()
+        mock_user.id = uuid4()
+
+        with patch.multiple(
+            OAuthService,
+            exchange_code_for_tokens=AsyncMock(return_value={"access_token": "token"}),
+            get_user_info=AsyncMock(
+                return_value={
+                    "provider_user_id": "123",
+                    "email": "user@example.com",
+                    "raw_data": {},
+                }
+            ),
+            find_or_create_user=AsyncMock(return_value=(mock_user, True)),
+        ):
+            with patch("app.services.oauth.AuthService", strict_auth_service):
+                result = await OAuthService.handle_oauth_callback(
+                    MagicMock(), OAuthProvider.GITHUB, "code", "state", "https://redirect.url"
+                )
+
+        assert result is not None
+        _user, auth_data = result
+        assert auth_data == {
+            "access_token": "access",
+            "refresh_token": "refresh",
+            "is_new_user": True,
+        }
+        strict_auth_service.create_session.assert_awaited_once()
 
     async def test_callback_token_exchange_failure(self):
         """Should return None if token exchange fails"""

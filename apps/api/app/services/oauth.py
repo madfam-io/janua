@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlencode
 
 import httpx
-from sqlalchemy import and_
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.locale import normalize_locale
@@ -385,9 +385,9 @@ class OAuthService:
             normalized["name"] = raw_info.get("global_name") or raw_info.get("username")
             avatar_hash = raw_info.get("avatar")
             if avatar_hash:
-                normalized[
-                    "profile_image_url"
-                ] = f"https://cdn.discordapp.com/avatars/{raw_info.get('id')}/{avatar_hash}.png"
+                normalized["profile_image_url"] = (
+                    f"https://cdn.discordapp.com/avatars/{raw_info.get('id')}/{avatar_hash}.png"
+                )
             # Discord doesn't provide first/last name
             if normalized["name"]:
                 parts = normalized["name"].split(" ", 1)
@@ -436,9 +436,9 @@ class OAuthService:
         return normalized
 
     @classmethod
-    def find_or_create_user(
+    async def find_or_create_user(
         cls,
-        db: Session,
+        db: AsyncSession,
         provider: OAuthProvider,
         user_info: Dict[str, Any],
         tokens: Dict[str, Any],
@@ -446,22 +446,28 @@ class OAuthService:
     ) -> Tuple[User, bool]:
         """Find existing user or create new one from OAuth info.
 
+        Runs on the request's `AsyncSession` (`get_db`). Until 2026-09-06 this
+        was a sync method built on `db.query(...)`, which the async session
+        does not have: the first social login to reach it raised
+        `AttributeError` before any user was looked up, and the unit tests never
+        noticed because they handed in a `MagicMock` that answers to anything.
+        The tests now hand in a spec'd `AsyncSession`, which refuses `.query`.
+
         `locale` is the language negotiated from the callback request, used
         only when the provider did not tell us one. It is never applied to an
         already-existing user: a returning user's stored preference outranks
         whatever browser they happen to be signing in from today.
         """
         # Check if OAuth account exists
-        oauth_account = (
-            db.query(OAuthAccount)
-            .filter(
+        result = await db.execute(
+            select(OAuthAccount).where(
                 and_(
                     OAuthAccount.provider == provider,
                     OAuthAccount.provider_user_id == user_info["provider_user_id"],
                 )
             )
-            .first()
         )
+        oauth_account = result.scalar_one_or_none()
 
         if oauth_account:
             # Existing OAuth account - update tokens
@@ -477,26 +483,27 @@ class OAuthService:
                 "scopes": granted_scopes,
                 "raw_user_info": user_info["raw_data"],
             }
-            db.commit()
+            # `oauth_account.user` is a lazy relationship: touching it on an
+            # AsyncSession raises MissingGreenlet. Load the owner explicitly.
+            user = await db.get(User, oauth_account.user_id)
+            await db.commit()
 
-            return oauth_account.user, False
+            return user, False
 
         # Check if user with email exists in the untenanted / staff pool. Social
         # login is a platform identity flow and the create branch below leaves
         # tenant_id NULL, so scope to that pool: post-013 email is per-tenant, and
-        # a bare .first() across pools could return another tenant's user. (Sync
-        # session here, so this scopes inline rather than via get_user_by_email.)
+        # a bare first() across pools could return another tenant's user.
         user = None
         if user_info.get("email"):
-            user = (
-                db.query(User)
-                .filter(
+            result = await db.execute(
+                select(User).where(
                     User.email == user_info["email"],
                     User.status == UserStatus.ACTIVE,
                     User.tenant_id.is_(None),
                 )
-                .first()
             )
+            user = result.scalars().first()
 
         # Create new user if doesn't exist
         is_new_user = False
@@ -519,7 +526,7 @@ class OAuthService:
                 locale=claimed_locale or locale,
             )
             db.add(user)
-            db.flush()
+            await db.flush()
             is_new_user = True
 
         # Parse scopes from token response
@@ -558,25 +565,28 @@ class OAuthService:
             user.email_verified = True
             user.email_verified_at = datetime.utcnow()
 
-        db.commit()
+        await db.commit()
 
         return user, is_new_user
 
     @classmethod
     async def handle_oauth_callback(
         cls,
-        db: Session,
+        db: AsyncSession,
         provider: OAuthProvider,
         code: str,
         state: str,
         redirect_uri: str,
         locale: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> Optional[Tuple[User, Dict[str, Any]]]:
         """Handle OAuth callback and create/update user.
 
-        `locale` is threaded through from the router because this layer is the
-        only one that touches User construction and the router is the only one
-        that can see request headers.
+        `locale`, `ip_address` and `user_agent` are threaded through from the
+        router because this layer is the only one that touches User
+        construction and session minting, and the router is the only one that
+        can see request headers.
         """
         # Exchange code for tokens
         tokens = await cls.exchange_code_for_tokens(provider, code, redirect_uri)
@@ -591,10 +601,17 @@ class OAuthService:
             return None
 
         # Find or create user
-        user, is_new = cls.find_or_create_user(db, provider, user_info, tokens, locale=locale)
+        user, is_new = await cls.find_or_create_user(db, provider, user_info, tokens, locale=locale)
 
-        # Create session tokens
-        access_token, refresh_token, session = AuthService.create_user_session(db, user)
+        # Mint the session through the one method AuthService actually has.
+        # Until 2026-09-06 this line called `AuthService.create_user_session`,
+        # which never existed: every social login ended in AttributeError ->
+        # 500 "OAuth callback processing failed", and the unit test hid it by
+        # mocking the phantom method into existence. `create_session` is the
+        # same minting path the password and magic-link logins use.
+        access_token, refresh_token, _session = await AuthService.create_session(
+            db, user, ip_address=ip_address, user_agent=user_agent
+        )
 
         return user, {
             "access_token": access_token,
