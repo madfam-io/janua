@@ -302,9 +302,7 @@ class TestFailedExchangeSetsNothing:
         db = _lookup_db(None)
         response = Response()
         with pytest.raises(HTTPException):
-            await auth_router.verify_magic_link(
-                SimpleNamespace(token="nope"), _req(), response, db
-            )
+            await auth_router.verify_magic_link(SimpleNamespace(token="nope"), _req(), response, db)
         assert _cookie_headers(response) == []
 
     async def test_rejected_destination_emits_no_sso_cookie(self):
@@ -391,9 +389,7 @@ class TestResolution:
         """The type gate runs both ways: an access token cannot masquerade as an
         estate session reference either."""
         user = _user()
-        access, _jti, _exp = jwt_manager.create_access_token(
-            user_id=str(user.id), email=user.email
-        )
+        access, _jti, _exp = jwt_manager.create_access_token(user_id=str(user.id), email=user.email)
         assert await resolve_sso_cookie_user(access, _lookup_db()) is None
 
     async def test_non_active_user_is_refused(self):
@@ -430,12 +426,12 @@ class TestNotABearerCredential:
 
     async def test_bearer_header_carrying_the_sso_value_does_not_authenticate(self):
         request = MagicMock()
-        request.headers = {"Authorization": f"Bearer {mint_sso_cookie_value(str(uuid4()), str(uuid4()))}"}
+        request.headers = {
+            "Authorization": f"Bearer {mint_sso_cookie_value(str(uuid4()), str(uuid4()))}"
+        }
         request.cookies = {}
         db = SimpleNamespace(execute=AsyncMock())
-        assert (
-            await oauth_provider_router.get_user_from_cookie_or_header(request, db) is None
-        )
+        assert await oauth_provider_router.get_user_from_cookie_or_header(request, db) is None
 
     def test_only_the_authorize_flow_reads_the_cookie(self):
         """Source-level pin. `get_user_from_cookie_or_header` is the sole reader,
@@ -451,13 +447,14 @@ class TestNotABearerCredential:
         readers = re.findall(r"cookies\.get\(SSO_COOKIE_NAME\)", src)
         assert len(readers) == 2, readers  # one in resolution, one in end_session revoke
 
-        callers = [
+        callers = {
             name
             for name, obj in vars(oauth_provider_router).items()
             if inspect.isfunction(obj)
+            and name != "get_user_from_cookie_or_header"  # its own definition
             and "get_user_from_cookie_or_header(" in inspect.getsource(obj)
-        ]
-        assert set(callers) == {"authorize_get", "handle_consent"}, callers
+        }
+        assert callers == {"authorize_get", "handle_consent"}, callers
 
 
 # --------------------------------------------------------------------------
@@ -593,9 +590,7 @@ class TestLogout:
         # the sso revoke branch looks the session row up.
         db = _lookup_db(session)
         with (
-            patch.object(
-                auth_router.AuthService, "verify_token", AsyncMock(return_value=None)
-            ),
+            patch.object(auth_router.AuthService, "verify_token", AsyncMock(return_value=None)),
             patch.object(auth_router, "log_activity", AsyncMock()),
             patch.object(auth_router, "log_audit_event", AsyncMock()),
         ):
@@ -617,9 +612,7 @@ class TestLogout:
         user = _user()
         response = Response()
         with (
-            patch.object(
-                auth_router.AuthService, "verify_token", AsyncMock(return_value=None)
-            ),
+            patch.object(auth_router.AuthService, "verify_token", AsyncMock(return_value=None)),
             patch.object(auth_router, "log_activity", AsyncMock()),
             patch.object(auth_router, "log_audit_event", AsyncMock()),
         ):
@@ -645,9 +638,7 @@ class TestLogout:
         session = _session_row(user.id)
         value = mint_sso_cookie_value(str(user.id), str(session.id))
         db = _lookup_db(session)
-        client = SimpleNamespace(
-            is_active=True, redirect_uris=["https://erp.example.test/goodbye"]
-        )
+        client = SimpleNamespace(is_active=True, redirect_uris=["https://erp.example.test/goodbye"])
         request = MagicMock()
         request.cookies = {SSO_COOKIE_NAME: value}
         with (

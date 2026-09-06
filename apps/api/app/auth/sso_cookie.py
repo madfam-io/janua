@@ -86,7 +86,7 @@ def sso_cookie_max_age() -> int:
     return settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
 
-def sso_cookie_kwargs() -> dict:
+def sso_cookie_kwargs() -> dict[str, Any]:
     """`set_cookie` kwargs for `janua_sso`.
 
     HttpOnly and Secure because this cookie is estate-wide: it is readable on
@@ -98,7 +98,7 @@ def sso_cookie_kwargs() -> dict:
     existing cookies; local dev over http keeps working the same way it does for
     those (browsers accept Secure cookies on http://localhost).
     """
-    kwargs: dict = {
+    kwargs: dict[str, Any] = {
         "httponly": True,
         "secure": True,
         "samesite": "lax",
@@ -110,14 +110,14 @@ def sso_cookie_kwargs() -> dict:
     return kwargs
 
 
-def sso_cookie_delete_kwargs() -> dict:
+def sso_cookie_delete_kwargs() -> dict[str, Any]:
     """`delete_cookie` kwargs.
 
     Domain and Path MUST match the ones the cookie was set with — a deletion that
     differs on either attribute addresses a different cookie and silently leaves
     the real one in the browser.
     """
-    kwargs: dict = {"path": "/"}
+    kwargs: dict[str, Any] = {"path": "/"}
     if settings.COOKIE_DOMAIN:
         kwargs["domain"] = settings.COOKIE_DOMAIN
     return kwargs
@@ -151,7 +151,7 @@ def _session_id_from_session(session: Any) -> Optional[str]:
     return str(session_id) if session_id else None
 
 
-def set_sso_cookie(response, user_id: str, session: Any) -> bool:
+def set_sso_cookie(response: Any, user_id: str, session: Any) -> bool:
     """Set `janua_sso` on `response` for a just-established session.
 
     Returns whether the cookie was set. A caller with no resolvable session row
@@ -170,7 +170,7 @@ def set_sso_cookie(response, user_id: str, session: Any) -> bool:
     return True
 
 
-def clear_sso_cookie(response) -> None:
+def clear_sso_cookie(response: Any) -> None:
     """Delete `janua_sso`, with the exact Domain/Path it was set with."""
     response.delete_cookie(SSO_COOKIE_NAME, **sso_cookie_delete_kwargs())
 
@@ -238,8 +238,8 @@ async def resolve_sso_cookie_user(cookie_value: str, db: AsyncSession) -> Option
         logger.warning("janua_sso cookie sub does not match its session row")
         return None
 
-    result = await db.execute(select(User).where(User.id == session.user_id))
-    user = result.scalar_one_or_none()
+    user_result = await db.execute(select(User).where(User.id == session.user_id))
+    user: Optional[User] = user_result.scalar_one_or_none()
     if user is None:
         return None
 
