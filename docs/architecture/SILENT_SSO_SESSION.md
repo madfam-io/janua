@@ -216,6 +216,22 @@ set with — a deletion differing on either attribute addresses a different cook
 and leaves the live one in place. The cookie's signature is verified before
 anything is revoked, so a forged value cannot end someone else's session.
 
+### Which paths emit it, and which deliberately do not
+
+The cookie is emitted from `_set_session_cookies`, so all four paths that
+establish a **browser** session get it: `login_form`, `login_form_mfa`,
+`magic_link_callback` and `verify_magic_link` (`routers/v1/auth.py`). The other
+session-minting paths were reviewed and deliberately excluded:
+
+| Path | Why not |
+|---|---|
+| `POST /auth/signin` (`app/auth/router.py`) | JSON API returning `TokenResponse`. Its cookies are the legacy `access_token` / `refresh_token` names, which `/authorize` does not read — it establishes no `/authorize`-visible session today, with or without R1. |
+| `POST /mfa/challenge/verify` (`routers/v1/mfa.py`) | JSON API returning tokens in the body; sets **no** cookies at all, not even `janua_access_token`. Nothing to be estate-wide about. |
+| Social OAuth callback (`routers/v1/oauth.py`) | Calls `AuthService.create_user_session`, **which does not exist anywhere in the codebase** — that path raises `AttributeError` the moment a social provider is configured. It is masked in production only because the social-provider env vars are unset (`/auth/oauth/providers` returns `[]`). Fixing it is out of R1's scope and tracked separately; when it is fixed it should emit `janua_sso` (and the `janua_*` cookie pair) too. |
+
+Each of these becomes a one-line change (`user=` / `session=` on the helper, or
+`set_sso_cookie`) if it later becomes a real browser-session door.
+
 ### A failed exchange sets nothing
 
 An invalid or expired magic link, a wrong password, an MFA interrupt, or a
