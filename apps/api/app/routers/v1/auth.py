@@ -42,6 +42,11 @@ from app.services.email_service import (
 from app.models.system_settings import SettingKeys
 from app.services.system_settings_service import SystemSettingsService
 from app.services.webhooks import WebhookEventType, trigger_user_webhook
+from app.auth.sso_cookie import (
+    clear_sso_cookie,
+    revoke_sso_cookie_session,
+    set_sso_cookie,
+)
 
 from ...models import ActivityLog, EmailVerification, MagicLink, PasswordReset, User, UserStatus
 from ...models import Session as UserSession
@@ -871,7 +876,14 @@ def _render_mfa_challenge_page(
     return HTMLResponse(content=html_content, status_code=status_code)
 
 
-def _set_session_cookies(response, access_token: str, refresh_token: str) -> None:
+def _set_session_cookies(
+    response,
+    access_token: str,
+    refresh_token: str,
+    *,
+    user=None,
+    session=None,
+) -> None:
     """Set the hosted-flow session cookies on a response.
 
     Extracted so the password path (login_form) and the second-factor path
@@ -879,6 +891,15 @@ def _set_session_cookies(response, access_token: str, refresh_token: str) -> Non
     optional cross-subdomain domain — instead of drifting between two copies.
     The access cookie is intentionally non-HttpOnly (the browser SDK reads it for
     API calls); the refresh cookie is HttpOnly.
+
+    SSO (J5/R1): when `user` and `session` are supplied, this also sets
+    `janua_sso` — the HttpOnly estate cookie `@madfam/janua-next` relays to the
+    browser after a server-to-server magic-link exchange, and the only session
+    reference `/authorize` can see when a person arrives from another product.
+    See `app/auth/sso_cookie.py` for why it is a separate cookie. `user`/`session`
+    are keyword-only and optional so no existing caller changes behaviour by
+    accident: a caller that cannot name the session row emits no `janua_sso`
+    rather than one that could never be revoked.
     """
     access_cookie_kwargs: dict = {
         "httponly": False,
@@ -898,6 +919,9 @@ def _set_session_cookies(response, access_token: str, refresh_token: str) -> Non
 
     response.set_cookie(key="janua_access_token", value=access_token, **access_cookie_kwargs)
     response.set_cookie(key="janua_refresh_token", value=refresh_token, **refresh_cookie_kwargs)
+
+    if user is not None and session is not None:
+        set_sso_cookie(response, str(getattr(user, "id", "")), session)
 
 
 async def _resolve_oauth_redirect_target(
@@ -1512,7 +1536,7 @@ async def login_form(
         response = RedirectResponse(url=safe_next, status_code=302)
 
     # Set session cookies (shared with the second-factor path — see helper).
-    _set_session_cookies(response, access_token, refresh_token)
+    _set_session_cookies(response, access_token, refresh_token, user=user, session=session)
 
     return response
 
@@ -1610,7 +1634,7 @@ async def login_form_mfa(
         return _reject("Invalid verification code. Please try again.", remint_for=user)
 
     # Second factor cleared — create the session and resume the OAuth redirect.
-    access_token, refresh_token, _session = await AuthService.create_session(
+    access_token, refresh_token, session = await AuthService.create_session(
         db, user, ip_address=request.client.host, user_agent=request.headers.get("user-agent")
     )
     await log_activity(
@@ -1636,7 +1660,7 @@ async def login_form_mfa(
     from fastapi.responses import RedirectResponse
 
     response = RedirectResponse(url=safe_next, status_code=302)
-    _set_session_cookies(response, access_token, refresh_token)
+    _set_session_cookies(response, access_token, refresh_token, user=user, session=session)
     return response
 
 
@@ -1664,12 +1688,19 @@ async def login(credentials: SignInRequest, request: Request, db: Session = Depe
 # Alias for /signout (tests expect /logout)
 @router.post("/logout")
 async def logout(
+    req: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ):
-    """Sign out current session (alias for /signout)"""
-    return await sign_out(current_user, credentials, db)
+    """Sign out current session (alias for /signout).
+
+    SSO (J5/R1): this is the endpoint `@madfam/janua-next` calls from its logout
+    route, and it relays the `janua_sso` deletion this sets back to the browser —
+    the mirror of the relay that delivered the cookie. See `sign_out`.
+    """
+    return await sign_out(current_user, credentials, db, req=req, response=response)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -1694,8 +1725,21 @@ async def sign_out(
     current_user: User = Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
+    req: Request = None,
+    response: Response = None,
 ):
-    """Sign out current session"""
+    """Sign out current session.
+
+    SSO (J5/R1): besides the existing blacklist + session revocation, this
+    revokes whatever `janua_sso` references and deletes the cookie with the same
+    Domain and Path it was set with. Both halves are needed: deleting the cookie
+    only clears this browser, while revoking the `sessions` row is what stops a
+    copy of the cookie taken earlier. The signature is verified before anything
+    is revoked, so a forged cookie cannot end someone else's session.
+
+    `req`/`response` default to None so the existing direct callers and tests,
+    which invoke this as a plain coroutine, keep working unchanged.
+    """
     token = credentials.credentials
     payload = await AuthService.verify_token(token, token_type="access")
 
@@ -1726,6 +1770,18 @@ async def sign_out(
                 await db.commit()
         except Exception:
             pass  # Best-effort session revocation
+
+    # SSO (J5/R1): revoke the estate session and clear its cookie. Best-effort,
+    # exactly like the blacklisting above — logout must never fail on this.
+    try:
+        if req is not None and await revoke_sso_cookie_session(
+            req.cookies.get("janua_sso"), db
+        ):
+            await db.commit()
+    except Exception:
+        pass
+    if response is not None:
+        clear_sso_cookie(response)
 
     # Log activity (best-effort, don't fail logout)
     try:
@@ -2556,7 +2612,7 @@ async def magic_link_callback(
     # session must never produce a second one.
     magic_link.used_at = datetime.utcnow()
 
-    access_token, refresh_token, _session = await AuthService.create_session(
+    access_token, refresh_token, session = await AuthService.create_session(
         db, user, ip_address=req.client.host if req and req.client else None,
         user_agent=req.headers.get("user-agent") if req else None,
         audience=await _session_audience_for_redirect(db, magic_link.redirect_url),
@@ -2593,7 +2649,7 @@ async def magic_link_callback(
     # the one moment the issuer can set its own cookie on a magic-link login.
     # Without it `/authorize?prompt=none` has no session to recognise and every
     # silent hop between products falls back to a fresh magic link.
-    _set_session_cookies(redirect, access_token, refresh_token)
+    _set_session_cookies(redirect, access_token, refresh_token, user=user, session=session)
     return redirect
 
 
@@ -2679,7 +2735,7 @@ async def verify_magic_link(
 
     # SSO (B1): same tokens the body carries, also as issuer session cookies.
     # The response body below is byte-for-byte what it was before.
-    _set_session_cookies(response, access_token, refresh_token)
+    _set_session_cookies(response, access_token, refresh_token, user=user, session=session)
 
     return SignInResponse(
         user=UserResponse(

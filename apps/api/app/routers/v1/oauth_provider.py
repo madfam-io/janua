@@ -30,6 +30,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.sso_cookie import (
+    SSO_COOKIE_NAME,
+    clear_sso_cookie,
+    resolve_sso_cookie_user,
+    revoke_sso_cookie_session,
+)
 from app.config import settings
 from app.core.database import get_db
 from app.core.jwt_manager import jwt_manager
@@ -341,11 +347,29 @@ async def get_user_from_cookie_or_header(
     Get authenticated user from either:
     1. Bearer token in Authorization header (API clients)
     2. janua_access_token cookie (browser-based OAuth flow)
+    3. janua_sso cookie (the estate session — J5/R1)
 
     This enables the OAuth authorize endpoint to work with browser sessions
     after the user logs in via the login form, or after a magic link (B1).
     Both paths accept any audience Janua minted — see
     `_verify_own_access_token`.
+
+    (3) is the case B1 could not reach. The MAP and the nauta ERP portal exchange
+    the magic link server-to-server, so their browsers never receive
+    `janua_access_token`; `@madfam/janua-next` relays `janua_sso` to the browser
+    instead. A person arriving at `/authorize` from another product has ONLY that
+    cookie, and it must be enough — for `prompt=none` and for the interactive
+    flow alike, which is what "single sign-on" means. Everything the interactive
+    path enforces afterwards (email verification, MFA, consent for third
+    parties) is enforced identically; this resolves *who* the person is, never
+    *whether they may proceed*.
+
+    This function is the ONLY reader of `janua_sso`, and its only callers are the
+    authorize flow (`GET /authorize`) and its consent continuation
+    (`POST /consent`). The cookie is never a bearer substitute: it carries
+    `type: "sso_session"`, and every bearer path — `get_current_user`,
+    `_verify_own_access_token` above — verifies `token_type="access"`, so
+    presenting it as `Authorization: Bearer …` fails verification.
     """
     # First, try to get user from Authorization header via dependency
     auth_header = request.headers.get("Authorization")
@@ -373,6 +397,18 @@ async def get_user_from_cookie_or_header(
                     return user
         except Exception:
             pass  # Intentionally ignoring - cookie JWT verification failure means user is not authenticated
+
+    # Third, the estate cookie. Unlike the two above this is not a token the
+    # holder could spend anywhere: resolution re-reads the `sessions` row it
+    # references, so a revoked session stops authenticating it immediately.
+    sso_cookie = request.cookies.get(SSO_COOKIE_NAME)
+    if sso_cookie:
+        try:
+            user = await resolve_sso_cookie_user(sso_cookie, db)
+            if user:
+                return user
+        except Exception:
+            logger.warning("janua_sso cookie resolution failed", exc_info=True)
 
     return None
 
@@ -2325,7 +2361,12 @@ async def revoke(
 
 
 def _clear_janua_session_cookies(response: RedirectResponse) -> None:
-    """Clear Janua browser session cookies on logout."""
+    """Clear Janua browser session cookies on logout.
+
+    `janua_sso` is deleted through its own helper because it is set with an
+    explicit `Path=/` — a deletion that differs on Domain *or* Path addresses a
+    different cookie and leaves the live one in the browser.
+    """
     delete_kwargs: dict = {}
     if settings.COOKIE_DOMAIN:
         delete_kwargs["domain"] = settings.COOKIE_DOMAIN
@@ -2336,6 +2377,7 @@ def _clear_janua_session_cookies(response: RedirectResponse) -> None:
         "refresh_token",
     ):
         response.delete_cookie(cookie_name, **delete_kwargs)
+    clear_sso_cookie(response)
 
 
 @logout_router.get("/logout")
@@ -2346,11 +2388,21 @@ async def oidc_end_session(
     ),
     state: Optional[str] = Query(None, description="Opaque state forwarded to redirect URI"),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """
     OIDC RP-Initiated Logout endpoint (end_session_endpoint).
 
     Clears Janua session cookies and redirects to the registered post-logout URI.
+
+    SSO (J5/R1): deleting `janua_sso` is the cosmetic half. The half that matters
+    is revoking the `sessions` row it references — a copy of the cookie taken
+    before logout must stop working, not merely disappear from this browser. The
+    cookie's signature is verified before anything is revoked, so a forged value
+    cannot end someone else's session.
+
+    `request` is declared last and optional so FastAPI still injects it on the
+    real route while the existing keyword-only callers keep working unchanged.
     """
     client = await _get_oauth_client(client_id, db)
     if not client or not client.is_active:
@@ -2376,6 +2428,17 @@ async def oidc_end_session(
     if state:
         separator = "&" if "?" in redirect_url else "?"
         redirect_url = f"{redirect_url}{separator}{urlencode({'state': state})}"
+
+    # Revoke before clearing: the cookie is the only handle we have on the row.
+    # `request` is optional (and last) so the existing direct callers and tests,
+    # which invoke this as a plain coroutine with keyword args, keep working.
+    try:
+        if request is not None and await revoke_sso_cookie_session(
+            request.cookies.get(SSO_COOKIE_NAME), db
+        ):
+            await db.commit()
+    except Exception:
+        logger.warning("Failed to revoke janua_sso session on end_session", exc_info=True)
 
     response = RedirectResponse(url=redirect_url, status_code=302)
     _clear_janua_session_cookies(response)
