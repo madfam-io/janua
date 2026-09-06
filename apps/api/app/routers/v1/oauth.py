@@ -153,7 +153,7 @@ async def oauth_authorize(
             logger.error("Failed to store OAuth state in Redis - service unavailable")
             raise HTTPException(
                 status_code=503,
-                detail="Authentication service temporarily unavailable. Please try again."
+                detail="Authentication service temporarily unavailable. Please try again.",
             )
 
         # Build redirect URI if not provided
@@ -235,7 +235,14 @@ async def oauth_callback(
 
         # Handle OAuth callback
         result = await OAuthService.handle_oauth_callback(
-            db, oauth_provider, code, state, redirect_uri, locale=locale_from_request(request)
+            db,
+            oauth_provider,
+            code,
+            state,
+            redirect_uri,
+            locale=locale_from_request(request),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
         )
 
         if not result:

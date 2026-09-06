@@ -159,14 +159,22 @@ class TestMagicLink:
 class TestOauth:
     """OAuth account creation, where the provider may assert a locale."""
 
-    def _run(self, claims, locale=None):
+    async def _run(self, claims, locale=None):
         from app.models import OAuthProvider
         from app.services.oauth import OAuthService
 
+        # `find_or_create_user` runs on the request's AsyncSession (2026-09-06):
+        # every lookup answers "nothing exists yet", so the create branch runs.
         db = MagicMock()
-        db.query.return_value.filter.return_value.first.return_value = None
+        nothing = MagicMock()
+        nothing.scalar_one_or_none.return_value = None
+        nothing.scalars.return_value.first.return_value = None
+        db.execute = AsyncMock(return_value=nothing)
+        db.add = MagicMock()
+        db.flush = AsyncMock()
+        db.commit = AsyncMock()
 
-        OAuthService.find_or_create_user(
+        await OAuthService.find_or_create_user(
             db,
             OAuthProvider.GOOGLE,
             {
@@ -180,19 +188,19 @@ class TestOauth:
         )
         return _only_locale(db)
 
-    def test_provider_claim_wins(self):
+    async def test_provider_claim_wins(self):
         # A user's language on their Google account beats today's browser.
-        assert self._run({"locale": "es-MX"}, locale="en") == "es"
+        assert await self._run({"locale": "es-MX"}, locale="en") == "es"
 
-    def test_header_fallback(self):
-        assert self._run({}, locale="es") == "es"
+    async def test_header_fallback(self):
+        assert await self._run({}, locale="es") == "es"
 
-    def test_unsupported_claim(self):
+    async def test_unsupported_claim(self):
         # An untranslatable claim must not shadow the usable header value.
-        assert self._run({"locale": "fr-CA"}, locale="es") == "es"
+        assert await self._run({"locale": "fr-CA"}, locale="es") == "es"
 
-    def test_nothing(self):
-        assert self._run({}, locale=None) is None
+    async def test_nothing(self):
+        assert await self._run({}, locale=None) is None
 
 
 class TestInviteAccept:
