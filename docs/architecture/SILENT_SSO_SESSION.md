@@ -20,8 +20,9 @@ unified-SSO ADR. It resolves the person from the `janua_access_token` cookie.
 That cookie had exactly two writers, both on the hosted password form
 (`login_form` and `login_form_mfa` in `apps/api/app/routers/v1/auth.py`, via
 `_set_session_cookies`). But the products that actually needed silent SSO — the
-MAP (`crea-map.madfam.io`) and the nauta portal, soon `crea-erp.madfam.io` —
-sign people in by **magic link**, and their users have no password at all. So no
+MAP and the nauta ERP portal (`map.creatumundo.mx` / `erp.creatumundo.mx`
+today; `crea-map.madfam.io` / `crea-erp.madfam.io` when this was written, now
+301 aliases) — sign people in by **magic link**, and their users have no password at all. So no
 browser ever held the cookie `/authorize` reads, and `prompt=none` could only
 ever answer `login_required`.
 
@@ -37,13 +38,13 @@ land, not a menu.
 | **B1** | Both magic-link paths set the issuer session cookies | Janua `routers/v1/auth.py` | landed |
 | **B2** | `/authorize` accepts every audience Janua mints | Janua `routers/v1/oauth_provider.py` | landed |
 | **B6** | First-party clients are pre-consented | Janua `routers/v1/oauth_provider.py` | landed |
-| **B3** | `COOKIE_DOMAIN=.madfam.io` so the cookie is readable estate-wide | operator (internal-devops / enclii) | **pending ratification** |
-| **B4** | `madfam:silent_auth` on the `crea-map` and nauta OIDC clients | operator (admin API / data) | pending |
-| **B5** | nauta sends `prompt=none` and falls back to interactive login | nauta `sso-launch.ts`, `auth.ts` | not started |
-| **B7** | The MAP links to `crea-erp` (optionally sends `prompt`) | crea-map | not started |
+| **B3** | `COOKIE_DOMAIN=.madfam.io` so the cookie is readable estate-wide | `k8s/base/deployments/janua-api.yaml` | landed |
+| **B4** | `madfam:silent_auth` on the `crea-map` and nauta OIDC clients | operator (admin API / data) | landed (client rows; not verifiable from this repo) |
+| **B5** | nauta sends `prompt=none` and falls back to interactive login | nauta `sso-launch.ts`, `auth.ts` | landed |
+| **B7** | The MAP links to `crea-erp` (optionally sends `prompt`) | crea-map | landed |
 | **R1** | `janua_sso`: an HttpOnly estate cookie the SDK can relay to the browser | Janua `auth/sso_cookie.py`, `routers/v1/auth.py`, `routers/v1/oauth_provider.py` | landed |
 | **R1s** | `@madfam/janua-next` relays `janua_sso` (and its deletion) | madfam-js `@madfam/janua-next@0.2.0` | landed |
-| **R1n** | nauta adds the same relay | nauta | in flight |
+| **R1n** | nauta adds the same relay | nauta | landed |
 | **J9** | `janua_sso` outranks `janua_access_token` at `/authorize` | Janua `routers/v1/oauth_provider.py` | landed |
 | **J6** | Magic links land on Janua first for hosts outside `COOKIE_DOMAIN`; the callback GET stops spending the token | Janua `auth/hosted_hop.py`, `services/email_service.py`, `routers/v1/auth.py` | landed |
 
@@ -146,6 +147,15 @@ covers the app's public host, appending it to the 303 it returns to the browser
 after the verify exchange. It relays the `Max-Age=0` deletion from
 `POST /api/v1/auth/logout` the same way. nauta adds the same relay (R1n). R1 is
 the Janua half: minting what the relay carries.
+
+> **Current package contract: `@madfam/janua-next@0.3.0`.** 0.2.0 is where the
+> relay above landed and is still the correct attribution for it. 0.3.0 adds the
+> **hop landing** J6 requires: a POST that accepts an `?token=<access_token>`
+> forwarded by janua's interstitial, rather than only the one-time magic-link
+> token 0.2.0 expects. This is not cosmetic — a product still on 0.2.0 answers
+> a hop-forwarded link with "El enlace ya no es válido", which is exactly what
+> `map.creatumundo.mx` did on 2026-09-07 at 03:07 CDMX before crea-map #347/#350
+> shipped. A brand host therefore needs 0.3.0 **and** a route to land it on.
 
 ### Why a separate cookie (option 3, ratified)
 
@@ -403,12 +413,13 @@ link for a host whose relay silently refuses — the live brand-host defect.
 
 Consequences worth stating:
 
-- **Nothing that works today changes.** `crea-map.madfam.io` and
-  `crea-erp.madfam.io` keep the byte-identical link they have now. The hop
-  lights up only for hosts that are provably broken.
-- **Cutover needs no deploy.** When `map.creatumundo.mx` goes live its links
-  take the hop automatically; a host that later moved under `madfam.io` would
-  revert automatically.
+- **Nothing that worked at the time changed.** `crea-map.madfam.io` and
+  `crea-erp.madfam.io` kept the byte-identical link they had. The hop lights up
+  only for hosts that are provably broken.
+- **Cutover needed no deploy, and this is how it actually went.** When
+  `map.creatumundo.mx` went live on 2026-09-07 its links took the hop with no
+  janua deploy; a host that later moved under `madfam.io` would revert the same
+  way.
 - `hosted_hop: true|false` on `POST /api/v1/auth/magic-link` overrides the rule
   in either direction. It is an escape hatch (a rehearsal host, a future tenant
   zone), never the mechanism.
@@ -445,6 +456,20 @@ contract products already implement. Body branding still resolves from the
 destination host (`CTM_HOSTS`), so a CTM link keeps the Crea header: the hop
 changes the link's host, not whose email it is.
 
+**What the PRODUCT owes, and the way it bites.** The `?token=` forwarded by the
+hop is an **access token**, not the one-time magic-link token. A product route
+that only knows how to redeem the latter answers a hop link with "the link is no
+longer valid" — the user-visible failure observed on `map.creatumundo.mx` at
+03:07 CDMX on 2026-09-07. Landing it takes two things on the product side:
+`@madfam/janua-next@0.3.0` (0.2.0 has no hop landing) and a `redirect_url`
+pointing at a route that completes a session from an access token. crea-map uses
+a route dedicated to exactly that, `/api/auth/magic-complete`, distinct from its
+one-time-token `/api/auth/magic-verify`.
+
+Janua does not know or care which route that is — it forwards to whatever
+`redirect_url` the caller registered — so this is a product contract, recorded
+here because janua's hop is what makes it load-bearing.
+
 ### The callback is now scanner-proof (a latent bug, fixed here)
 
 `GET /api/v1/auth/magic-link/callback` used to **spend the one-time token on the
@@ -469,9 +494,12 @@ had to land with it: shipping the hop without it would have shipped the
 
 ### Test recipe (both directions, both host pairs)
 
-Substitute `HOST_MAP` / `HOST_ERP` for the pair under test:
-`crea-map.madfam.io` / `crea-erp.madfam.io` today, `map.creatumundo.mx` /
-`erp.creatumundo.mx` after DNS Switch 1.
+Substitute `HOST_MAP` / `HOST_ERP` for the pair under test. Since 2026-09-07
+the CANONICAL pair is `map.creatumundo.mx` / `erp.creatumundo.mx`; the estate
+pair `crea-map.madfam.io` / `crea-erp.madfam.io` now answers 301 to it
+(Cloudflare redirect rules on the `madfam.io` zone). Both are still worth
+testing — they exercise the two SIDES of the hop rule, which is the point of
+the recipe: the brand pair must take the hop, the estate pair must not.
 
 **1. The hop fires only where it should** (no mail needed):
 

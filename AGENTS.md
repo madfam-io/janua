@@ -398,9 +398,15 @@ SMTP_FROM=noreply@janua.dev
 # Email (Resend)
 EMAIL_ENABLED=true               # Enable email sending (default: false)
 EMAIL_PROVIDER=resend             # Email provider (resend)
-EMAIL_FROM_ADDRESS=hola@madfam.io  # see docs/EMAIL_SENDER_POLICY.md
-EMAIL_FROM_NAME=MADFAM            # one sender for every platform
-RESEND_API_KEY=re_XXXXX           # Resend API key (sending access)
+EMAIL_FROM_ADDRESS=hola@madfam.io  # PLATFORM sender; see docs/EMAIL_SENDER_POLICY.md
+EMAIL_FROM_NAME=MADFAM            # platform default, NOT "one sender for every
+                                  # platform": vCTO tenants resolve their own
+                                  # From line from sender_binding.py
+RESEND_API_KEY=re_XXXXX           # MADFAM's Resend account (platform sending)
+RESEND_VERIFIED_DOMAINS=madfam.io # domains verified on MADFAM's account
+CTM_RESEND_API_KEY=re_XXXXX       # CTM's OWN Resend account (tenant binding).
+                                  # Optional: absent => CTM degrades to the
+                                  # platform sender, the link still sends.
 ```
 
 ### Admin Bootstrap

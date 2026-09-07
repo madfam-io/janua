@@ -1,8 +1,20 @@
 # Who our email comes from
 
-**2026-08-14.** A two-phase policy. Phase 1 is in force today and applies to
-every new engagement; Phase 2 begins per-client, when MADFAM takes over
-managing that client's web presence.
+**2026-08-14.** A policy that grew to four phases. Phase 1 is in force for every
+engagement by default; Phases 2-4 begin per-client, as MADFAM takes over that
+client's web presence and, eventually, hands the sending account back to them.
+
+> **Where this stands today (2026-09-07).** All four phases are live, and CTM is
+> the worked example of the end state: a magic link requested at
+> `map.creatumundo.mx` arrived at 12:07:06 CDMX from
+> **`Crea Tu Mundo <hola@creatumundo.mx>`**, sent on **CTM's own Resend
+> account**. Reading order for the current contract: [THE RULE](#the-rule-2026-09-07--the-display-name-follows-the-address)
+> (what a From header may never be), then
+> [Phase 3](#phase-3--a-branded-sender-is-a-vcto-privilege-and-it-is-portable)
+> (who is entitled to one), then
+> [Phase 4](#phase-4--ctm-is-live-on-its-own-resend-account-2026-09-07)
+> (the account, the credential path, and the rollback). Phases 1-2 remain the
+> description of every tenant that has not reached Phase 3.
 
 ## THE RULE (2026-09-07) — the display name follows the address
 
