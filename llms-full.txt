@@ -1,6 +1,6 @@
 # Janua Full LLM Context
 
-Generated: 2026-05-13
+Generated: 2026-05-13 · contracts section updated 2026-09-07
 
 ## Purpose
 
@@ -32,6 +32,54 @@ break-glass emergencies when Enclii is unavailable or lacks an implemented
 adapter. Any break-glass use must record the actor, reason, target
 service/environment, commands executed, result, and follow-up Enclii adapter
 gap or incident link.
+
+## Durable contracts an agent must not break
+
+These are load-bearing behaviours with production evidence behind them. Changing
+one is a decision, not a refactor. Each names the file that owns it.
+
+### Sending identity — `app/services/sender_binding.py`, `email_sender.py`
+
+A From header pairing a client's display NAME with an address on MADFAM's domain
+(`Crea Tu Mundo <hola@madfam.io>`) must never be produced. Display name and
+address move together on one fact: is the binding's address domain verified for
+the ACCOUNT that will send it. There is no intermediate state. This reversed an
+earlier rule after the forbidden header reached a real client inbox on
+2026-09-07; several tests exist only to assert it can never recur, so a test
+naming that string is a guard, not a stale reference.
+
+Verification is per ACCOUNT, not per domain. A tenant on its own provider
+account reads its own `verified_domains`; the global `RESEND_VERIFIED_DOMAINS`
+describes MADFAM's account only.
+
+A missing tenant credential degrades the sender to the platform From line and
+logs `sender_credentials.tenant_credential_missing`. It never blocks the send: a
+degraded From is a degraded outcome, a magic link that never arrives is an
+outage.
+
+`credential_ref` names an ENV VAR for CTM, not a Vault path, because janua-api
+runs with no `VAULT_ADDR`/`VAULT_TOKEN` — a `path#field` reference cannot
+resolve at runtime in production. Vault reaches the pod through an
+enclii-managed ExternalSecret instead.
+
+### Magic links — `app/auth/hosted_hop.py`, `routers/v1/auth.py`
+
+`GET` on the magic-link callback spends nothing; only `POST` exchanges. Mail
+scanners GET every URL in an email, and this estate has already lost a live
+ceremony to a scanner-consumed link.
+
+When the destination host cannot receive the estate cookie (it is outside
+`COOKIE_DOMAIN`), the link lands on janua for one hop and then forwards
+`?token=<access_token>` to the registered `redirect_url`. The rule is DERIVED
+from the cookie domain, never configured, so it cannot drift from the relay
+guard in `@madfam/janua-next`. Products land the forward with 0.3.0 or later.
+
+### Estate session — `app/auth/sso_cookie.py`
+
+`janua_sso` is HttpOnly, `Domain=.madfam.io`, and outranks `janua_access_token`
+at `/authorize`. It is the only session that reaches the browser across the
+estate, because products exchange magic links server-to-server and Node drops
+the `Set-Cookie` on a fetch response.
 
 ## Repo entrypoints detected
 

@@ -218,17 +218,25 @@ PLATFORM_BINDING = SenderBinding(
 # --------------------------------------------------------------------------
 # Crea Tu Mundo. The first, and today the only, client binding.
 #
-# STATE AS OF THIS COMMIT: `account=ACCOUNT_MADFAM`. CTM sends on MADFAM's
-# Resend account, from their own domain once that domain is verified there.
-# That is the correct state while MADFAM runs the domain (Switch 1 of the
-# creatumundo.mx plan has not happened yet) and it is what #603 shipped.
+# STATE SINCE 2026-09-07 (#608): `account=ACCOUNT_TENANT`. CTM sends on ITS
+# OWN Resend account, where `creatumundo.mx` is verified. Confirmed in a real
+# inbox at 12:07 CDMX that day: `From: Crea Tu Mundo <hola@creatumundo.mx>`.
 #
-# The MIGRATION to `ACCOUNT_TENANT` is a two-field edit on this record —
-# `account` and `credential_ref` — performed by
-# `scripts/sender_binding_switch.py`, which also creates and verifies the
-# domain in the tenant's own Resend account first. Nothing else changes: no
-# code path, no caller, no template. That is the portability the owner asked
-# for, and the reason `account` is a field rather than a global setting.
+# (#603 shipped `ACCOUNT_MADFAM` — CTM's address on MADFAM's account — which
+# was correct while MADFAM ran the domain, before creatumundo.mx Switch 1.)
+#
+# The MIGRATION performed here was a two-field edit on this record —
+# `account` and `credential_ref` — plus `verified_domains`, made by
+# `scripts/sender_binding_switch.py`, which creates and verifies the domain in
+# the tenant's own Resend account first. Nothing else changed: no code path, no
+# caller, no template. That is the portability the owner asked for, and the
+# reason `account` is a field rather than a global setting.
+#
+# `credential_ref` names an ENV VAR, not a Vault path: janua-api runs with no
+# VAULT_ADDR/VAULT_TOKEN, so a `path#field` reference can never resolve at
+# runtime. Vault `secret/janua#ctm_resend_api_key` reaches the pod as
+# `CTM_RESEND_API_KEY` through the enclii-managed `janua-secrets`
+# ExternalSecret. See docs/EMAIL_SENDER_POLICY.md "Phase 4".
 # --------------------------------------------------------------------------
 CTM_BINDING = SenderBinding(
     tenant="ctm",
@@ -238,11 +246,11 @@ CTM_BINDING = SenderBinding(
     provider=PROVIDER_RESEND,
     account=ACCOUNT_TENANT,
     credential_ref="CTM_RESEND_API_KEY",
-    # Empty while on MADFAM's account: the global RESEND_VERIFIED_DOMAINS is
-    # the authority there, and duplicating `creatumundo.mx` here would create a
-    # second place to forget to remove it. It becomes non-empty when, and only
-    # when, `account` flips to `tenant` — because then the global list (which
-    # describes MADFAM's account) is the WRONG authority.
+    # Non-empty BECAUSE `account` is `tenant`. Verification in Resend is per
+    # ACCOUNT, so the global RESEND_VERIFIED_DOMAINS — which describes MADFAM's
+    # account — is the wrong authority for a tenant-account binding. These two
+    # fields move together, in both directions: a rollback to ACCOUNT_MADFAM
+    # empties this tuple so the global list becomes authoritative again.
     verified_domains=("creatumundo.mx",),
     hosts=CTM_HOSTS,
     org_id=CTM_ORG_ID,

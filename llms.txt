@@ -11,6 +11,29 @@ Compact LLM context index for this repository.
 - `packages/cli/README.md` — `@janua/cli` consumer provisioning (`janua provision *`).
 - `docs/PP_3B_STAGING_PIPELINE.md` — staging/prod pipeline, ops bootstrap, OAuth provisioning.
 - `examples/consumer-bootstrap/` — `janua.client.yaml` template for consumer repos.
+- `docs/EMAIL_SENDER_POLICY.md` — who our email comes from. THE RULE (a client
+  display name never pairs with a MADFAM address), the vCTO gate, and how a
+  tenant sends on its own provider account.
+- `docs/architecture/SILENT_SSO_SESSION.md` — one browser session across the
+  estate: the `janua_sso` cookie, `prompt=none`, and the hosted hop for hosts
+  outside the cookie domain.
+- `docs/runbooks/resend-domain-onboarding.md` — onboarding a client sending
+  domain, and migrating a client to their own Resend account.
+
+## Current state worth knowing (2026-09-07)
+
+- Magic links to a host **outside** `COOKIE_DOMAIN` take a **hosted hop**: janua
+  renders a branded interstitial and forwards `?token=<access_token>` to the
+  product's `redirect_url`. The product must land that on a route that completes
+  a session from an access token, using `@madfam/janua-next@0.3.0` or later.
+- The magic-link callback `GET` renders and **spends nothing**; only `POST`
+  exchanges. Mail scanners no longer burn links.
+- Sending identity is **per tenant** (`app/services/sender_binding.py`), not one
+  global From line. Crea Tu Mundo sends from `hola@creatumundo.mx` on **its own
+  Resend account**, keyed by the `CTM_RESEND_API_KEY` env var. A missing tenant
+  credential degrades the sender to the platform From line; it never blocks a
+  sign-in link.
+- A tenant display name is never paired with an address on MADFAM's domain.
 
 ## Production operations
 

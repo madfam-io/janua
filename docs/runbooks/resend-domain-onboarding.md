@@ -69,6 +69,15 @@ Idempotent: a re-run finds the existing domain instead of creating a duplicate.
 It prints the records **and** the matching `enclii providers cloudflare
 dns-apply` lines. Exit code `2` means "exists, not verified yet" — expected here.
 
+> **If the very first call answers `HTTP 403` with a body of `error code: 1010`,
+> the API key is not the problem.** That is Cloudflare, in front of
+> `api.resend.com`, refusing urllib's default `User-Agent` before the request
+> reaches Resend. Both scripts now send a descriptive UA (#606 for this one; the
+> sibling `sender_binding_switch.py` in the 2026-09-07 wrap-up), and
+> `tests/unit/test_resend_scripts_user_agent.py` fails if either loses it. Worth
+> recognising by sight: a 403 on an authenticated endpoint reads as a bad
+> credential, and an operator can burn a long time rotating a key that was fine.
+
 ### 2. Publish the records through Enclii
 
 Enclii-first: do not edit DNS in the Cloudflare dashboard. Copy the generated
@@ -151,8 +160,10 @@ This is a plain env change; **no Alembic migration is involved.**
 The API's 200 says nothing about SPF/DKIM alignment or spam placement. Read a
 real message.
 
-1. Request a magic link for a CTM user at `https://map.creatumundo.mx` (or
-   `crea-map.madfam.io` — both resolve to the CTM tenant).
+1. Request a magic link for a CTM user at `https://map.creatumundo.mx` — the
+   canonical CTM host since 2026-09-07. (`crea-map.madfam.io` now answers 301
+   to it; it still resolves to the CTM tenant for sender purposes, so it is a
+   valid tenant signal, just no longer the address to hand a person.)
 2. In the received mail, confirm:
    - `From: Crea Tu Mundo <hola@creatumundo.mx>`
    - `Reply-To: hola@creatumundo.mx`
@@ -306,6 +317,12 @@ python3 scripts/sender_binding_switch.py ctm --verify
 ```
 
 Código de salida `2` = existe pero no verificado. `0` = listo para el paso 3.
+
+> **`HTTP 403` con cuerpo `error code: 1010` no es la llave.** Es Cloudflare
+> delante de `api.resend.com` rechazando el `User-Agent` por omisión de urllib.
+> Ambos scripts ya mandan un UA descriptivo y hay una prueba que falla si se
+> pierde. Un 403 en un extremo autenticado se lee como credencial mala: no
+> rotes la llave del cliente por esto.
 
 ### 2. Si no: crearlo ahí e imprimir el DNS que falta
 

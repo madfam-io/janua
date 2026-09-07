@@ -75,7 +75,13 @@ available.
 - RS256-signed JWTs — verify tokens anywhere against our public keys
 - Email/password authentication with secure hashing
 - OAuth 2.0 social login (Google, GitHub, Microsoft, Apple, Discord, Twitter, LinkedIn, Slack)
-- Magic links (passwordless email authentication)
+- Magic links (passwordless email authentication), including a **hosted hop**
+  for destinations outside the estate cookie domain — the link lands on Janua
+  for one browser hop so the issuer can set its own first-party cookie, then
+  forwards to the product ([`docs/architecture/SILENT_SSO_SESSION.md`](./docs/architecture/SILENT_SSO_SESSION.md))
+- Per-tenant sending identity: a vCTO client's mail can carry its own From line
+  and even send on the client's **own provider account**, as a config change
+  rather than a migration ([`docs/EMAIL_SENDER_POLICY.md`](./docs/EMAIL_SENDER_POLICY.md))
 - Hosted health endpoints for operations
 
 **🔧 Implemented, hardening in progress** (in daily use; GA evidence being filed):
