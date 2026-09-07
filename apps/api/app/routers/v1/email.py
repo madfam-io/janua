@@ -46,6 +46,12 @@ class SendEmailRequest(BaseModel):
     tags: Optional[Dict[str, str]] = None
     source_app: str  # Required: dhanam, digifab, forj, avala, madfam-site
     source_type: Optional[str] = "notification"  # auth, billing, transactional, notification
+    # Tenant signals for the Phase-2 sender. A caller that knows which tenant
+    # the message is for can say so; the host in `redirect_url` is the same
+    # signal the auth mailer reads. Neither is required, and neither can force
+    # an unverified sending domain onto the wire — see app/services/email_sender.py.
+    redirect_url: Optional[str] = None
+    org_id: Optional[str] = None
 
 
 class SendTemplateEmailRequest(BaseModel):
@@ -57,6 +63,8 @@ class SendTemplateEmailRequest(BaseModel):
     attachments: Optional[List[EmailAttachment]] = None
     source_app: str
     source_type: Optional[str] = "notification"
+    redirect_url: Optional[str] = None
+    org_id: Optional[str] = None
 
 
 class EmailResponse(BaseModel):
@@ -277,8 +285,10 @@ async def send_email(request: SendEmailRequest, _: bool = Depends(verify_interna
         if request.tags:
             tag_list.extend([{"name": k, "value": v} for k, v in request.tags.items()])
 
-        # Note: ResendEmailService uses settings for from_email/from_name
-        # Custom from_email, from_name, and attachments are not currently supported
+        # from_email / from_name are now passed through, but they are NOT
+        # trusted: `sender_for_address` honours an explicit address only when
+        # its domain is in RESEND_VERIFIED_DOMAINS, and otherwise falls back to
+        # the tenant/host rule. Attachments are still not supported here.
         # Send to each recipient (service expects single email address)
         results = []
         for recipient in request.to:
@@ -291,6 +301,10 @@ async def send_email(request: SendEmailRequest, _: bool = Depends(verify_interna
                 cc=request.cc,
                 bcc=request.bcc,
                 tags=tag_list,
+                from_email=request.from_email,
+                from_name=request.from_name,
+                redirect_url=request.redirect_url,
+                org_id=request.org_id,
             )
             results.append(result)
 
@@ -352,8 +366,8 @@ async def send_template_email(
             {"name": "template", "value": request.template},
         ]
 
-        # Note: ResendEmailService uses settings for from_email/from_name
-        # Custom from_email, from_name, and attachments are not currently supported
+        # from_email / from_name are passed through under the verified-domain
+        # gate (see /send above). Attachments remain unsupported here.
         # Send to each recipient (service expects single email address)
         results = []
         for recipient in request.to:
@@ -362,6 +376,10 @@ async def send_template_email(
                 subject=subject,
                 html_content=html_content,
                 tags=tag_list,
+                from_email=request.from_email,
+                from_name=request.from_name,
+                redirect_url=request.redirect_url,
+                org_id=request.org_id,
             )
             results.append(result)
 

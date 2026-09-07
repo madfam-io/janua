@@ -23,6 +23,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.services import email_sender as sender_module
 from app.services import email_service as email_module
 from app.services.email_branding import (
     CTM_ORG_ID,
@@ -109,9 +110,7 @@ class TestResolveBranding:
 
     def test_org_id_takes_precedence_over_host(self):
         """A caller that knows the org id is authoritative over the host."""
-        b = resolve_branding(
-            redirect_url="https://example.test/go", org_id=CTM_ORG_ID
-        )
+        b = resolve_branding(redirect_url="https://example.test/go", org_id=CTM_ORG_ID)
         assert b["header_name"] == "Crea Tu Mundo"
 
     def test_resolver_never_returns_a_from_address(self):
@@ -124,21 +123,36 @@ class TestResolveBranding:
 
 
 # --------------------------------------------------------------------------
-# The From line — the policy invariant
+# The From line — Phase 2, gated on the sending domain being verified
 # --------------------------------------------------------------------------
-class TestSenderNeverChanges:
-    def test_resolve_sender_is_madfam_for_ctm_redirect(self):
-        """resolve_sender ignores the redirect and returns MADFAM — always."""
+class TestSenderUnderTheVerifiedDomainGate:
+    """These used to pin "the sender NEVER changes" (Phase 1). It changes now
+    — but only as far as the verified-domain gate allows. With the default
+    `RESEND_VERIFIED_DOMAINS=madfam.io`, a CTM message carries the CTM display
+    name on the MADFAM address, so merging Phase 2 moves no mail. The address
+    moves the day `creatumundo.mx` is added to that list, which is what
+    `test_ctm_from_is_creatumundo_once_verified` covers.
+    """
+
+    def test_resolve_sender_carries_ctm_name_on_madfam_address_before_verification(self):
+        """Default config: the brand arrives, the unverified domain does not."""
         name, address = resolve_sender(CTM_REDIRECT)
-        assert (name, address) == ("MADFAM", "hola@madfam.io")
+        assert (name, address) == ("Crea Tu Mundo", "hola@madfam.io")
+
+    def test_resolve_sender_is_madfam_without_a_tenant_signal(self):
+        """No signal is still, and always, MADFAM."""
+        assert resolve_sender(None) == ("MADFAM", "hola@madfam.io")
+        assert resolve_sender("https://example.test/go") == ("MADFAM", "hola@madfam.io")
 
     @pytest.mark.asyncio
-    async def test_ctm_magic_link_still_sends_from_madfam(self):
-        """A CTM-branded magic link comes FROM MADFAM, not from CTM.
+    async def test_ctm_magic_link_address_stays_madfam_until_verified(self):
+        """A CTM magic link is sent from the MADFAM ADDRESS while
+        `creatumundo.mx` is unverified — with the CTM name on it.
 
-        This is the policy line (EMAIL_SENDER_POLICY.md): BODY branding is
-        per-tenant, the sender is not. We drive the real send path and read the
-        From header off the Resend payload.
+        This is the deliverability line: Resend REJECTS a send from an
+        unverified domain, so shipping the CTM address before verification
+        would break every CTM sign-in link. We drive the real send path and
+        read the From header off the Resend payload.
         """
         captured = {}
 
@@ -152,9 +166,11 @@ class TestSenderNeverChanges:
             return _Resp()
 
         service = EmailService()
-        with patch.object(email_module.settings, "EMAIL_PROVIDER", "resend"), patch.object(
-            email_module.settings, "RESEND_API_KEY", "re_test_key"
-        ), patch("app.services.email_service.httpx.AsyncClient") as client_cls:
+        with (
+            patch.object(email_module.settings, "EMAIL_PROVIDER", "resend"),
+            patch.object(email_module.settings, "RESEND_API_KEY", "re_test_key"),
+            patch("app.services.email_service.httpx.AsyncClient") as client_cls,
+        ):
             client = client_cls.return_value.__aenter__.return_value
             client.post = AsyncMock(side_effect=fake_post)
             sent = await service.send_magic_link_email(
@@ -164,12 +180,13 @@ class TestSenderNeverChanges:
                 locale="es",
             )
         assert sent is True
-        # From is MADFAM regardless of the CTM redirect.
-        assert captured["from"] == formataddr(("MADFAM", "hola@madfam.io"))
+        # Name is CTM's, address is still MADFAM's (unverified domain gate).
+        assert captured["from"] == formataddr(("Crea Tu Mundo", "hola@madfam.io"))
 
     @pytest.mark.asyncio
-    async def test_ctm_body_is_branded_but_from_is_not(self):
-        """Same send: the HTML body carries CTM, the From carries MADFAM."""
+    async def test_ctm_body_and_from_both_carry_the_brand(self):
+        """Same send: body and From both read Crea Tu Mundo; only the ADDRESS
+        is still MADFAM's, and only because the domain is not yet verified."""
         captured = {}
 
         async def fake_post(url, headers=None, json=None):
@@ -182,18 +199,58 @@ class TestSenderNeverChanges:
             return _Resp()
 
         service = EmailService()
-        with patch.object(email_module.settings, "EMAIL_PROVIDER", "resend"), patch.object(
-            email_module.settings, "RESEND_API_KEY", "re_test_key"
-        ), patch("app.services.email_service.httpx.AsyncClient") as client_cls:
+        with (
+            patch.object(email_module.settings, "EMAIL_PROVIDER", "resend"),
+            patch.object(email_module.settings, "RESEND_API_KEY", "re_test_key"),
+            patch("app.services.email_service.httpx.AsyncClient") as client_cls,
+        ):
             client = client_cls.return_value.__aenter__.return_value
             client.post = AsyncMock(side_effect=fake_post)
             await service.send_magic_link_email(
                 "ana@creatumundo.mx", "tok123", redirect_url=CTM_REDIRECT, locale="es"
             )
-        assert captured["from"] == formataddr(("MADFAM", "hola@madfam.io"))
+        assert captured["from"] == formataddr(("Crea Tu Mundo", "hola@madfam.io"))
         assert "Crea Tu Mundo" in captured["html"]
         assert "Con tecnología de" in captured["html"]
         assert "Impulsado por" not in captured["html"]
+
+    @pytest.mark.asyncio
+    async def test_ctm_from_is_creatumundo_once_verified(self):
+        """Add `creatumundo.mx` to RESEND_VERIFIED_DOMAINS and the SAME send
+        path puts the client's own address on the envelope, with a matching
+        Reply-To. This is the production cutover, exercised as a test so the
+        cutover is not also the first execution of this branch."""
+        captured = {}
+
+        async def fake_post(url, headers=None, json=None):
+            captured.update(json)
+
+            class _Resp:
+                status_code = 200
+                text = ""
+
+            return _Resp()
+
+        service = EmailService()
+        with (
+            patch.object(email_module.settings, "EMAIL_PROVIDER", "resend"),
+            patch.object(email_module.settings, "RESEND_API_KEY", "re_test_key"),
+            patch.object(
+                sender_module.settings, "RESEND_VERIFIED_DOMAINS", "madfam.io,creatumundo.mx"
+            ),
+            patch("app.services.email_service.httpx.AsyncClient") as client_cls,
+        ):
+            client = client_cls.return_value.__aenter__.return_value
+            client.post = AsyncMock(side_effect=fake_post)
+            sent = await service.send_magic_link_email(
+                "ana@creatumundo.mx", "tok123", redirect_url=CTM_REDIRECT, locale="es"
+            )
+        assert sent is True
+        assert captured["from"] == formataddr(("Crea Tu Mundo", "hola@creatumundo.mx"))
+        # Reply-To equals From here, so it is omitted rather than duplicated.
+        assert "reply_to" not in captured
+        # The body is unaffected by the sender switch.
+        assert "Crea Tu Mundo" in captured["html"]
 
 
 # --------------------------------------------------------------------------
@@ -210,10 +267,7 @@ class TestRenderedFrame:
     def test_default_render_is_madfam_frame(self):
         """No branding signal -> today's MADFAM header, byte-for-byte."""
         html = self._render(locale="en")
-        assert (
-            '<h1 style="margin: 0; font-size: 24px; font-weight: 600;">MADFAM</h1>'
-            in html
-        )
+        assert '<h1 style="margin: 0; font-size: 24px; font-weight: 600;">MADFAM</h1>' in html
         assert "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)" in html
         assert "#1a2a8f" not in html
         # The MADFAM logo block is present for the MADFAM header.

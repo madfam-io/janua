@@ -7,6 +7,7 @@ import json
 import secrets
 from dataclasses import dataclass
 from datetime import datetime
+from email.utils import formataddr
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,7 @@ import structlog
 
 from app.config import settings
 from app.services.email_i18n import build_email_environment
+from app.services.email_sender import sender_for_address
 
 # Optional import for resend - gracefully handle if not installed
 try:
@@ -86,6 +88,10 @@ class ResendEmailService:
         reply_to: Optional[str] = None,
         cc: Optional[List[str]] = None,
         bcc: Optional[List[str]] = None,
+        from_email: Optional[str] = None,
+        from_name: Optional[str] = None,
+        redirect_url: Optional[str] = None,
+        org_id: Optional[str] = None,
     ) -> EmailDeliveryStatus:
         """
         Send email via Resend API
@@ -99,9 +105,16 @@ class ResendEmailService:
             track_delivery: Enable delivery tracking
             metadata: Custom metadata for tracking
             tags: Email tags for categorization
-            reply_to: Reply-to email address
+            reply_to: Reply-to email address (overrides the resolved default)
             cc: CC recipients
             bcc: BCC recipients
+            from_email: Caller-supplied sender address. HONOURED ONLY when its
+                domain is in RESEND_VERIFIED_DOMAINS; otherwise discarded and
+                the host/tenant rule decides. See app/services/email_sender.py.
+            from_name: Caller-supplied display name (always honoured — naming
+                yourself is harmless, claiming a domain is not)
+            redirect_url: Tenant signal; its host selects the tenant sender
+            org_id: Tenant signal that outranks the host when the caller knows it
 
         Returns:
             EmailDeliveryStatus object with delivery information
@@ -127,12 +140,27 @@ class ResendEmailService:
                 )
 
             # Production mode: Resend API
+            # Phase 2: the From line follows the tenant when that tenant's
+            # domain is Resend-verified, and falls back to the MADFAM address
+            # (keeping the tenant's display name) when it is not. This used to
+            # be an unconditional f-string over settings, which meant a CTM
+            # message went out as MADFAM no matter what the caller asked for.
+            sender_name, sender_address, sender_reply_to = sender_for_address(
+                from_email=from_email,
+                from_name=from_name,
+                redirect_url=redirect_url,
+                org_id=org_id,
+            )
             params = {
-                "from": f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM_ADDRESS}>",
+                "from": formataddr((sender_name, sender_address)),
                 "to": [to_email],
                 "subject": subject,
                 "html": html_content,
             }
+            # An explicit reply_to from the caller wins; otherwise the resolved
+            # one is set only when it differs from From (see email_sender).
+            if not reply_to and sender_reply_to and sender_reply_to != sender_address:
+                reply_to = sender_reply_to
 
             # Add optional parameters
             if text_content:
