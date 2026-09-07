@@ -32,10 +32,19 @@ WHY THIS IS NOT "A GIANT HOST MAP". It is one tenant. The registry is CTM's
 canonical org id plus the two hosts CTM users actually sign in through
 (crea-map, kalya). A second client is a second entry, added the day their
 branding is agreed — not a config surface for every product.
+
+TWO MORE THINGS ARE KEYED ON THE SAME SIGNAL (2026-09-06): the VOICE the mail
+speaks in (`tú` / `usted`) and the CLOCK its subject line is stamped with. Both
+are properties of the product the reader is being sent back to, and both were
+previously either fixed or absent — so both belong on the same host key rather
+than on three parallel registries. See `default_formality_for` and
+`timezone_for`.
 """
 
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
+
+from app.services.email_i18n import FORMALITY_TU, FORMALITY_USTED
 
 # --------------------------------------------------------------------------
 # The MADFAM default. Byte-for-byte the header base.html rendered before this
@@ -188,3 +197,123 @@ def resolve_branding(
     if tenant is None:
         return dict(MADFAM_BRANDING)
     return {**MADFAM_BRANDING, **_TENANT_BRANDING[tenant]}
+
+
+def resolve_tenant(
+    redirect_url: Optional[str] = None,
+    org_id: Optional[Any] = None,
+) -> Optional[str]:
+    """The tenant key for one message, or None for the MADFAM default.
+
+    Same precedence as `resolve_branding` (explicit org id, then the redirect
+    host) — factored out because branding is no longer the only thing keyed on
+    it: the voice and the clock are too, and three copies of this walk would
+    be three chances for them to disagree about who the reader is.
+    """
+    tenant = _tenant_for_org_id(org_id)
+    if tenant is None and redirect_url:
+        tenant = _tenant_for_host(urlparse(redirect_url).hostname)
+    return tenant
+
+
+# --------------------------------------------------------------------------
+# The voice each product speaks in.
+#
+# WHY THIS IS PER-PRODUCT AND NOT PER-DEPLOYMENT. `resolve_formality` in
+# email_i18n deliberately has no deployment-wide tier: register is a property
+# of the reader. But most readers have never been asked, so their user row is
+# NULL — and NULL used to mean the global `usted` default for everyone. The
+# result, found live 2026-09-06: crea-map's own login page says «Escribe el
+# correo… te llega un enlace y con un clic estás dentro» (tú), and the mail
+# janua sent for that page opened «Inicie sesión en su portal · Use el
+# siguiente botón» (usted). One journey, two voices, in the two screens a
+# person sees back to back.
+#
+# So this table is NOT a fourth opinion about the reader. It is what the
+# REQUESTING PRODUCT already sounds like, used only when the reader has not
+# said otherwise — a better guess than a global constant, and strictly below
+# both an explicit request value and the user's own stored choice. See
+# `resolve_formality_for_request` in email_i18n for the full precedence.
+#
+# CTM's products (crea-map, kalya, the creatumundo.mx brand hosts) address
+# families and clinicians as `tú` throughout their UI, so their mail does too.
+# Everything else — MADFAM's own hosts, the nauta client portal, any host not
+# listed — stays `usted`: these are B2B/professional surfaces, and formal is
+# the cheaper error for a first contact (email_i18n, DEFAULT_FORMALITY).
+# --------------------------------------------------------------------------
+_TENANT_FORMALITY: Dict[str, str] = {
+    "ctm": FORMALITY_TU,
+}
+
+# The register for a host that resolves to no tenant. Same value as
+# email_i18n.DEFAULT_FORMALITY and for the same reason; named separately so a
+# future tenant table entry reads as an override of a stated default rather
+# than of an implicit one.
+DEFAULT_TENANT_FORMALITY = FORMALITY_USTED
+
+
+def default_formality_for(
+    redirect_url: Optional[str] = None,
+    org_id: Optional[Any] = None,
+) -> str:
+    """The register the REQUESTING PRODUCT speaks in.
+
+    The lowest-but-one tier of the magic-link precedence chain: consulted only
+    when neither the request nor the user row named a register. Never None —
+    an unknown host is `usted`, which is exactly what it rendered before this
+    table existed.
+    """
+    tenant = resolve_tenant(redirect_url=redirect_url, org_id=org_id)
+    if tenant is None:
+        return DEFAULT_TENANT_FORMALITY
+    return _TENANT_FORMALITY.get(tenant, DEFAULT_TENANT_FORMALITY)
+
+
+# --------------------------------------------------------------------------
+# The clock each product's subject line is stamped with.
+#
+# WHY THIS EXISTS AT ALL. Every re-sendable transactional email carried a
+# CONSTANT subject: five requests produced five messages all titled «Su enlace
+# de acceso», which mail clients thread together. A person with a threaded
+# inbox opens the top of the thread — which is the OLDEST message — and lands
+# on an expired link, over and over, with nothing on screen to tell them which
+# of the five is the live one. (Observed 2026-09-06 on the technical account's
+# Proton inbox: one thread, «[32] Su enlace de acceso».) A send-time stamp in
+# the subject makes each request its own message and makes "the newest one"
+# something a human can read rather than guess.
+#
+# WHY A ZONE PER TENANT RATHER THAN UTC. The stamp is only useful if the
+# reader can compare it to their own wall clock without arithmetic. UTC would
+# read as six hours in the future to every Mexican reader and would make the
+# newest link look like it had not arrived yet. There was no timezone notion
+# anywhere in this codebase before (verified: no ZoneInfo/pytz import in
+# apps/api/app), so this table is the first one — deliberately small, keyed on
+# the same host signal as everything else here, and defaulting to CDMX because
+# that is MADFAM's operating timezone and every current reader is in it.
+# --------------------------------------------------------------------------
+_TENANT_TIMEZONE: Dict[str, str] = {
+    # CTM operates from Mexico City. Same zone as the MADFAM default today;
+    # named explicitly so a future tenant elsewhere is one line, not a rewrite.
+    "ctm": "America/Mexico_City",
+}
+
+# MADFAM's operating timezone. See the ecosystem rule that ALL human-facing
+# times are CDMX: a stamp in any other zone is a stamp the reader has to
+# convert, which defeats the point of putting it in front of them.
+DEFAULT_TIMEZONE = "America/Mexico_City"
+
+
+def timezone_for(
+    redirect_url: Optional[str] = None,
+    org_id: Optional[Any] = None,
+) -> str:
+    """The IANA zone name to stamp this message's subject in.
+
+    Always a real zone name, never None: an unknown host gets CDMX, which is
+    correct for every reader this platform has today and is the zone the whole
+    ecosystem states its human-facing times in.
+    """
+    tenant = resolve_tenant(redirect_url=redirect_url, org_id=org_id)
+    if tenant is None:
+        return DEFAULT_TIMEZONE
+    return _TENANT_TIMEZONE.get(tenant, DEFAULT_TIMEZONE)

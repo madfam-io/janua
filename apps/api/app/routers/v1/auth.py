@@ -34,6 +34,7 @@ from app.services.user_lookup import (
 )
 from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.email import EmailService
+from app.services.email_i18n import normalize_formality
 from app.services.email_service import (
     send_magic_link_email_task,
     send_password_reset_email_task,
@@ -137,6 +138,21 @@ class ChangePasswordRequest(BaseModel):
 class MagicLinkRequest(BaseModel):
     email: EmailStr
     redirect_url: Optional[str] = None
+    # The Spanish register the REQUESTING PRODUCT speaks in: "tu" or "usted".
+    # Optional, and validated rather than trusted — `normalize_formality`
+    # returns None for anything unsupported (including `vosotros`), which makes
+    # a bad value fall through to the next precedence tier instead of 422ing a
+    # sign-in request over a cosmetic field. A product that omits it gets the
+    # default for its redirect host (app/services/email_branding.py), so the
+    # only products that need to send it are ones whose voice differs from
+    # their host's registered default.
+    formality: Optional[str] = None
+
+    @field_validator("formality")
+    @classmethod
+    def _validate_formality(cls, value: Optional[str]) -> Optional[str]:
+        """Normalize, never reject. See the field comment above."""
+        return normalize_formality(value)
 
 
 class VerifyMagicLinkRequest(BaseModel):
@@ -2459,13 +2475,23 @@ async def send_magic_link(
     db.add(magic_link)
     await db.commit()
 
-    # Send email in background
+    # Send email in background.
+    #
+    # Both `locale` and `formality` are read off the User row HERE, while the
+    # request still holds a DB session — a BackgroundTask has none, so anything
+    # stored about the recipient has to be resolved before the task is queued.
+    # `magic_link_data.formality` is the requesting product's own register and
+    # outranks the stored value; when both are absent the mailer falls back to
+    # the redirect host's registered default rather than to a global `usted`
+    # (app/services/email_branding.py::default_formality_for).
     background_tasks.add_task(
         send_magic_link_email_task,
         user.email,
         magic_token,
         safe_redirect_url,
         locale=getattr(user, "locale", None),
+        formality=magic_link_data.formality,
+        user_formality=getattr(user, "spanish_formality", None),
     )
 
     return {"message": "Magic link sent to email"}

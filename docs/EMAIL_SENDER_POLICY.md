@@ -97,6 +97,101 @@ host is the tenant signal that IS available — the same one Phase 2 will read.
 When a send path carries a session, `resolve_branding(org_id=…)` is the seam to
 hang the DB-backed config on.
 
+## The voice each message speaks in
+
+**2026-09-06.** The From line and the header were already the requester's.
+The WORDS were not: every Spanish message addressed its reader as `usted`,
+whichever product had asked for it.
+
+Spanish forces a choice English does not — every sentence aimed at the reader
+is either `tú` or `usted`, with no neutral second person. The register
+machinery has existed in `app/services/email_i18n.py` since the formality work
+landed (both copies, both subjects, both templates), but nothing on the live
+path ever selected between them: the magic-link router passed `locale` and not
+`formality`, so everything resolved through `DEFAULT_FORMALITY` to `usted`.
+
+The result, found live: crea-map's own login page says «Escribe el correo con
+el que la dirección te dio de alta — te llega un enlace y con un clic estás
+dentro» (`tú`), and the mail janua sent for that page opened «Inicie sesión en
+su portal · Use el siguiente botón» (`usted`). Two screens, seen back to back,
+addressing the same person two different ways.
+
+### Precedence
+
+Highest first. Each tier is skipped when absent or unsupported, so a bad value
+falls through instead of shadowing a good one below it.
+
+| # | Tier | Where it comes from |
+|---|------|---------------------|
+| 1 | The request | `formality` on `POST /api/v1/auth/magic-link` — `"tu"` or `"usted"` |
+| 2 | The reader | `users.spanish_formality`, read by the router while it still holds a session |
+| 3 | The product | the redirect host's registered voice — `email_branding.default_formality_for` |
+| 4 | The default | `usted` (`email_i18n.DEFAULT_FORMALITY`) |
+
+Tier 3 is the one that fires in practice: `users.spanish_formality` is NULL for
+almost every row, because NULL means "has not chosen" rather than "usted". It
+is keyed on the SAME redirect host as the branding above, so a message's
+header, its voice, and its From line all resolve from one signal:
+
+- CTM products (`crea-map`, `ensayo-map`, `kalya.app`, `*.creatumundo.mx`) → `tú`
+- everything else, including the nauta client portal and every unlisted host → `usted`
+
+Tier 2 sitting ABOVE tier 3 is deliberate: a product may state its own voice,
+but it must never overwrite someone who has told us how they want to be
+addressed.
+
+`formality` is normalized rather than validated: an unsupported value (
+`vosotros` included — see `email_i18n` for why that register is not coming)
+becomes None and falls to the next tier. A sign-in request must not 422 over a
+cosmetic field.
+
+**Consumers:** a product only needs to send `formality` when its voice differs
+from its host's registered default. crea-map should send `"tu"` explicitly so
+its mail does not depend on a host table entry; nauta needs no change — its
+portal hosts already resolve to `usted`, and its request route deliberately
+cannot vary its behavior per recipient (that would leak workspace membership).
+
+## The timestamp on every re-sendable subject
+
+**2026-09-06.** Subjects are constant strings, so five requests produce five
+messages titled «Su enlace de acceso» — and every mail client threads them
+into one conversation. A threaded reader opens the top of the thread, which is
+the OLDEST message, lands on an expired link, and has nothing on screen that
+distinguishes the live link from the dead ones. Observed on a real inbox as a
+single thread labelled «[32] Su enlace de acceso».
+
+Every re-sendable transactional subject now ends with the send moment:
+
+```
+Tu enlace de acceso | 2026-09-06 16:23:11
+Su enlace de acceso | 2026-09-06 16:23:11
+Your sign-in link | 2026-09-06 16:23:11
+```
+
+After Anthropic's `Your secure link to Claude.ai is here | 2026-09-06 16:23:11`.
+The shape is deliberate: the stamp is LAST so the subject still starts with the
+words a reader scans for and a truncating client eats the stamp rather than the
+meaning; the date is ISO-ordered and the clock is 24h so it sorts and is
+unambiguous between es-MX and en readers; seconds are included because two
+links requested in the same minute is exactly the case someone hits when the
+first seems not to have arrived.
+
+**The zone is the requester's, and there is no zone suffix.** The stamp is only
+useful if the reader can compare it to their own wall clock without arithmetic,
+so it is rendered in the product's operating timezone —
+`email_branding.timezone_for`, keyed on the same redirect host, defaulting to
+`America/Mexico_City` (MADFAM's operating timezone, and the ecosystem rule for
+every human-facing time). UTC would read six hours in the future to every
+Mexican reader, making the NEWEST link look like it had not arrived yet.
+
+The clock is read per send (`email_i18n.now_for_timezone`), never cached at
+import — a module-level "now" would stamp every message in a long-lived worker
+with the time that worker booted.
+
+Applies to the three re-sendable messages: **magic link**, **password reset**,
+**email verification**. Not to welcome or invitation, which are sent once and
+whose subjects already carry a distinguishing organization name.
+
 ## The seam that makes Phase 2 cheap
 
 `app/services/email_service.py::resolve_sender()` accepts `redirect_url` and

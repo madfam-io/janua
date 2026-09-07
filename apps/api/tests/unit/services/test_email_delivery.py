@@ -321,11 +321,19 @@ class TestSubjectLocalization:
     @pytest.mark.asyncio
     async def test_sender_passes_the_localized_subject_to_the_transport(self):
         """The subject a recipient sees must follow the same locale as the
-        body — it is the only part visible before opening."""
+        body — it is the only part visible before opening.
+
+        `startswith` rather than `==` since 2026-09-06: every re-sendable
+        subject now carries a send-time stamp after a " | " separator, so the
+        LOCALIZED WORDS are the head of the subject rather than the whole of
+        it. The stamp's own shape is pinned in
+        tests/unit/services/test_email_voice_and_stamp.py; what this assertion
+        is about is which language those words are in.
+        """
         service = EmailService()
         with patch.object(service, "_send_email", new=AsyncMock(return_value=True)) as send:
             await service.send_magic_link_email("a@b.test", "tok", locale="es-MX")
-        assert send.await_args.kwargs["subject"] == subject_for("magic_link", "es")
+        assert send.await_args.kwargs["subject"].startswith(subject_for("magic_link", "es"))
 
         with patch.object(service, "_send_email", new=AsyncMock(return_value=True)) as send:
             await service.send_magic_link_email("a@b.test", "tok", locale="en")
@@ -333,7 +341,7 @@ class TestSubjectLocalization:
         # for the same reason the headline did. Deliberately still the literal
         # English string rather than subject_for(...): comparing against the
         # table the code reads would pass whatever the table said.
-        assert send.await_args.kwargs["subject"] == "Your sign-in link"
+        assert send.await_args.kwargs["subject"].startswith("Your sign-in link")
 
 
 class TestSendersAcceptLocale:
