@@ -236,14 +236,14 @@ CTM_BINDING = SenderBinding(
     from_address="hola@creatumundo.mx",
     reply_to="hola@creatumundo.mx",
     provider=PROVIDER_RESEND,
-    account=ACCOUNT_MADFAM,
-    credential_ref=MADFAM_RESEND_CREDENTIAL_REF,
+    account=ACCOUNT_TENANT,
+    credential_ref="secret/data/janua/senders/ctm#resend_api_key",
     # Empty while on MADFAM's account: the global RESEND_VERIFIED_DOMAINS is
     # the authority there, and duplicating `creatumundo.mx` here would create a
     # second place to forget to remove it. It becomes non-empty when, and only
     # when, `account` flips to `tenant` — because then the global list (which
     # describes MADFAM's account) is the WRONG authority.
-    verified_domains=(),
+    verified_domains=("creatumundo.mx",),
     hosts=CTM_HOSTS,
     org_id=CTM_ORG_ID,
 )
