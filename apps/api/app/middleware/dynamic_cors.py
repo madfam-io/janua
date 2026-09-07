@@ -108,9 +108,13 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
         for allowed in allowed_origins:
             if allowed.startswith("*."):
                 domain = allowed[2:]  # Remove "*."
-                # Check if origin ends with the domain (e.g., sub.janua.dev matches *.janua.dev)
                 origin_domain = origin.replace("https://", "").replace("http://", "")
-                if origin_domain.endswith(domain) or origin_domain == domain.lstrip("."):
+                # SECURITY: the suffix must land on a dot boundary. A bare
+                # endswith() accepts `evilmadfam.io` for `*.madfam.io`, which
+                # would hand an attacker-registered lookalike domain
+                # credentialed CORS access. Same rule as
+                # core/url_security.py::_host_matches_pattern.
+                if origin_domain == domain or origin_domain.endswith(f".{domain}"):
                     return True
 
         return False

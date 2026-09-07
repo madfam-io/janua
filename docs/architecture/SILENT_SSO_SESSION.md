@@ -263,3 +263,26 @@ is no session, so there is nothing to reference.
   alembic; nothing here waits on a schema change. R1 deliberately reuses the
   existing `sessions` row rather than adding storage, because production is
   frozen behind the migration-drift guard.
+
+## Brand hosts: the three allowlists a new host must enter
+
+The MAP and the ERP portal will also serve on the client's own zone —
+`map.creatumundo.mx` and `erp.creatumundo.mx`. Three janua allowlists gate a
+host like that, and each fails *silently* in a different way, so all three move
+together (J7, 2026-09-06):
+
+| List | Where | What breaks without the host |
+|---|---|---|
+| `CORS_ORIGINS` | `k8s/base/deployments/janua-api.yaml` (static env of `janua-api`) | **No magic link can be issued for the host.** `app/core/url_security.py` derives `get_allowed_redirect_hosts()` from `settings.cors_origins_list`, so the request 400s with "add it to CORS_ORIGINS before requesting links for it". Note the dynamic CORS middleware (`app/middleware/dynamic_cors.py`) derives origins from OAuth clients' `redirect_uris` — a **separate** list that does *not* feed `url_security`. |
+| `CTM_HOSTS` | `app/services/email_branding.py` | Sign-in email silently reverts to MADFAM branding. `_host_matches` is a dot-boundary suffix match, so the single entry `creatumundo.mx` covers `map.` and `erp.` (and never `notcreatumundo.mx`). |
+| CSP `form-action` | `app/middleware/security_headers.py` | After a hosted-login POST, browsers that apply `form-action` to the whole post-submit redirect chain block the 302 to the brand host — the "Sign In does nothing" bug class. |
+
+These are *prerequisites for the login path*, not for session sharing. The
+`janua_sso` estate cookie cannot be relayed onto `creatumundo.mx` hosts at all:
+it is scoped by `COOKIE_DOMAIN=.madfam.io` and a cookie cannot cross a
+registrable-domain boundary. A brand host therefore establishes its session the
+browser-visited way — the `magic_link_callback` path (lane J6) — and not by
+reading an estate cookie.
+
+Adding a brand host is a deploy-only change (no migration): edit the three
+lists, then the normal staging → prod promote.

@@ -27,6 +27,7 @@ from app.services import email_service as email_module
 from app.services.email_branding import (
     CTM_ORG_ID,
     MADFAM_BRANDING,
+    _tenant_for_host,
     resolve_branding,
 )
 from app.services.email_service import EmailService, resolve_sender
@@ -82,6 +83,24 @@ class TestResolveBranding:
     def test_lookalike_host_does_not_match(self):
         """Suffix match is on a dot boundary; `evilkalya.app` is not kalya."""
         b = resolve_branding(redirect_url="https://evilkalya.app/x")
+        assert b["header_name"] == "MADFAM"
+
+    @pytest.mark.parametrize(
+        "host",
+        ["map.creatumundo.mx", "erp.creatumundo.mx", "creatumundo.mx"],
+    )
+    def test_creatumundo_brand_hosts_resolve_to_ctm(self, host):
+        """The client's own zone is CTM: sign-in mail for the brand hosts must
+        not silently revert to MADFAM branding (J7)."""
+        assert _tenant_for_host(host) == "ctm"
+        b = resolve_branding(redirect_url=f"https://{host}/portal/verify?token=abc")
+        assert b["header_name"] == "Crea Tu Mundo"
+        assert b["platform_name"] == "MADFAM"
+
+    def test_creatumundo_lookalike_host_does_not_match(self):
+        """`notcreatumundo.mx` shares a suffix but not a dot boundary."""
+        assert _tenant_for_host("notcreatumundo.mx") is None
+        b = resolve_branding(redirect_url="https://notcreatumundo.mx/x")
         assert b["header_name"] == "MADFAM"
 
     def test_org_id_resolves_ctm(self):

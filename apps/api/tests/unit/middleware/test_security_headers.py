@@ -272,6 +272,10 @@ class TestContentSecurityPolicy:
             "https://*.dhan.am",
             "https://*.tezca.mx",
             "https://*.karafiel.mx",
+            # 2026-09-06 (J7): the Crea Tu Mundo brand zone — map./erp.
+            # creatumundo.mx serve the MAP and the ERP portal.
+            "https://creatumundo.mx",
+            "https://*.creatumundo.mx",
         ]:
             assert domain in csp, f"form-action missing required OAuth callback domain: {domain}"
 
