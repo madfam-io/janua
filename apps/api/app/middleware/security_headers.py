@@ -82,6 +82,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "https://aureo.studio https://*.aureo.studio "
             "https://ceq.studio https://*.ceq.studio "
             "https://4d-admin.madfam.io https://sniper.madfam.io "
+            # 2026-09-06: the Crea Tu Mundo brand zone. The MAP and the ERP
+            # portal also serve on map./erp.creatumundo.mx; a hosted-login
+            # POST 302s to those hosts, and form-action applies to the whole
+            # post-submit redirect chain, so without them the browser blocks
+            # the submit silently (same bug class as the enclii/forgesight
+            # regressions above).
+            "https://creatumundo.mx https://*.creatumundo.mx "
             "http://127.0.0.1:* http://localhost:*",
             "upgrade-insecure-requests",
         ]

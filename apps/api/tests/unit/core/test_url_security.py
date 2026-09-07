@@ -4,6 +4,8 @@ Unit tests for URL security validation module.
 Tests the open redirect prevention functionality (CWE-601 mitigation).
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest  # noqa: F401 - pytest is used implicitly by test framework
 
 from app.core.url_security import (
@@ -207,3 +209,61 @@ class TestGetAllowedRedirectHosts:
         """Test that there are no duplicate hosts."""
         hosts = get_allowed_redirect_hosts()
         assert len(hosts) == len(set(hosts))
+
+
+class TestCorsOriginsDriveRedirectAllowlist:
+    """CORS_ORIGINS is the magic-link redirect allowlist.
+
+    `get_allowed_redirect_hosts()` derives hosts from `settings.cors_origins_list`,
+    so a host that is not an entry of CORS_ORIGINS cannot receive a magic link
+    (the request 400s with "add it to CORS_ORIGINS before requesting links for
+    it"). This is the mechanism the creatumundo.mx brand hosts depend on (J7);
+    note that the dynamic CORS middleware's client-derived origins are a
+    SEPARATE list and do not feed this one.
+    """
+
+    def _settings(self, cors_origins):
+        mock = MagicMock()
+        mock.cors_origins_list = cors_origins
+        mock.JANUA_CUSTOM_DOMAIN = "auth.madfam.io"
+        mock.DOMAIN = "janua.dev"
+        return mock
+
+    def test_brand_host_in_cors_origins_becomes_allowed_redirect_host(self):
+        with patch(
+            "app.core.url_security.settings",
+            self._settings(["https://map.creatumundo.mx", "https://erp.creatumundo.mx"]),
+        ):
+            hosts = get_allowed_redirect_hosts()
+            assert "map.creatumundo.mx" in hosts
+            assert "erp.creatumundo.mx" in hosts
+
+    def test_magic_verify_url_on_brand_host_validates(self):
+        """The exact shape of a magic-link destination on the brand host."""
+        url = "https://map.creatumundo.mx/api/auth/magic-verify?token=abc123&next=%2F"
+        with patch(
+            "app.core.url_security.settings",
+            self._settings(["https://map.creatumundo.mx"]),
+        ):
+            assert is_safe_redirect_url(url)
+            assert validate_redirect_url(url, default_url="/") == url
+
+    def test_brand_host_absent_from_cors_origins_is_rejected(self):
+        """Falsifiable counterpart: without the CORS_ORIGINS entry the same URL
+        falls back to the default — the silent exclusion J7 fixes."""
+        url = "https://map.creatumundo.mx/api/auth/magic-verify?token=abc123"
+        with patch(
+            "app.core.url_security.settings",
+            self._settings(["https://crea-map.madfam.io"]),
+        ):
+            assert not is_safe_redirect_url(url)
+            assert validate_redirect_url(url, default_url="/") == "/"
+
+    def test_lookalike_brand_host_not_allowed_by_the_entry(self):
+        """An exact-host CORS entry must not admit `notcreatumundo.mx`."""
+        with patch(
+            "app.core.url_security.settings",
+            self._settings(["https://map.creatumundo.mx"]),
+        ):
+            assert not is_safe_redirect_url("https://map.notcreatumundo.mx/x")
+            assert not is_safe_redirect_url("https://evil.com/x")

@@ -112,6 +112,11 @@ CTM_HOSTS: tuple = (
     "crea-map.madfam.io",
     "ensayo-map.madfam.io",
     "kalya.app",
+    # 2026-09-06: the client's own brand zone. Dot-boundary suffix matching
+    # covers `map.creatumundo.mx` and `erp.creatumundo.mx` (the brand hosts
+    # that will serve the MAP and the ERP portal) with one entry, and never
+    # `notcreatumundo.mx`.
+    "creatumundo.mx",
 )
 
 
