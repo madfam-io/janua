@@ -117,6 +117,15 @@ def _request(method: str, path: str, body: Optional[Dict[str, Any]] = None) -> A
         headers={
             "Authorization": f"Bearer {_tenant_api_key()}",
             "Content-Type": "application/json",
+            # api.resend.com sits behind Cloudflare, which rejects urllib's
+            # default User-Agent with HTTP 403 "error code: 1010" before the
+            # request reaches Resend (observed 2026-09-07 onboarding
+            # creatumundo.mx; fixed for the sibling script in #606). Any
+            # descriptive UA passes. Without it EVERY call here fails --
+            # including the --verify gate that --switch refuses to run without,
+            # so the whole migration path is blocked by a 403 that looks like
+            # a bad API key.
+            "User-Agent": "janua-sender-binding-switch/1.0 (+https://madfam.io)",
         },
     )
     try:
