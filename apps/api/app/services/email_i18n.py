@@ -23,7 +23,9 @@ against the recipient's chosen register, so a template author picks a key and
 never picks a register.
 """
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from jinja2 import Environment, FileSystemLoader, pass_context, select_autoescape
 
@@ -161,10 +163,53 @@ def resolve_formality(explicit: Any = None, user: Any = None) -> str:
 
     Deliberately has no deployment-wide tier the way `resolve_locale` does:
     register is a property of the reader, not of the installation.
+
+    It DOES have a per-product tier, one level below the reader — see
+    `resolve_formality_for_request`, which threads the requesting product's own
+    voice in between the user row and DEFAULT_FORMALITY. That is not a
+    deployment tier: it is a fact about the app the reader just clicked.
     """
     for candidate in (
         explicit,
         getattr(user, "spanish_formality", None) if user is not None else None,
+    ):
+        normalized = normalize_formality(candidate)
+        if normalized:
+            return normalized
+    return DEFAULT_FORMALITY
+
+
+def resolve_formality_for_request(
+    explicit: Any = None,
+    user: Any = None,
+    client_default: Any = None,
+) -> str:
+    """Resolve the register for a message sent ON BEHALF OF a product.
+
+    Same as `resolve_formality` with one tier inserted: what the REQUESTING
+    PRODUCT sounds like, consulted after the reader and before the global
+    default. Highest precedence first:
+
+    1. `explicit` — a register named on the request itself. The product knows
+       its own audience, and an operator resending on someone's behalf knows
+       better still.
+    2. `user.spanish_formality` — the reader's own stored choice. Still beats
+       the product: a person who has told us how they want to be addressed is
+       addressed that way in every product's mail.
+    3. `client_default` — the requesting product's voice
+       (`email_branding.default_formality_for`, keyed on the redirect host).
+       This tier exists because tier 2 is NULL for almost everybody, and
+       falling straight to `usted` made janua's mail contradict the login page
+       the reader had just read in `tú` (2026-09-06, crea-map).
+    4. `DEFAULT_FORMALITY` — `usted`.
+
+    Each tier is skipped when absent or unsupported, so an unrecognized value
+    anywhere falls through instead of shadowing a good one below it.
+    """
+    for candidate in (
+        explicit,
+        getattr(user, "spanish_formality", None) if user is not None else None,
+        client_default,
     ):
         normalized = normalize_formality(candidate)
         if normalized:
@@ -248,6 +293,68 @@ def subject_for(
         except (KeyError, IndexError):
             return template
     return template
+
+
+# --------------------------------------------------------------------------
+# Send-time stamp on the subject line.
+#
+# THE PROBLEM. Every re-sendable message had a CONSTANT subject, so five
+# requests produced five messages titled «Su enlace de acceso» — which every
+# mail client threads into one conversation. A threaded reader opens the top
+# of the thread, which is the OLDEST message, lands on an expired link, and
+# has nothing on screen that distinguishes the live link from the four dead
+# ones. Observed 2026-09-06 on a real inbox as a single thread labelled
+# «[32] Su enlace de acceso».
+#
+# THE SHAPE. `<subject> | YYYY-MM-DD HH:MM:SS`, after Anthropic's
+# "Your secure link to Claude.ai is here | 2026-09-06 16:23:11". Chosen over
+# the alternatives on purpose:
+#   * The separator is " | ", not a dash or parentheses: it reads as metadata
+#     appended to a title rather than as part of the sentence.
+#   * The stamp is LAST, so the subject still starts with the words the reader
+#     scans for, and a client that truncates a long subject truncates the
+#     stamp rather than the meaning.
+#   * ISO-ordered date, 24h clock, no zone suffix: sortable, unambiguous
+#     between es-MX and en readers (11/09 vs 09/11), and short. The zone is
+#     not printed because it is the reader's own — see `timezone_for`.
+#   * Seconds are included: two links requested in the same minute is exactly
+#     the case a person hits when the first one seems not to arrive.
+#
+# THE CLOCK IS READ, NEVER CACHED. `stamp_subject` takes the moment as an
+# argument so tests can pin it, and `now_for_timezone` is the only place that
+# calls the real clock. A module-level "now" evaluated at import would stamp
+# every message in a long-lived process with the time the worker booted.
+# --------------------------------------------------------------------------
+SUBJECT_STAMP_SEPARATOR = " | "
+SUBJECT_STAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def now_for_timezone(timezone_name: Optional[str] = None) -> datetime:
+    """The current moment in one IANA zone, read from the real clock.
+
+    Falls back to UTC only when the zone name is unknown to the system tzdata,
+    which is a packaging problem rather than a caller error: a subject stamped
+    in the wrong zone is still more useful than a message that failed to send.
+    """
+    try:
+        return datetime.now(ZoneInfo(timezone_name or "UTC"))
+    except (ZoneInfoNotFoundError, ValueError):
+        return datetime.now(timezone.utc)
+
+
+def stamp_subject(subject: str, moment: Optional[datetime] = None) -> str:
+    """Append the send-time stamp to a subject line.
+
+    `moment` is required in practice — callers pass `now_for_timezone(...)` so
+    the zone is the reader's — and defaults to UTC-now only so that calling
+    this with no clock still produces a stamped subject rather than raising.
+
+    Idempotent by nature of being called once per send; it does NOT try to
+    detect an existing stamp, because a subject that legitimately contains
+    " | " (none do today) should not silently lose its stamp.
+    """
+    when = moment if moment is not None else datetime.now(timezone.utc)
+    return f"{subject}{SUBJECT_STAMP_SEPARATOR}{when.strftime(SUBJECT_STAMP_FORMAT)}"
 
 
 # --------------------------------------------------------------------------

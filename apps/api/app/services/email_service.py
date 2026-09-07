@@ -11,6 +11,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 import httpx
@@ -18,14 +19,21 @@ import redis.asyncio as redis
 import structlog
 
 from app.config import settings
-from app.services.email_branding import resolve_branding
+from app.services.email_branding import (
+    default_formality_for,
+    resolve_branding,
+    timezone_for,
+)
 from app.services.email_i18n import (
     FALLBACK_LOCALE,
     FORMALITY_TU,
     FORMALITY_USTED,
     build_email_environment,
+    now_for_timezone,
     resolve_formality,
+    resolve_formality_for_request,
     resolve_locale,
+    stamp_subject,
     subject_for,
     template_candidates,
 )
@@ -158,8 +166,14 @@ class EmailService:
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
         }
 
-        # Render email template
-        subject = subject_for("verification", recipient_locale, recipient_formality)
+        # Render email template. Stamped: verification is re-sendable ("resend
+        # the code") and threads exactly like the magic link. No host signal
+        # reaches this flow — it takes no redirect — so `timezone_for()` yields
+        # the MADFAM default, CDMX.
+        subject = stamp_subject(
+            subject_for("verification", recipient_locale, recipient_formality),
+            now_for_timezone(timezone_for()),
+        )
         html_content = self._render_template(
             "verification.html", template_data, recipient_locale, recipient_formality
         )
@@ -239,7 +253,14 @@ class EmailService:
         """
 
         recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
-        recipient_formality = resolve_formality(formality, user=user)
+        # Same requester-voice chain as the magic link: this flow also carries a
+        # product host (`redirect_base`), so the product's own register is the
+        # tier below the reader's stored choice rather than a global `usted`.
+        recipient_formality = resolve_formality_for_request(
+            formality,
+            user=user,
+            client_default=default_formality_for(redirect_url=redirect_base),
+        )
 
         # Mirror to Redis for observability (audit 2026-04-23 M2: JSON).
         if self.redis_client:
@@ -273,8 +294,15 @@ class EmailService:
             "support_email": settings.SUPPORT_EMAIL or "support@janua.dev",
         }
 
-        # Render email template
-        subject = subject_for("password_reset", recipient_locale, recipient_formality)
+        # Render email template. Stamped like the magic link, and for the same
+        # reason: a reset is re-requested when the first one seems not to have
+        # arrived, so a constant subject threads the live link under the dead
+        # ones. `redirect_base` is this flow's host signal (the product page
+        # that consumes the token), so the stamp is in that product's zone.
+        subject = stamp_subject(
+            subject_for("password_reset", recipient_locale, recipient_formality),
+            now_for_timezone(timezone_for(redirect_url=redirect_base)),
+        )
         html_content = self._render_template(
             "password_reset.html", template_data, recipient_locale, recipient_formality
         )
@@ -506,9 +534,21 @@ class EmailService:
 
         Without a redirect_url the link falls back to Janua's own GET callback
         — a clicked link is a GET, and only Janua can trade the token then.
+
+        The REGISTER follows the requester. `formality` is what the requesting
+        product asked for and wins outright; below it sit the reader's own
+        stored choice and then the product's default voice, read off the same
+        redirect host that already picks the branding. That last tier is the
+        one that matters in practice — almost every user row is NULL — and it
+        is why a crea-map link now reads «Inicia sesión en tu portal» while a
+        nauta-portal link still reads «Inicie sesión en su portal».
         """
         recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
-        recipient_formality = resolve_formality(formality, user=user)
+        recipient_formality = resolve_formality_for_request(
+            formality,
+            user=user,
+            client_default=default_formality_for(redirect_url=redirect_url),
+        )
         if redirect_url:
             separator = "&" if "?" in redirect_url else "?"
             magic_url = f"{redirect_url}{separator}token={magic_token}"
@@ -538,7 +578,16 @@ class EmailService:
             **resolve_branding(redirect_url=redirect_url),
         }
 
-        subject = subject_for("magic_link", recipient_locale, recipient_formality)
+        # Stamped with the SEND MOMENT in the requester's operating timezone.
+        # Without it every request in a thread carries the same subject and the
+        # reader opens the oldest, expired link; with it "the newest one" is
+        # readable rather than guessable. The zone comes off the same host
+        # signal as the branding and the voice — see email_branding.timezone_for
+        # — and the clock is read here, per send, never cached at import.
+        subject = stamp_subject(
+            subject_for("magic_link", recipient_locale, recipient_formality),
+            now_for_timezone(timezone_for(redirect_url=redirect_url)),
+        )
         html_content = self._render_template(
             "magic_link.html", template_data, recipient_locale, recipient_formality
         )
@@ -780,6 +829,7 @@ async def send_magic_link_email_task(
     redirect_url: Optional[str] = None,
     locale: Optional[str] = None,
     formality: Optional[str] = None,
+    user_formality: Optional[str] = None,
 ) -> None:
     """Background-task entrypoint for the magic-link flow.
 
@@ -789,11 +839,26 @@ async def send_magic_link_email_task(
     That is exactly how the magic-link route failed — it referenced a method
     that did not exist at all, raising AttributeError before any mail was
     attempted, which is why no client could ever sign in passwordlessly.
+
+    TWO REGISTER ARGUMENTS, DELIBERATELY. `formality` is what the REQUESTING
+    PRODUCT asked for; `user_formality` is what the RECIPIENT chose, read off
+    the User row by the router because a background task holds no DB session
+    (the same reason `locale` is passed rather than looked up). They are
+    separate parameters because they sit at different precedence tiers and
+    collapsing them would let a product's default silently overwrite a
+    person's stated preference. `user_formality` is wrapped back into the
+    duck-typed `user` shape the resolver reads, rather than widening the
+    resolver to take loose scalars.
     """
     try:
         service = EmailService()
         sent = await service.send_magic_link_email(
-            email, magic_token, redirect_url, locale=locale, formality=formality
+            email,
+            magic_token,
+            redirect_url,
+            locale=locale,
+            formality=formality,
+            user=SimpleNamespace(spanish_formality=user_formality) if user_formality else None,
         )
         if not sent:
             logger.warning(
@@ -836,7 +901,12 @@ async def send_verification_email_task(
         }
         sent = await service._send_email(
             to_email=email,
-            subject=subject_for("verification", recipient_locale, recipient_formality),
+            # Stamped like the method above — this task renders the same
+            # message on the same pipeline and must not diverge from it.
+            subject=stamp_subject(
+                subject_for("verification", recipient_locale, recipient_formality),
+                now_for_timezone(timezone_for()),
+            ),
             html_content=service._render_template(
                 "verification.html", template_data, recipient_locale, recipient_formality
             ),
