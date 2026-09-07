@@ -37,6 +37,7 @@ from app.services.email_i18n import (
     subject_for,
     template_candidates,
 )
+from app.services.email_sender import sender_for
 
 logger = structlog.get_logger()
 
@@ -52,58 +53,36 @@ def _redact_email(email: str) -> str:
 
 
 def resolve_sender(redirect_url: str | None = None) -> tuple[str, str]:
-    """The (display name, address) every message comes FROM.
+    """The (display name, address) a message comes FROM.
 
-    ALWAYS `MADFAM <hola@madfam.io>`. Deliberately not per-tenant, and not
-    per-platform. The address is the one a client can simply reply to, which
-    is also why it is the `support` link in the footer; `config.py` defaults
-    EMAIL_FROM_ADDRESS to it.
+    PHASE 2 IS LIVE FOR TENANTS WHOSE DOMAIN IS VERIFIED. This used to return
+    `MADFAM <hola@madfam.io>` unconditionally and ignore `redirect_url`, which
+    the docstring called "the Phase 2 hook ... DO NOT REMOVE IT because it is
+    currently unused". This is that hook being used: the redirect host names
+    the tenant, and `email_sender.sender_for` maps it to that tenant's sender.
 
-    WHY IT USED TO BE `Janua <noreply@janua.dev>` AND WHY THAT WAS WRONG. The
-    first message a fractional-CTO client ever receives is a sign-in link. It
-    arrived from a brand they had never heard of, on a domain unrelated to
-    anything they had been told about, asking them to authenticate — which is
-    indistinguishable from phishing, and deleting it is the correct reaction
-    from a careful person.
+        no tenant signal          -> MADFAM <hola@madfam.io>
+        a CTM host, domain verified   -> Crea Tu Mundo <hola@creatumundo.mx>
+        a CTM host, NOT yet verified  -> Crea Tu Mundo <hola@madfam.io>
 
-    WHY NOT THE CLIENT'S OWN NAME EITHER. An earlier version of this function
-    put the tenant on the From line (`Crea Tu Mundo <hola@madfam.io>`).
-    That optimises the wrong thing. Bespoke clients meet several MADFAM
-    platforms over an engagement — Janua for identity, Nauta for the
-    workspace, Karafiel for documents — and a sender that changes per tenant
-    or per product teaches them nothing and looks like several vendors. One
-    consistent sender is what builds recognition, and recognition is what
-    makes the NEXT email safe to open. The platform is credited inside the
-    message, "Powered by", where it informs without competing.
+    WHY THE THIRD LINE EXISTS. Resend rejects a send from a domain it has not
+    verified — an unverified sender means the sign-in link does not arrive at
+    all, which is strictly worse than the wrong brand on the envelope. So the
+    address is gated on `RESEND_VERIFIED_DOMAINS` while the display name is
+    not; see `app/services/email_sender.py` and `docs/EMAIL_SENDER_POLICY.md`.
 
-    WHY ONE DOMAIN, NOT `noreply@<tenant>.madfam.io`. Per-subdomain sending
-    splits reputation across domains that each send a handful of messages a
-    year, and a domain with no reputation lands in spam. One verified domain
-    accumulates reputation across every client and every service, with one
-    SPF/DKIM/DMARC setup instead of N. madfam.io is Resend-verified.
+    WHY THE ORIGINAL PHASE-1 REASONING STILL HOLDS FOR EVERYONE ELSE. A client
+    who has no domain of their own meets several MADFAM platforms over an
+    engagement, and a sender that changes per product reads as several vendors
+    rather than one; the platform is credited inside the body, "Powered by".
+    Nothing about that changed. What changed is that CTM now HAS a domain, we
+    manage it, and mail from `creatumundo.mx` to a CTM family is not a fourth
+    vendor — it is the one they were told about.
 
-    THIS IS PHASE 1 OF A TWO-PHASE POLICY, not a permanent answer. See
-    `docs/EMAIL_SENDER_POLICY.md`.
-
-      Phase 1 (now, and every new engagement): MADFAM sends, MADFAM brands,
-      the platform is credited. The client is meeting our ecosystem for the
-      first time and we control the sending domain, so this is the only shape
-      that is both recognisable and deliverable.
-
-      Phase 2 (once MADFAM manages the client's own domain, e.g.
-      creatumundo.mx): mail comes from THEIR domain with THEIR branding. It
-      requires their domain verified in Resend — their DNS, which is exactly
-      what "we manage their web presence" gives us.
-
-    `redirect_url` is accepted and unused ON PURPOSE. It is the Phase 2 hook:
-    the redirect host identifies the tenant, so when a client's domain is
-    verified this function can switch senders without another signature change
-    through four callers. DO NOT REMOVE IT because it is currently unused —
-    that is the seam, not dead code.
+    This returns a 2-tuple for `formataddr`; callers that also want the
+    reply-to address should call `email_sender.sender_for` directly.
     """
-    del redirect_url  # Phase 2 hook; see docstring before deleting
-    name = settings.FROM_NAME or settings.EMAIL_FROM_NAME or "MADFAM"
-    address = settings.FROM_EMAIL or settings.EMAIL_FROM_ADDRESS
+    name, address, _reply_to = sender_for(redirect_url=redirect_url)
     return name, address
 
 
@@ -683,11 +662,18 @@ class EmailService:
         RESEND_API_KEY has been present the whole time — only the transport
         disagreed. Nothing this service ever sent left the cluster.
         """
+        name, address, reply_to = sender_for(redirect_url=redirect_url)
         payload: Dict[str, Any] = {
-            "from": formataddr(resolve_sender(redirect_url)),
+            "from": formataddr((name, address)),
             "to": [to_email],
             "subject": subject,
         }
+        # Reply-To only when it differs from the From address: for the MADFAM
+        # default the two are the same and the header would be pure noise. It
+        # earns its place for a tenant whose mail is SENT by Resend on
+        # creatumundo.mx but RECEIVED in that domain's own mailbox.
+        if reply_to and reply_to != address:
+            payload["reply_to"] = reply_to
         if html_content:
             payload["html"] = html_content
         if text_content:
@@ -750,8 +736,11 @@ class EmailService:
             # Create message
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = formataddr(resolve_sender(redirect_url))
+            smtp_name, smtp_address, smtp_reply_to = sender_for(redirect_url=redirect_url)
+            msg["From"] = formataddr((smtp_name, smtp_address))
             msg["To"] = to_email
+            if smtp_reply_to and smtp_reply_to != smtp_address:
+                msg["Reply-To"] = smtp_reply_to
 
             # Add text and HTML parts
             if text_content:
@@ -770,7 +759,10 @@ class EmailService:
                     server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
 
                 text = msg.as_string()
-                server.sendmail(settings.FROM_EMAIL, [to_email], text)
+                # Envelope sender follows the resolved From, not the static
+                # setting: a mismatch between envelope and header is what SPF
+                # alignment failures are made of.
+                server.sendmail(smtp_address, [to_email], text)
 
             return True
 

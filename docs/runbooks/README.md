@@ -10,6 +10,12 @@ Operator guides for production GitOps, secrets rotation, and incident records.
 | [ALEMBIC_CONVERGENCE.md](./ALEMBIC_CONVERGENCE.md) (ES) | Before promoting with unapplied migrations; after applying a migration by hand |
 | [../PP_3B_STAGING_PIPELINE.md](../PP_3B_STAGING_PIPELINE.md) | Full staging → prod pipeline (Pattern B) |
 
+## Email
+
+| Document | When to use |
+|----------|-------------|
+| [resend-domain-onboarding.md](./resend-domain-onboarding.md) | Adding a client sending domain to Resend (Phase 2 of `../EMAIL_SENDER_POLICY.md`) |
+
 ## Incidents
 
 | Date | Document |

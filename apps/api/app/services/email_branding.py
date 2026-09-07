@@ -41,7 +41,7 @@ than on three parallel registries. See `default_formality_for` and
 `timezone_for`.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 from app.services.email_i18n import FORMALITY_TU, FORMALITY_USTED
@@ -117,7 +117,7 @@ CTM_BRANDING: Dict[str, str] = {
 # a subdomain suffix, so both `crea-map.madfam.io` and a bare `kalya.app`
 # resolve. NOT a catch-all: `madfam.io` itself is deliberately absent — it is
 # MADFAM's own host and must keep MADFAM branding.
-CTM_HOSTS: tuple = (
+CTM_HOSTS: Tuple[str, ...] = (
     "crea-map.madfam.io",
     "ensayo-map.madfam.io",
     "kalya.app",

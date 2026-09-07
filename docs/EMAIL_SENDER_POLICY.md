@@ -51,17 +51,57 @@ wrong brand, because it does not arrive at all.
 
 ## Phase 2 — the client's domain, the client's branding
 
-Begins when MADFAM manages the client's web presence (e.g. `creatumundo.mx`).
+**IN CODE as of 2026-09-06, gated on verification.** Begins per-client when
+MADFAM manages that client's web presence (e.g. `creatumundo.mx`).
 
 ```
-From:    Crea Tu Mundo <noreply@creatumundo.mx>
+From:    Crea Tu Mundo <hola@creatumundo.mx>
+Reply-To: hola@creatumundo.mx
 Header:  client logo and palette
 Footer:  Con tecnología de MADFAM
 ```
 
+Owner directive, 2026-09-06: "so far we've been sending the emails from
+madfam.io, which should change now that we have @creatumundo.mx accessible via
+email. Sender should be hola@creatumundo.mx." `hola@`, matching MADFAM's own
+`hola@madfam.io` — a repliable human address, not `noreply@` as this document
+originally sketched.
+
 **Precondition, non-negotiable:** the client's domain verified in Resend, which
 needs DNS records published — exactly what managing their web presence gives
-us. Without it, mail from their domain is spam-foldered or rejected.
+us. Without it, mail from their domain is not spam-foldered, it is **rejected
+by Resend** and never sent at all.
+
+### How the precondition is enforced in code
+
+`RESEND_VERIFIED_DOMAINS` (default `madfam.io`) is the list of domains Resend
+has verified. `app/services/email_sender.py::sender_for()` resolves the tenant
+from the redirect host (or an explicit `org_id`) and then checks the resolved
+address against that list. An address on an unverified domain is **downgraded,
+not sent** — and the downgrade is partial:
+
+| `RESEND_VERIFIED_DOMAINS` | A CTM message comes from |
+|---|---|
+| `madfam.io` | `Crea Tu Mundo <hola@madfam.io>` |
+| `madfam.io,creatumundo.mx` | `Crea Tu Mundo <hola@creatumundo.mx>` |
+
+The tenant's **display name** ships immediately; only the **address** waits for
+verification. So merging Phase 2 moves no mail, and the production cutover is
+one env edit with a one-env-edit rollback — over the same code path that was
+already running, which is why the cutover is not also a first execution.
+
+The step-by-step is [`runbooks/resend-domain-onboarding.md`](./runbooks/resend-domain-onboarding.md);
+`scripts/resend_domain_onboard.py` creates the domain and prints the exact DNS
+records (DKIM `resend._domainkey` TXT, plus `send.` MX + TXT for the SPF return
+path) as `enclii providers cloudflare dns-apply` lines.
+
+### The internal door
+
+`POST /api/v1/email/send` accepts `from_email` / `from_name` from other MADFAM
+services. These used to be ignored outright. They are now honoured **under the
+same gate**: an explicit address is used only when its domain is verified, and
+otherwise discarded in favour of the tenant/host rule. A caller's display name
+is always honoured — naming yourself is harmless, claiming a domain is not.
 
 ## Phase 1, refined — MADFAM sends, the BODY is the tenant's
 
@@ -86,14 +126,16 @@ the magic-link `redirect_url` host (crea-map / kalya → CTM) or an explicit
 `org_id`, and returns the header name, header palette, and footer credit;
 everything else defaults to the MADFAM frame, so an unknown or absent signal
 renders exactly what it rendered before. It is deliberately kept separate from
-`resolve_sender`, and nothing it returns is ever used to build the From line —
-`tests/unit/services/test_email_branding.py` pins that a CTM-context send still
-comes from `MADFAM <hola@madfam.io>`.
+`resolve_sender`, and nothing it returns is ever used to build the From line.
+(Superseded in part by Phase 2 below: the From line DOES now carry the tenant,
+but it is resolved by `email_sender.sender_for` from the same host signal —
+never from anything `resolve_branding` returns. `test_email_branding.py` still
+pins that separation.)
 
 Why keyed on the redirect host rather than `WhiteLabelConfiguration`: the auth
 mailer runs in FastAPI BackgroundTasks with no DB session, so the org-branding
 table (keyed by `organization_id`) is not reachable at send time. The redirect
-host is the tenant signal that IS available — the same one Phase 2 will read.
+host is the tenant signal that IS available — and the one Phase 2 now reads.
 When a send path carries a session, `resolve_branding(org_id=…)` is the seam to
 hang the DB-backed config on.
 
@@ -192,20 +234,26 @@ Applies to the three re-sendable messages: **magic link**, **password reset**,
 **email verification**. Not to welcome or invitation, which are sent once and
 whose subjects already carry a distinguishing organization name.
 
-## The seam that makes Phase 2 cheap
+## The seam that made Phase 2 cheap — now used
 
-`app/services/email_service.py::resolve_sender()` accepts `redirect_url` and
-currently ignores it. **That is not dead code.** The redirect host identifies
-the tenant, so when a client's domain is verified, the switch happens in one
-function rather than as another signature change through four callers.
+`app/services/email_service.py::resolve_sender()` accepted `redirect_url` and
+ignored it, with a docstring insisting it was not dead code: "the redirect host
+identifies the tenant, so when a client's domain is verified, the switch
+happens in one function rather than as another signature change through four
+callers."
 
-The template already takes `platform_name` / `platform_url`, defaulting to
-Janua. Per-client logo and palette are the remaining Phase 2 work, and Janua
-already models per-org white-label branding to hang them on.
+That is exactly what happened. `resolve_sender` now delegates to
+`email_sender.sender_for()`, and no caller signature changed. The prediction is
+recorded here because it is the argument for leaving the next such seam alone.
+
+Per-client logo and palette landed earlier, in the Phase-1 refinement above.
 
 ## Rules that hold in both phases
 
-- **Never send from an unverified domain.** Check Resend first, every time.
+- **Never send from an unverified domain.** This is no longer only a habit:
+  `RESEND_VERIFIED_DOMAINS` enforces it in code, and adding a domain to that
+  list before `scripts/resend_domain_onboard.py` reports `verified` is the one
+  way to break it.
 - **Credit, do not brand.** Whoever is not the sender goes in "Powered by".
 - **es-MX uses "Con tecnología de"**, not "Impulsado por" — the first reads as
   an attribution, the second as marketing.

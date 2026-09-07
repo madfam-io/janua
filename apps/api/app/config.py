@@ -236,6 +236,28 @@ class Settings(BaseSettings):
     EMAIL_FROM_ADDRESS: str = Field(default="hola@madfam.io")
     EMAIL_FROM_NAME: str = Field(default="MADFAM")
     RESEND_API_KEY: Optional[str] = Field(default=None)
+    # Sending domains that are VERIFIED in Resend. The per-host sender resolver
+    # (`app/services/email_sender.py`) will only put an address on the From line
+    # when its domain appears here; anything else falls back to the MADFAM
+    # address while KEEPING the tenant's display name.
+    #
+    # WHY A GATE AND NOT JUST THE TABLE. Resend rejects a send from a domain it
+    # has not verified — the message does not go to spam, it does not go at all.
+    # Shipping the CTM sender before `creatumundo.mx` is verified would break
+    # every CTM sign-in link, so the code ships first and the domain is added to
+    # this list only once `POST /domains/{id}/verify` reports `verified`. See
+    # `docs/EMAIL_SENDER_POLICY.md` (Phase 2) and
+    # `docs/runbooks/resend-domain-onboarding.md`.
+    #
+    # Comma-separated, same shape as CORS_ORIGINS. Read through
+    # `resend_verified_domains_list`, never directly.
+    RESEND_VERIFIED_DOMAINS: str = Field(
+        default="madfam.io",
+        description=(
+            "Comma-separated sending domains verified in Resend. A sender "
+            "address is only used when its domain is listed here."
+        ),
+    )
     # Language for transactional mail when the recipient has no stored locale
     # and the caller did not specify one. Defaults to Spanish: this platform's
     # users are predominantly Mexican, and mail was English-only before.
@@ -666,6 +688,20 @@ class Settings(BaseSettings):
 
         # Parse as comma-separated string
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def resend_verified_domains_list(self) -> List[str]:
+        """The Resend-verified sending domains, lowercased.
+
+        Empty/blank config falls back to `madfam.io` rather than to an empty
+        set: an empty set would disable EVERY sender including the default and
+        silently stop all mail, which is the failure this gate exists to
+        prevent.
+        """
+        raw = (self.RESEND_VERIFIED_DOMAINS or "").strip()
+        if not raw:
+            return ["madfam.io"]
+        return [d.strip().lower().lstrip("@") for d in raw.split(",") if d.strip()]
 
     @property
     def service_url(self) -> str:
