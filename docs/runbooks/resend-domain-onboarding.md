@@ -170,3 +170,167 @@ a typo'd value does not). Check the deployed env before touching Resend.
 - It does not put the API key anywhere but the operator's shell. The script
   reads `RESEND_API_KEY` from env and never prints it or the `Authorization`
   header.
+
+---
+
+# Quién puede tener remitente de marca
+
+**Sólo los clientes vCTO.** Directiva del propietario, 2026-09-06: «este tipo
+de trato debe reservarse exclusivamente para nuestros clientes vCTO, donde
+tenemos control operativo completo.»
+
+La razón no es comercial, es operativa. Cuando un correo sale como
+`Crea Tu Mundo <hola@creatumundo.mx>`, MADFAM se ha hecho cargo del DNS de ese
+dominio, de la rotación de su DKIM, de su reputación de envío y de sus rebotes.
+Eso se puede prometer para un cliente retenido cuya infraestructura operamos.
+No se puede prometer para un alta self-serve — y prometerlo ahí significa que
+el problema de entregabilidad de un desconocido llega como incidente nuestro.
+
+## Dónde vive la verdad
+
+En **janua**, en `product_tiers` de la organización — el mismo almacén de
+titularidades que ya alimenta el claim `madfam_entitled_products` del JWT:
+
+```json
+{ "vcto": "fractional_cto" }
+```
+
+Se otorga y se revoca por el endpoint de admin que ya existe y que ya audita:
+
+```
+POST   /api/v1/admin/entitlements/org   {"org_id": "...", "product": "vcto", "tier": "fractional_cto"}
+DELETE /api/v1/admin/entitlements/org   {"org_id": "...", "product": "vcto"}
+```
+
+**Por qué no se lee de nauta.** Nauta sí tiene el dato (`Workspace.tier =
+FRACTIONAL_CTO`), pero (1) no lo expone a ningún llamador de servicio — sus dos
+rutas máquina devuelven sólo `{workspaceId, provisioning, locale}` y un
+`TimeEntryDraft`; (2) la integración hoy va nauta → janua y nunca al revés,
+así que preguntarle obligaría al proveedor de identidad a depender de un
+producto aguas abajo en un BackgroundTask, para un enlace de acceso; y (3) el
+propio ADR-0001 de nauta declara que «janua es la única autoridad de
+titularidades». Preguntarle a nauta invertiría la regla que nauta respeta.
+
+## La compuerta falla cerrada
+
+El mailer corre sin sesión de base de datos, así que la lectura autoritativa no
+puede ocurrir en la ruta de envío. La compuerta consulta, en orden: una
+decisión explícita del llamador, luego el caché de proceso, y si ninguna
+responde **no hay derecho**.
+
+«Falla cerrada» aquí significa que el correo **sí sale**, desde
+`hola@madfam.io`, conservando el nombre visible del cliente. Nunca significa
+que el enlace de acceso no llegue: un correo que nadie recibe es peor falla que
+un correo desde la dirección de la plataforma.
+
+## Matriz de respaldo (fallback)
+
+| vCTO | Dominio verificado en la cuenta que envía | Sale como |
+|---|---|---|
+| sí | sí | `Crea Tu Mundo <hola@creatumundo.mx>` |
+| sí | no | `Crea Tu Mundo <hola@madfam.io>` |
+| no | sí | `Crea Tu Mundo <hola@madfam.io>` |
+| no | no | `Crea Tu Mundo <hola@madfam.io>` |
+| sin señal de inquilino | — | `MADFAM <hola@madfam.io>` |
+
+El degradado siempre es **parcial**: se conserva el nombre, se revierte la
+dirección. La marca es cosmética; la dirección es operativa.
+
+---
+
+# Migrar a tu propia cuenta de Resend (u otro proveedor)
+
+Directiva del propietario, 2026-09-06: «debemos permitir mecanismos para que
+CTM y cualquier otro cliente vCTO pueda moverse fácilmente a su propia cuenta
+de Resend (o su proveedor preferido).»
+
+Un `SenderBinding` (`apps/api/app/services/sender_binding.py`) separa **quién
+firma el correo** de **qué cuenta lo envía**. Mudarse de cuenta cambia tres
+campos del binding — `account`, `credential_ref`, `verified_domains` — y
+**ningún camino de código**. Es reversible en un comando.
+
+> La verificación de dominio en Resend es **por cuenta**. Que
+> `creatumundo.mx` esté verificado en la cuenta de MADFAM no dice nada sobre la
+> cuenta del cliente. Por eso un binding en cuenta propia lleva su propia lista
+> `verified_domains` y deja de consultar `RESEND_VERIFIED_DOMAINS`.
+
+## Orden de operaciones
+
+### 0. La llave, una sola vez, sin eco
+
+El operador pega la API key del cliente una vez y la escribe a Vault. Ni el
+script ni el binding ven nunca el valor: el binding guarda una **referencia**.
+
+```bash
+read -rs TENANT_RESEND_API_KEY && export TENANT_RESEND_API_KEY
+vault kv put secret/janua/senders/ctm resend_api_key="$TENANT_RESEND_API_KEY"
+```
+
+### 1. ¿La cuenta del cliente ya tiene el dominio, verificado?
+
+```bash
+python3 scripts/sender_binding_switch.py ctm --verify
+```
+
+Código de salida `2` = existe pero no verificado. `0` = listo para el paso 3.
+
+### 2. Si no: crearlo ahí e imprimir el DNS que falta
+
+```bash
+python3 scripts/sender_binding_switch.py ctm --onboard
+```
+
+La clave DKIM es **por cuenta además de por dominio**, así que son registros
+**nuevos**, distintos a los que ya están publicados para la cuenta de MADFAM.
+El script imprime las líneas `enclii providers cloudflare dns-apply` listas.
+Publicarlas por Enclii, esperar propagación, y repetir el paso 1.
+
+### 3. Voltear el binding
+
+```bash
+python3 scripts/sender_binding_switch.py ctm --switch \
+    --credential-ref 'secret/data/janua/senders/ctm#resend_api_key'
+```
+
+Se **rehúsa** a correr si el paso 1 no reporta `verified` (usar `--force` sólo
+a sabiendas): voltear antes haría que Resend rechace cada envío del inquilino, y
+los enlaces de acceso no llegarían en absoluto.
+
+Edita `sender_binding.py` e imprime el diff. Es un cambio de código a
+propósito — el binding es configuración versionada, así que la mudanza se
+revisa en un PR y se revierte con `git`. Usar `--dry-run` para verlo sin
+escribir.
+
+Antes de desplegar, confirmar que la credencial sí está en Vault (responde
+sí/no, nunca imprime el valor):
+
+```bash
+python3 scripts/sender_binding_switch.py ctm --check-credential
+```
+
+### 4. Reversa
+
+```bash
+python3 scripts/sender_binding_switch.py ctm --rollback
+```
+
+Vuelve a la cuenta de MADFAM. La línea `From` no cambia; sólo cambia la cuenta
+que la transporta. Confirmar que el dominio siga en `RESEND_VERIFIED_DOMAINS`
+de la cuenta de MADFAM, o la dirección degradará a `hola@madfam.io`.
+
+## Otro proveedor que no sea Resend
+
+`provider` es un campo del binding (`resend` | `smtp`). El stub `smtp` existe
+con la misma interfaz para que «proveedor preferido» sea un cambio de binding y
+no de código. **Todavía no tiene transporte detrás**: un binding que declare
+`smtp` falla de forma visible en el envío en vez de salir calladamente por
+Resend, que sería mentir sobre cómo salió el correo. Implementar el transporte
+SMTP es el trabajo pendiente para el primer cliente que lo pida.
+
+## Qué NO hace este procedimiento
+
+- No toca DNS a mano — Enclii-first, por `AGENTS.md`.
+- No pone una llave en el repositorio, en un log, ni en un argumento de línea
+  de comandos. El binding guarda referencias; Vault guarda valores.
+- No cambia la compuerta vCTO. Mudarse de cuenta y tener derecho a remitente de
+  marca son decisiones independientes.

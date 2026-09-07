@@ -1310,6 +1310,38 @@ async def revoke_user_entitlement(
     )
 
 
+def _sync_sender_policy(org_id: str, product_tiers: Optional[dict]) -> None:
+    """Tell the transactional-mail gate what this org's vCTO status now is.
+
+    Best-effort and never fatal: an entitlement grant must not fail because a
+    mail-sender cache could not be updated. The gate fails CLOSED on a stale or
+    empty cache (the sender falls back to MADFAM's address, keeping the tenant
+    display name), so the worst case of a miss here is a message from the
+    platform address — never an undelivered sign-in link.
+
+    Only applies to orgs that HAVE a sender binding; every other org has no
+    branded sender to gate.
+    """
+    try:
+        from app.services.sender_binding import tenant_for_org_id
+        from app.services.sender_policy import (
+            product_tiers_grant_vcto,
+            refresh_vcto_cache,
+        )
+
+        tenant = tenant_for_org_id(org_id)
+        if tenant:
+            refresh_vcto_cache(tenant, product_tiers_grant_vcto(product_tiers))
+    except Exception as exc:  # pragma: no cover - defensive
+        # Local import, matching this module's existing convention (there is no
+        # module-level logger here).
+        import structlog
+
+        structlog.get_logger().warning(
+            "admin.sender_policy_sync_failed", error=str(exc), org_id=org_id
+        )
+
+
 @router.post("/entitlements/org", response_model=AdminOrgEntitlementResponse)
 async def grant_org_entitlement(
     request: AdminOrgEntitlementGrantRequest,
@@ -1356,6 +1388,12 @@ async def grant_org_entitlement(
     )
 
     await db.commit()
+
+    # Propagate to the transactional-mail vCTO gate. The auth mailer runs in a
+    # BackgroundTask with no DB session, so it cannot re-read product_tiers at
+    # send time; this is the authoritative write telling it what changed. See
+    # app/services/sender_policy.py.
+    _sync_sender_policy(str(org_uuid), updated)
 
     return AdminOrgEntitlementResponse(org_id=str(org_uuid), product_tiers=updated)
 
@@ -1404,6 +1442,10 @@ async def revoke_org_entitlement(
     )
 
     await db.commit()
+
+    # Revocation must propagate as fast as a grant, or a concluded engagement
+    # keeps sending from a domain MADFAM no longer operates.
+    _sync_sender_policy(str(org_uuid), updated)
 
     return AdminOrgEntitlementResponse(org_id=str(org_uuid), product_tiers=updated)
 

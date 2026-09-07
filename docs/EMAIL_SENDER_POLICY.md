@@ -257,3 +257,124 @@ Per-client logo and palette landed earlier, in the Phase-1 refinement above.
 - **Credit, do not brand.** Whoever is not the sender goes in "Powered by".
 - **es-MX uses "Con tecnología de"**, not "Impulsado por" — the first reads as
   an attribution, the second as marketing.
+
+## Phase 3 — a branded sender is a vCTO privilege, and it is portable
+
+Owner directive, 2026-09-06, two sentences that shaped this phase:
+
+> «this type of treatment should be left exclusively for our vCTO clients,
+> where we have full operational control. And we should allow mechanisms so
+> that CTM and any other vCTO client can easily move to their own Resend (or
+> preferred provider) account.»
+
+Phase 2 answered *which address goes on the envelope*. Neither of those
+sentences is answerable in those terms, because both are properties of the
+TENANT rather than of the address:
+
+- a branded From is now a **privilege that must be checked**, not a property of
+  a host;
+- the From line and **the account that sends it** are separable, and Phase 2
+  welded them together — `resend.api_key` is set once at service construction,
+  so every tenant sent on MADFAM's account.
+
+So the per-tenant sender became a record instead of a triple.
+
+### The binding
+
+`app/services/sender_binding.py`. One `SenderBinding` per tenant:
+
+```
+tenant · display_name · from_address · reply_to
+provider (resend|smtp) · account (madfam|tenant) · credential_ref · verified_domains
+```
+
+`credential_ref` is a **name** — an env var or a Vault path — never a value.
+That is what makes a binding safe to commit, safe to diff in a PR and safe for
+an operator script to print. `app/services/sender_credentials.py` is the only
+module that ever resolves one, through the repo's existing
+`core/secrets_provider` (SOC 2 CF-06).
+
+`_TENANT_SENDERS` and `SENDER_HOSTS` in `email_sender.py` are now **derived
+views** over this registry rather than parallel tables. A malformed binding —
+unknown provider, tenant account still pointing at MADFAM's key, tenant account
+with no verified domains of its own — raises at **import**, so the API does not
+start rather than discovering it on a sign-in link.
+
+### Verification is per ACCOUNT, not per domain
+
+Resend verifies a domain **for an account**. `creatumundo.mx` verified on
+MADFAM's account says nothing about CTM's own account. So `is_verified_domain`
+now takes the binding: a binding on MADFAM's account reads the global
+`RESEND_VERIFIED_DOMAINS` exactly as before, and a binding on the tenant's own
+account reads its own `verified_domains`, because the global list describes the
+wrong account.
+
+### The gate, and why it is not a call to nauta
+
+The task that produced this phase proposed reading nauta's `Workspace.tier`
+over an internal endpoint. Reading nauta first settled it the other way:
+
+1. **Nauta has the tier but exposes it to nobody.** `Workspace.tier`
+   (`SELF_SERVE | PROJECT | FRACTIONAL_CTO`) is reachable only through
+   human-session tRPC admin mutations. Nauta's two machine-authenticated routes
+   return `{workspaceId, provisioning, locale}` and a write-only time draft.
+2. **The call would run the wrong way.** The integration today is strictly
+   nauta → janua. Janua calls nauta nowhere. This would make the identity
+   provider depend on a downstream product at send time, inside a
+   BackgroundTask with no session and no retry budget, for a sign-in link.
+3. **It would contradict the ratified boundary.** Nauta's own ADR-0001 and its
+   `erp-catalog.ts` state that «janua is the sole entitlement authority».
+   "Is this client entitled to a branded sender" is an entitlement question, so
+   asking nauta inverts the rule nauta is written to respect.
+
+So the source of truth is janua's own `Organization.product_tiers` — the store
+that already feeds `madfam_entitled_products`, already has audited admin
+grant/revoke endpoints, and is therefore **not a second registry**:
+
+```json
+{ "vcto": "fractional_cto" }
+```
+
+`fractional_cto` deliberately mirrors nauta's enum so the two vocabularies read
+the same even though janua is the authority.
+
+### Fail closed, but never fail to deliver
+
+The auth mailer has no DB session, so the authoritative read cannot happen on
+the send path. `sender_policy.is_vcto_entitled` consults, in order: an explicit
+decision from a caller that DOES hold a session, then a process cache refreshed
+by the admin endpoints, then **not entitled**.
+
+"Fail closed" means the message still goes out — from `hola@madfam.io`, keeping
+the tenant's display name. It never means a sign-in link fails to arrive. That
+ordering is the same one the verified-domain gate was built on.
+
+CTM is **seeded** entitled in code, because a cold process has an empty cache
+and the auth mailer never touches the DB, so a strict gate would silently
+regress everything Phase 2 shipped. The seed is a statement of a signed
+commercial fact, versioned in git and revocable by deleting one line — not a
+bypass: an explicit `vcto_entitled=False` from an authoritative read still wins.
+
+### The internal door is gated too
+
+`sender_for_address` honours a caller's explicit `from_email` only from a
+verified domain — and now, when that domain belongs to a **client**, only when
+that client passes the vCTO gate. Otherwise the internal API key would be a way
+around the restriction, and the internal caller is exactly the one most likely
+to be automating a client's mail. An address on MADFAM's own domain is
+unaffected: sending as MADFAM was never the branded privilege.
+
+### Portability
+
+`scripts/sender_binding_switch.py` moves a tenant to their own account:
+`--onboard` creates and prints DNS for the domain in the TENANT's Resend
+account, `--verify` polls it, `--switch` flips `account` / `credential_ref` /
+`verified_domains` (refusing to run before the domain verifies), `--rollback`
+reverses it, `--check-credential` answers whether the Vault reference resolves
+without printing it. The runbook has the operator one-shot.
+
+The `smtp` provider is a binding-level **stub with no transport behind it**. A
+binding declaring it fails visibly at send rather than quietly leaving via
+Resend, which would be a lie about how the mail left. Implementing SMTP is the
+work the first client who asks for it will trigger — the interface is already
+the binding, so it stays a config change.

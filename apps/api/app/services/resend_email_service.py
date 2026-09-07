@@ -5,6 +5,7 @@ Replaces SendGrid with Resend for better developer experience and reliability
 
 import json
 import secrets
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from email.utils import formataddr
@@ -17,7 +18,9 @@ import structlog
 
 from app.config import settings
 from app.services.email_i18n import build_email_environment
-from app.services.email_sender import sender_for_address
+from app.services.email_sender import binding_for, sender_for_address
+from app.services.sender_binding import PROVIDER_SMTP
+from app.services.sender_credentials import SenderCredentialError, resolve_credential
 
 # Optional import for resend - gracefully handle if not installed
 try:
@@ -29,6 +32,11 @@ except ImportError:
     resend = None
 
 logger = structlog.get_logger()
+
+# Serialises the `resend.api_key` swap performed when a binding sends on a
+# TENANT's own provider account. See the send path for why the SDK forces a
+# global swap rather than a per-call credential.
+_ACCOUNT_LOCK = threading.Lock()
 
 
 class EmailPriority(Enum):
@@ -151,6 +159,60 @@ class ResendEmailService:
                 redirect_url=redirect_url,
                 org_id=org_id,
             )
+
+            # WHICH ACCOUNT SENDS THIS. The From line above says who the mail
+            # is from; the binding says whose provider account carries it. They
+            # are separate so a vCTO client can move to their own Resend
+            # account without a code change — owner directive 2026-09-06. A
+            # binding on MADFAM's account resolves to None here and the module
+            # -level `resend.api_key` set in __init__ is used, byte-identical
+            # to the path that ran before this existed.
+            binding = binding_for(redirect_url=redirect_url, org_id=org_id)
+            api_key_override: Optional[str] = None
+            if binding.provider == PROVIDER_SMTP:
+                # The SMTP provider stub is a BINDING-level declaration with no
+                # transport behind it yet. Sending it through Resend anyway
+                # would be a silent lie about how the mail left, so this fails
+                # visibly rather than quietly using the wrong provider.
+                # Recipient deliberately absent: the tenant and the message id
+                # are what diagnose this, and a misconfiguration log is not a
+                # reason to put an address in the log stream.
+                logger.error(
+                    "email.smtp_provider_not_implemented",
+                    tenant=binding.tenant,
+                    message_id=message_id,
+                )
+                return EmailDeliveryStatus(
+                    message_id=message_id,
+                    status="failed",
+                    timestamp=datetime.utcnow(),
+                    error_message=(
+                        f"binding {binding.tenant!r} declares provider 'smtp', "
+                        "which has no transport implementation yet"
+                    ),
+                )
+            if binding.is_on_tenant_account:
+                try:
+                    api_key_override = await resolve_credential(binding)
+                except SenderCredentialError as exc:
+                    # The tenant's own key is missing. Fall back to the
+                    # PLATFORM sender on the platform account rather than
+                    # dropping a sign-in link: a mail from hola@madfam.io is a
+                    # degraded outcome, a mail nobody receives is an outage.
+                    logger.error(
+                        "email.tenant_credential_unavailable_falling_back",
+                        tenant=binding.tenant,
+                        credential_ref=binding.credential_ref,  # a name, not a value
+                        error=str(exc),
+                    )
+                    sender_name, sender_address, sender_reply_to = sender_for_address(
+                        from_email=None,
+                        from_name=sender_name,
+                        redirect_url=None,
+                        org_id=None,
+                    )
+                    api_key_override = None
+
             params = {
                 "from": formataddr((sender_name, sender_address)),
                 "to": [to_email],
@@ -184,8 +246,32 @@ class ResendEmailService:
             if metadata:
                 params["headers"]["X-Metadata"] = str(metadata)
 
-            # Send via Resend
-            response = resend.Emails.send(params)
+            # Send via Resend.
+            #
+            # WHY A LOCK AND A SWAP RATHER THAN A PER-CALL KEY. The Resend
+            # Python SDK reads the API key from the MODULE GLOBAL `resend.api_key`
+            # at request time (`resend/request.py`, the Authorization header);
+            # its `SendOptions` accepts only `idempotency_key`, so there is no
+            # supported per-call credential. Sending on a tenant's own account
+            # therefore means setting that global for the duration of one call.
+            #
+            # That is process-wide state, and this service runs inside FastAPI
+            # BackgroundTasks on a threadpool, so two concurrent sends could
+            # otherwise interleave and mail one tenant's message on another
+            # tenant's account. `_ACCOUNT_LOCK` serialises exactly the swap and
+            # the call, and the `finally` restores the previous value on every
+            # path including an exception. A send on MADFAM's account takes
+            # neither the lock nor the swap and is byte-identical to before.
+            if api_key_override:
+                with _ACCOUNT_LOCK:
+                    previous_key = resend.api_key
+                    resend.api_key = api_key_override
+                    try:
+                        response = resend.Emails.send(params)
+                    finally:
+                        resend.api_key = previous_key
+            else:
+                response = resend.Emails.send(params)
 
             # Resend returns {"id": "..."} on success
             delivery_status = EmailDeliveryStatus(
