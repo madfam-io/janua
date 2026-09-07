@@ -16,17 +16,16 @@
     "verified_at and verified_by are required and why the runbook makes reading the",
     "database the step that precedes editing this file."
   ],
-  "recorded_revision": "011_invitation_columns",
+  "recorded_revision": "016_org_member_app_roles",
   "schema_revision": "016_org_member_app_roles",
-  "verified_at": "2026-09-04",
-  "verified_by": "Dirección Tecnológica (read-only measurement, postgres pod: alembic_version=011, capability_links absent, organization_member_app_roles present)",
+  "verified_at": "2026-09-06",
+  "verified_by": "Dirección Tecnológica (operator run of operador/one-shot-2026-09-06-parte7b.sh, block 2, ~18:3x CDMX: 013_per_tenant_email_uniqueness and 014_capability_links applied with the postgres role via DIRECT_DATABASE_URL, `alembic stamp 016_org_member_app_roles`, then `alembic_converge.py --check` in the janua-api pod: «Convergente: alembic_version (016_org_member_app_roles) ya cubre el esquema» — 0 desvíos)",
   "notes": [
-    "012, 013, 015 and 016 were applied BY HAND and never stamped.",
-    "014 (capability_links) is NOT applied in production as of 2026-09-04 08:25 CDMX",
-    "(`capability_links` does not exist); it will be applied via the operator's bootstrap",
-    "(step janua-014, generated SQL) deliberately without touching alembic_version.",
-    "Convergence has NOT been performed yet: after 014 exists, run",
-    "scripts/alembic_converge.py --stamp, then set recorded_revision to the value it",
-    "reports and refresh verified_at."
+    "2026-09-04: 012, 013(absent), 014(absent), 015 and 016 were out of step with alembic_version=011 (see git history of this file).",
+    "2026-09-06: converged. 013 and 014 needed the postgres role (users/oauth_clients/alembic_version are owned by `enclii`;",
+    "the app role `janua` cannot CREATE INDEX), applied from /app/apps/api with DIRECT_DATABASE_URL, then stamped to 016.",
+    "Pre-013 backup on the postgres pod: /tmp/janua-pre-013-20260906T192436Z.dump. 0 duplicate emails, so 013 was safe.",
+    "Next time the head moves: apply/stamp in the pod, run alembic_converge.py --check, and refresh this file in the same PR",
+    "as the migration — a promote that carries an unrecorded migration stops on the drift guard until then."
   ]
 }
