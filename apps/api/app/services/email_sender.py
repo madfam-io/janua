@@ -67,6 +67,21 @@ here. Two owner requirements drove that, and neither fits a triple:
     binding's `account` / `credential_ref` pair, read at send time by
     `sender_credentials`.
 
+2026-09-07, LATER THE SAME DAY — CTM IS ON ITS OWN RESEND ACCOUNT, AND THE
+CREDENTIAL BECAME PART OF THE FROM DECISION. `creatumundo.mx` is verified in
+CTM's own Resend account, so CTM's binding is `account="tenant"` with
+`credential_ref="CTM_RESEND_API_KEY"` and its own `verified_domains`. That
+introduces a state the two existing gates cannot see: the domain is verified —
+on an account this process can only reach with a key it may not have. Sending
+the branded address without that key means sending it on MADFAM's account,
+where the domain is NOT verified, which Resend rejects; the message is a magic
+link, so the outcome is a client who cannot sign in. `sender_for` therefore
+consults `sender_credentials.tenant_credential_available` as a third gate and
+falls back to `MADFAM <hola@madfam.io>` — degraded, delivered — when the key
+is absent. The gate lives here, in the SYNC resolution every send path shares,
+rather than only in the async send path, so the envelope and the account that
+carries it can never disagree.
+
 `_TENANT_SENDERS` and `SENDER_HOSTS` are kept as DERIVED views over the binding
 registry: they were public names with tests pinning them, and deriving rather
 than deleting means the registry stays the single source while nothing that
@@ -86,6 +101,7 @@ from app.services.sender_binding import (
 )
 from app.services.sender_binding import tenant_for_host as _binding_tenant_for_host
 from app.services.sender_binding import tenant_for_org_id as _binding_tenant_for_org_id
+from app.services.sender_credentials import tenant_credential_available
 from app.services.sender_policy import is_vcto_entitled
 
 # --------------------------------------------------------------------------
@@ -298,7 +314,7 @@ def sender_for(
          product; this is what the auth mailer actually has at send time.
       4. Nothing recognised -> the MADFAM default.
 
-    TWO gates then apply to the resolved tenant, in this order:
+    THREE gates then apply to the resolved tenant, in this order:
 
       * **The vCTO gate** (`sender_policy.is_vcto_entitled`). A branded From
         line is reserved for clients whose infrastructure MADFAM operates —
@@ -309,15 +325,25 @@ def sender_for(
       * **The verified-domain gate**, evaluated against the ACCOUNT the binding
         names (see `is_verified_domain`).
 
-    EITHER GATE FAILING RETURNS THE PLATFORM BINDING WHOLE — name and address
+      * **The credential gate** (`sender_credentials.tenant_credential_available`),
+        added 2026-09-07 when CTM moved to its own Resend account. A binding on
+        a TENANT account carries its own `verified_domains`, describing an
+        account this process can only reach with that tenant's key. With the
+        key absent, the first two gates would still pass — the domain IS
+        verified, on an account we cannot authenticate to — and the branded
+        address would leave on MADFAM's account, where `creatumundo.mx` is not
+        verified and Resend rejects the send. That is a sign-in link that never
+        arrives, so the credential is part of the same decision as the address.
+
+    ANY GATE FAILING RETURNS THE PLATFORM BINDING WHOLE — name and address
     together (owner directive 2026-09-07; see `_fallback_for`). It used to
     return the tenant's display name on the platform address, which produced
     `Crea Tu Mundo <hola@madfam.io>` in a real inbox. The display name now
     follows the address it is entitled to, always.
 
-    Neither gate is bypassable from a caller: passing `vcto_entitled=True` for
-    a tenant whose domain is unverified still downgrades, because the second
-    gate is about whether Resend will accept the send at all.
+    No gate is bypassable from a caller: passing `vcto_entitled=True` for a
+    tenant whose domain is unverified still downgrades, because the later gates
+    are about whether Resend will accept the send at all.
     """
     tenant = tenant_for(host=host, redirect_url=redirect_url, org_id=org_id)
 
@@ -335,6 +361,16 @@ def sender_for(
 
     if not is_verified_domain(sender[1], binding=binding):
         return _fallback_for(sender)
+
+    if not tenant_credential_available(binding):
+        # The binding says "send on the tenant's own account" and that
+        # account's key is not present. Its verified_domains describe an
+        # account this process cannot reach, so the branded address would go
+        # out on MADFAM's account — where `creatumundo.mx` is NOT verified and
+        # Resend rejects the call outright. Falling back here keeps the From
+        # line and the account that carries it as ONE decision.
+        return _fallback_for(sender)
+
     return sender
 
 

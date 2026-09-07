@@ -17,13 +17,26 @@ The load-bearing guarantees, each with a test that fails loudly if it breaks:
   * verification is per-ACCOUNT: a tenant on its own account reads its own
     verified_domains, not the global RESEND_VERIFIED_DOMAINS
   * a binding that would send on the wrong account is rejected at IMPORT
+  * a tenant-account binding whose credential is ABSENT resolves to the
+    PLATFORM sender rather than raising — a degraded From is a degraded
+    outcome, a magic link that never arrives is an outage (#607)
   * everything #603 shipped still resolves exactly as it did
+
+STATE SINCE 2026-09-07: CTM is on its OWN Resend account. `creatumundo.mx` is
+verified there, so CTM's binding is `account="tenant"` with
+`credential_ref="CTM_RESEND_API_KEY"` and its own `verified_domains`. The key
+reaches the pod as an env var (janua-api has no Vault access at runtime), so
+every test that expects the BRANDED sender has to put that env var in place —
+`with_ctm_credential()` below — and the tests that expect the platform sender
+are the ones that deliberately leave it out.
 
 Style follows tests/unit/services/test_email_sender.py: patch settings on the
 module under test rather than standing up a live provider.
 """
 
 import dataclasses
+import os
+from email.utils import formataddr
 from unittest.mock import patch
 
 import pytest
@@ -57,6 +70,39 @@ from app.services.sender_policy import (
 CTM_REDIRECT = "https://crea-map.madfam.io/portal/verify?next=/"
 MADFAM = ("MADFAM", "hola@madfam.io", "hola@madfam.io")
 
+#: The env var CTM's binding names. The VALUE is a fake that never leaves the
+#: process — what is being tested is presence, which is the whole of what the
+#: credential gate reads.
+CTM_CREDENTIAL_ENV = "CTM_RESEND_API_KEY"
+FAKE_CTM_KEY = "re_test_ctm_key_not_real"
+
+
+def with_ctm_credential(value: str = FAKE_CTM_KEY):
+    """Put CTM's own Resend key in the environment for a with-block.
+
+    Since CTM moved to its own account, a branded From is gated on this key
+    being present — without it `sender_for` correctly returns the PLATFORM
+    sender, so a test asserting the branded address has to supply it. Patching
+    `os.environ` rather than `settings` because that is how the key actually
+    arrives in production: the janua-secrets ExternalSecret projects it as an
+    env var, and janua-api has no Vault access at runtime.
+    """
+    return patch.dict(os.environ, {CTM_CREDENTIAL_ENV: value})
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_ctm_credential():
+    """No test inherits a real CTM key from the developer's shell.
+
+    Without this, whether the branded sender resolves would depend on the
+    environment the suite happens to run in — green locally for whoever
+    exported the key, red in CI, which is the failure mode this fixture exists
+    to make impossible.
+    """
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop(CTM_CREDENTIAL_ENV, None)
+        yield
+
 
 def verified(*domains):
     """Patch the GLOBAL RESEND_VERIFIED_DOMAINS (MADFAM's account)."""
@@ -80,14 +126,33 @@ def _reset_policy_cache():
 # The binding registry
 # --------------------------------------------------------------------------
 class TestBindingRegistry:
-    def test_ctm_binding_is_on_madfam_account_today(self):
-        """The shipped state. CTM sends FROM their domain, ON our account —
-        moving the account is a separate, deliberate operator action."""
+    def test_ctm_binding_is_on_its_own_resend_account(self):
+        """The shipped state since 2026-09-07: CTM sends FROM their domain, ON
+        THEIR OWN account.
+
+        This is the migration `sender_binding`'s docstring describes as "a
+        two-field edit on this record" — `account` and `credential_ref` — and
+        it happened because `creatumundo.mx` is Verified in CTM's own Resend
+        account. `verified_domains` becomes non-empty at exactly the same
+        moment and for the same reason: the global RESEND_VERIFIED_DOMAINS
+        describes MADFAM's account, which is now the WRONG authority for this
+        binding.
+        """
         binding = resolve_binding("ctm")
-        assert binding.account == ACCOUNT_MADFAM
-        assert binding.credential_ref == MADFAM_RESEND_CREDENTIAL_REF
+        assert binding.account == ACCOUNT_TENANT
+        assert binding.credential_ref == "CTM_RESEND_API_KEY"
         assert binding.from_address == "hola@creatumundo.mx"
-        assert binding.is_on_tenant_account is False
+        assert binding.is_on_tenant_account is True
+        assert binding.verified_domains == ("creatumundo.mx",)
+        # The tenant account must never point back at MADFAM's own key, or the
+        # mail would leave on our account while the binding claims theirs.
+        assert binding.credential_ref != MADFAM_RESEND_CREDENTIAL_REF
+
+    def test_the_platform_binding_is_still_on_madfam_account(self):
+        """CTM moving accounts must not have moved the platform's."""
+        assert PLATFORM_BINDING.account == ACCOUNT_MADFAM
+        assert PLATFORM_BINDING.credential_ref == MADFAM_RESEND_CREDENTIAL_REF
+        assert PLATFORM_BINDING.is_on_tenant_account is False
 
     def test_unknown_tenant_resolves_to_the_platform_binding(self):
         assert resolve_binding("nobody") is PLATFORM_BINDING
@@ -138,12 +203,24 @@ class TestBindingRegistry:
         assert tenant_for_org_id(None) is None
 
     def test_redacted_never_carries_a_secret(self):
-        """A binding is safe to log: it holds a credential NAME, not a value."""
+        """A binding is safe to log: it holds a credential NAME, not a value.
+
+        Now that CTM is on its own account the reference is CTM's env var
+        rather than MADFAM's, which makes this assertion sharper than it was:
+        the thing being shown is the name of a key that DOES exist and DOES
+        have a value somewhere, and it is still only ever the name.
+        """
         redacted = resolve_binding("ctm").redacted()
-        # The REFERENCE is present (an operator debugging a switch needs it)...
-        assert redacted["credential_ref"] == MADFAM_RESEND_CREDENTIAL_REF
-        # ...and no value shaped like a Resend key ever is.
-        assert not any(v.startswith("re_") for v in redacted.values())
+        # The REFERENCE is present (an operator debugging a switch needs it)
+        # and it is a NAME — an env var, not a value.
+        assert redacted["credential_ref"] == "CTM_RESEND_API_KEY"
+        assert redacted["account"] == ACCOUNT_TENANT
+        # ...and no value shaped like a Resend key ever is, even when the real
+        # key is sitting in the environment right next to it.
+        with with_ctm_credential():
+            redacted = resolve_binding("ctm").redacted()
+            assert not any(v.startswith("re_") for v in redacted.values())
+            assert FAKE_CTM_KEY not in "".join(redacted.values())
 
 
 class TestRegistryValidation:
@@ -302,8 +379,14 @@ class TestProductTiersInterpretation:
 class TestSenderUnderTheVctoGate:
     def test_entitled_ctm_resolves_exactly_as_before(self):
         """#603's behaviour, unchanged: this is the regression guard for the
-        whole refactor."""
-        with verified("madfam.io", "creatumundo.mx"):
+        whole refactor.
+
+        "Fully enabled" now means three things rather than two — entitled,
+        domain verified, credential present — so the credential is supplied
+        here. The RESOLVED ANSWER is the assertion, and it is byte-identical
+        to what #603 shipped.
+        """
+        with verified("madfam.io", "creatumundo.mx"), with_ctm_credential():
             assert sender_module.sender_for(host="creatumundo.mx") == (
                 "Crea Tu Mundo",
                 "hola@creatumundo.mx",
@@ -324,15 +407,55 @@ class TestSenderUnderTheVctoGate:
         assert (name, address, reply_to) == MADFAM
 
     def test_the_gate_does_not_rescue_an_unverified_domain(self):
-        """Both gates apply. Being a vCTO client does not make Resend accept a
-        send from a domain it has not verified — and since 2026-09-07 the
-        failed gate takes the display name with it."""
-        with verified("madfam.io"):
+        """Every gate applies. Being a vCTO client does not make Resend accept
+        a send from a domain it has not verified — and since 2026-09-07 the
+        failed gate takes the display name with it.
+
+        CTM is on its own account, so the authority for "is this domain
+        verified" is the BINDING's `verified_domains`, not the global list. A
+        binding whose own list is empty is a domain its account has not
+        verified, and no entitlement rescues that.
+        """
+        unverified = dataclasses.replace(
+            resolve_binding("ctm"), verified_domains=(), account=ACCOUNT_MADFAM
+        )
+        with (
+            verified("madfam.io"),
+            patch.object(sender_module, "resolve_binding", lambda _t: unverified),
+        ):
             name, address, _ = sender_module.sender_for(host="creatumundo.mx", vcto_entitled=True)
         assert (name, address) == ("MADFAM", "hola@madfam.io")
 
+    def test_the_gate_does_not_rescue_a_missing_tenant_credential(self):
+        """The third gate, added when CTM moved to its own account.
+
+        The vCTO gate passes and the domain IS verified — on an account this
+        process cannot authenticate to without CTM's key. Sending the branded
+        address anyway would put it on MADFAM's account, where
+        `creatumundo.mx` is NOT verified, and Resend would reject the magic
+        link outright. Entitlement does not conjure a credential.
+        """
+        with verified("madfam.io"):  # CTM_RESEND_API_KEY deliberately absent
+            name, address, _ = sender_module.sender_for(host="creatumundo.mx", vcto_entitled=True)
+        assert (name, address) == ("MADFAM", "hola@madfam.io")
+
+    def test_the_credential_is_what_moves_the_sender_back(self):
+        """The same call, the same gates, one env var apart. This is the pair
+        that shows the credential is genuinely the deciding fact and not an
+        incidental difference between two test setups."""
+        with verified("madfam.io"):
+            without = sender_module.sender_for(host="creatumundo.mx")
+            with with_ctm_credential():
+                with_key = sender_module.sender_for(host="creatumundo.mx")
+        assert without == MADFAM
+        assert with_key == (
+            "Crea Tu Mundo",
+            "hola@creatumundo.mx",
+            "hola@creatumundo.mx",
+        )
+
     def test_revocation_through_the_cache_moves_the_sender(self):
-        with verified("madfam.io", "creatumundo.mx"):
+        with verified("madfam.io", "creatumundo.mx"), with_ctm_credential():
             assert sender_module.sender_for(host="creatumundo.mx")[1] == "hola@creatumundo.mx"
             refresh_vcto_cache("ctm", False)
             assert sender_module.sender_for(host="creatumundo.mx")[1] == "hola@madfam.io"
@@ -436,10 +559,133 @@ class TestSenderCredentials:
     @pytest.mark.asyncio
     async def test_madfam_account_resolves_to_none(self):
         """None means 'change nothing': the SDK is already configured with the
-        platform key, so the pre-existing path stays byte-identical."""
+        platform key, so the pre-existing path stays byte-identical.
+
+        Asserted on the PLATFORM binding now that CTM has moved off MADFAM's
+        account — the platform binding is the one that still has this shape,
+        and it is the shape every non-tenant send takes.
+        """
         from app.services.sender_credentials import resolve_credential
 
-        assert await resolve_credential(resolve_binding("ctm")) is None
+        assert await resolve_credential(PLATFORM_BINDING) is None
+
+    @pytest.mark.asyncio
+    async def test_ctms_own_key_resolves_from_the_environment(self):
+        """The live production shape: an env var name on a tenant-account
+        binding, delivered to the pod by the janua-secrets ExternalSecret."""
+        from app.services.sender_credentials import resolve_credential
+
+        with with_ctm_credential():
+            assert await resolve_credential(resolve_binding("ctm")) == FAKE_CTM_KEY
+
+    @pytest.mark.asyncio
+    async def test_ctms_missing_key_still_RAISES_for_a_caller_asking_for_it(self):
+        """`resolve_credential` is the "hand me the secret" question, and it
+        stays loud: `scripts/sender_binding_switch.py --check-credential`
+        reports NO off exactly this path.
+
+        The SEND path asks a different question and gets a boolean —
+        see `test_a_missing_credential_never_blocks_a_sign_in_link`.
+        """
+        from app.services.sender_credentials import (
+            SenderCredentialError,
+            resolve_credential,
+        )
+
+        with pytest.raises(SenderCredentialError):
+            await resolve_credential(resolve_binding("ctm"))
+
+
+class TestMissingTenantCredentialFallsBackNotFails:
+    """#607's rule, applied to the account layer: a client's sign-in link must
+    never be blocked by a missing tenant credential.
+
+    An operator can flip a binding to the tenant's own account before writing
+    the key — that is the ordinary shape of the migration, and the switch
+    script's own output tells them to write it next. In that window every
+    branded send would otherwise either raise or be rejected by Resend. The
+    rule is that the mail still goes out, from the PLATFORM sender, whole, with
+    a warning naming the tenant and the credential REFERENCE.
+    """
+
+    def test_a_missing_credential_never_blocks_a_sign_in_link(self):
+        """It resolves — no exception — and it resolves to something sendable."""
+        with verified("madfam.io"):
+            resolved = sender_module.sender_for(redirect_url=CTM_REDIRECT)
+        assert resolved == MADFAM
+
+    def test_the_fallback_is_the_platform_sender_WHOLE(self):
+        """Never `Crea Tu Mundo <hola@madfam.io>` — the header #607 forbids.
+        A missing credential is one more downgrade path, and every downgrade
+        path returns the platform binding entire."""
+        with verified("madfam.io"):
+            name, address, _ = sender_module.sender_for(host="map.creatumundo.mx")
+        assert formataddr((name, address)) == "MADFAM <hola@madfam.io>"
+        assert formataddr((name, address)) != "Crea Tu Mundo <hola@madfam.io>"
+
+    def test_the_availability_check_is_a_boolean_and_never_raises(self):
+        """The send path's question. `resolve_credential` raises; this does
+        not, because `email_sender.sender_for` is sync and must return a
+        sender for every input rather than propagate a credential error into
+        a magic-link background task."""
+        from app.services.sender_credentials import tenant_credential_available
+
+        assert tenant_credential_available(resolve_binding("ctm")) is False
+        with with_ctm_credential():
+            assert tenant_credential_available(resolve_binding("ctm")) is True
+
+    def test_a_madfam_account_binding_needs_no_tenant_credential(self):
+        """The platform binding is not asking for a tenant key, so the check
+        must not veto it — otherwise every ordinary MADFAM send would downgrade
+        to... itself, with a spurious warning on every message."""
+        from app.services.sender_credentials import tenant_credential_available
+
+        assert tenant_credential_available(PLATFORM_BINDING) is True
+
+    def test_a_vault_reference_is_not_vetoed_by_the_sync_check(self):
+        """A Vault read is I/O and cannot happen in a sync function, so the
+        check has nothing to say about it and must not veto on ignorance —
+        returning False would strand every Vault-backed binding on the platform
+        sender permanently. The async send path still resolves it and still
+        falls back if the read comes back empty."""
+        from app.services.sender_credentials import tenant_credential_available
+
+        vaulted = dataclasses.replace(
+            resolve_binding("ctm"),
+            credential_ref="secret/data/janua/senders/ctm#resend_api_key",
+        )
+        assert tenant_credential_available(vaulted) is True
+
+    def test_the_warning_names_the_reference_and_never_a_value(self):
+        """What an operator needs to debug "did I write the right key" is the
+        NAME. What must never reach a log stream is the value."""
+        from app.services import sender_credentials as creds
+
+        with patch.object(creds, "logger") as log:
+            assert creds.tenant_credential_available(resolve_binding("ctm")) is False
+        log.warning.assert_called_once()
+        event, kwargs = log.warning.call_args[0][0], log.warning.call_args[1]
+        assert event == "sender_credentials.tenant_credential_missing"
+        assert kwargs["tenant"] == "ctm"
+        assert kwargs["credential_ref"] == "CTM_RESEND_API_KEY"
+        assert not any(str(v).startswith("re_") for v in kwargs.values())
+
+    def test_a_present_credential_logs_no_warning(self):
+        """The warning marks a degraded state. Emitting it on the healthy path
+        would train an operator to ignore it."""
+        from app.services import sender_credentials as creds
+
+        with with_ctm_credential(), patch.object(creds, "logger") as log:
+            assert creds.tenant_credential_available(resolve_binding("ctm")) is True
+        log.warning.assert_not_called()
+
+    def test_a_blank_credential_counts_as_missing(self):
+        """An ExternalSecret can project an empty string as readily as a real
+        one, and an empty Authorization header is a rejection, not a send."""
+        from app.services.sender_credentials import tenant_credential_available
+
+        with with_ctm_credential("   "):
+            assert tenant_credential_available(resolve_binding("ctm")) is False
 
     @pytest.mark.asyncio
     async def test_a_tenant_binding_with_a_missing_credential_raises(self):
