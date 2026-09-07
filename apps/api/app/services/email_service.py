@@ -18,6 +18,7 @@ import httpx
 import redis.asyncio as redis
 import structlog
 
+from app.auth.hosted_hop import should_use_hosted_hop
 from app.config import settings
 from app.services.email_branding import (
     default_formality_for,
@@ -500,6 +501,7 @@ class EmailService:
         locale: Optional[str] = None,
         formality: Optional[str] = None,
         user: Any = None,
+        hosted_hop: Optional[bool] = None,
     ) -> bool:
         """Send a passwordless sign-in link.
 
@@ -514,6 +516,18 @@ class EmailService:
         Without a redirect_url the link falls back to Janua's own GET callback
         — a clicked link is a GET, and only Janua can trade the token then.
 
+        THE HOSTED HOP (J6). There is a third case, and it is why the branch
+        below is not simply "redirect or not". The product-hosted link can only
+        carry the person into estate-wide SSO when the product is able to relay
+        janua's `janua_sso` cookie, and a product may only do that when the
+        cookie's `Domain` covers its host. On a host OUTSIDE the cookie domain —
+        the client's own `map.creatumundo.mx` — no configuration can make that
+        work: a browser rejects a `.madfam.io` cookie from a `creatumundo.mx`
+        page. For those hosts the link lands on JANUA first, which is the one
+        moment the issuer can set its own first-party cookie, and janua then
+        forwards to the product with the same `?token=` contract. The link the
+        recipient sees changes host; nothing the product implements changes.
+
         The REGISTER follows the requester. `formality` is what the requesting
         product asked for and wins outright; below it sit the reader's own
         stored choice and then the product's default voice, read off the same
@@ -521,6 +535,14 @@ class EmailService:
         one that matters in practice — almost every user row is NULL — and it
         is why a crea-map link now reads «Inicia sesión en tu portal» while a
         nauta-portal link still reads «Inicie sesión en su portal».
+
+        THE HOP DOES NOT TOUCH ANY OF THAT (J6 × J8 × J10). Branding
+        (`resolve_branding`), voice (`default_formality_for`), timezone
+        (`timezone_for`) and sender (`email_sender.sender_for`) all key off
+        `redirect_url` — the DESTINATION — and the hop changes only where the
+        link lands, never the destination itself. So a hop link to a CTM host
+        still carries the Crea header, still reads «tu», is still stamped in
+        CDMX and still comes FROM Crea Tu Mundo; only `magic_url` differs.
         """
         recipient_locale = resolve_locale(locale, user=user, default=self._default_locale())
         recipient_formality = resolve_formality_for_request(
@@ -528,9 +550,17 @@ class EmailService:
             user=user,
             client_default=default_formality_for(redirect_url=redirect_url),
         )
-        if redirect_url:
+        use_hop = should_use_hosted_hop(redirect_url, requested=hosted_hop)
+        if redirect_url and not use_hop:
             separator = "&" if "?" in redirect_url else "?"
             magic_url = f"{redirect_url}{separator}token={magic_token}"
+        elif use_hop:
+            # The hop: janua's own browser-visited callback, carrying the
+            # destination so the callback can forward there after it has set the
+            # estate cookie. `redirect_url` was allowlist-validated when the link
+            # was requested and is re-validated at redemption.
+            callback = f"{settings.public_base_url}/api/v1/auth/magic-link/callback"
+            magic_url = f"{callback}?token={magic_token}"
         else:
             # PUBLIC domain, never the api.janua.dev default. This fallback fires
             # when the request named no redirect_url (a clicked link is a GET, and
@@ -822,6 +852,7 @@ async def send_magic_link_email_task(
     locale: Optional[str] = None,
     formality: Optional[str] = None,
     user_formality: Optional[str] = None,
+    hosted_hop: Optional[bool] = None,
 ) -> None:
     """Background-task entrypoint for the magic-link flow.
 
@@ -851,6 +882,7 @@ async def send_magic_link_email_task(
             locale=locale,
             formality=formality,
             user=SimpleNamespace(spanish_formality=user_formality) if user_formality else None,
+            hosted_hop=hosted_hop,
         )
         if not sent:
             logger.warning(

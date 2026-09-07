@@ -138,6 +138,17 @@ class ChangePasswordRequest(BaseModel):
 class MagicLinkRequest(BaseModel):
     email: EmailStr
     redirect_url: Optional[str] = None
+    # THE HOSTED HOP (J6), as an explicit override. Left None — the normal case
+    # — janua DERIVES it: the link lands on janua first exactly when the
+    # destination host could not otherwise receive the `janua_sso` estate cookie
+    # (see app/auth/hosted_hop.py). A product only sets this to force the
+    # decision either way for a host the derived rule would answer differently,
+    # e.g. a rehearsal host inside the cookie domain that still wants the hop.
+    #
+    # ORTHOGONAL TO `formality` below: the hop moves where the link LANDS, the
+    # register decides how the message READS. Both are resolved from the same
+    # `redirect_url` and neither reads the other.
+    hosted_hop: Optional[bool] = None
     # The Spanish register the REQUESTING PRODUCT speaks in: "tu" or "usted".
     # Optional, and validated rather than trusted — `normalize_formality`
     # returns None for anything unsupported (including `vosotros`), which makes
@@ -2492,6 +2503,7 @@ async def send_magic_link(
         locale=getattr(user, "locale", None),
         formality=magic_link_data.formality,
         user_formality=getattr(user, "spanish_formality", None),
+        hosted_hop=magic_link_data.hosted_hop,
     )
 
     return {"message": "Magic link sent to email"}
@@ -2565,13 +2577,212 @@ async def _preferred_pool_for_redirect(db: Session, redirect_url: Optional[str])
     return getattr(client, "organization_id", None) if client else None
 
 
+def _magic_link_expired_page():
+    """The one dead-link page both halves of the callback show.
+
+    Shared so the GET (which only reads) and the POST (which spends) cannot
+    drift into telling the same person two different stories. Deliberately does
+    not distinguish expired from already-used: to the reader both mean "ask for
+    a new link", and saying which leaks nothing useful.
+    """
+    from fastapi.responses import HTMLResponse
+
+    return HTMLResponse(
+        content=_recovery_page_html(
+            "<h1>🔗 Link expired</h1>"
+            '<p class="lede">Magic links work once and expire after 15 minutes.</p>'
+            "<p>Request a new one from the page you were signing in to.</p>"
+        ),
+        status_code=400,
+    )
+
+
+def _magic_link_interstitial_html(token: str, redirect_url: Optional[str]) -> str:
+    """The scanner-proof interstitial: one button that POSTs the token back.
+
+    Branded from the DESTINATION host via `resolve_branding`, the same signal
+    the email itself was branded from (`email_branding.py`), so the page a CTM
+    person lands on carries the Crea header their mail carried rather than a
+    MADFAM page they were not expecting. An unknown or absent destination
+    resolves to the MADFAM default.
+
+    The copy follows the destination's language: the CTM hosts are Spanish, and
+    a person mid-sign-in should not be handed an English button. Anything else
+    keeps English, which is what every other hosted page here renders.
+    """
+    import html as html_mod
+
+    from app.services.email_branding import resolve_branding
+
+    branding = resolve_branding(redirect_url=redirect_url)
+    spanish = _magic_link_interstitial_is_spanish(redirect_url)
+
+    heading = "Entrar" if spanish else "Sign in"
+    explanation = (
+        "Confirma que eres tú quien abrió este enlace."
+        if spanish
+        else "Confirm it was you who opened this link."
+    )
+    action = "Entrar" if spanish else "Continue"
+    header_name = html_mod.escape(str(branding.get("header_name", "MADFAM")))
+    header_bg = html_mod.escape(str(branding.get("header_bg", "")))
+    header_fg = html_mod.escape(str(branding.get("header_fg", "#ffffff")))
+    lang = "es-MX" if spanish else "en"
+
+    return f"""<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>{html_mod.escape(heading)}</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f4f5f7;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .card {{
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            width: 100%;
+            max-width: 420px;
+            overflow: hidden;
+        }}
+        .brand {{
+            background: {header_bg};
+            color: {header_fg};
+            padding: 20px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 18px;
+        }}
+        .body {{ padding: 32px; text-align: center; }}
+        h1 {{ font-size: 22px; color: #1b1c2e; margin-bottom: 10px; }}
+        p {{ color: #5c5f72; font-size: 15px; line-height: 1.5; margin-bottom: 24px; }}
+        button {{
+            width: 100%;
+            padding: 14px;
+            background: {header_bg};
+            color: {header_fg};
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            min-height: 48px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="brand">{header_name}</div>
+        <div class="body">
+            <h1>{html_mod.escape(heading)}</h1>
+            <p>{html_mod.escape(explanation)}</p>
+            <form method="POST" action="/api/v1/auth/magic-link/callback">
+                <input type="hidden" name="token" value="{html_mod.escape(token)}">
+                <button type="submit">{html_mod.escape(action)}</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+
+def _magic_link_interstitial_is_spanish(redirect_url: Optional[str]) -> bool:
+    """Does this destination serve a Spanish-speaking tenant?
+
+    Reuses `CTM_HOSTS` — the same registry that decides the email's branding —
+    rather than introducing a second host list that could disagree with it. The
+    hosts that take the hosted hop today are all CTM's.
+    """
+    if not redirect_url:
+        return False
+    from app.services.email_branding import CTM_HOSTS
+
+    host = (urlparse(redirect_url).hostname or "").lower()
+    if not host:
+        return False
+    return any(host == h or host.endswith(f".{h}") for h in CTM_HOSTS)
+
+
 @router.get("/magic-link/callback")
-async def magic_link_callback(
+async def magic_link_callback_interstitial(
     token: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Render the scanner-proof interstitial. SPENDS NOTHING.
+
+    ⚠️ THE TOKEN IS ONE-TIME, SO A GET MUST CONSUME NOTHING.
+
+    Mail clients and their safe-link / preview scanners GET every URL in an
+    email. Until 2026-09-06 this route VERIFIED on the GET: it burned
+    `used_at`, minted a session and redirected. A scanner's fetch therefore
+    spent the link and the human's own click replayed a spent token —
+    "could not sign in". That is not hypothetical: it is the failure this
+    estate already hit once (nauta portal, first real ceremony 2026-08-16),
+    and it is the reason `@madfam/janua-next` splits its own magic-link route
+    exactly this way. This route was written for the no-`redirect_url`
+    fallback and never received the same treatment; the J6 hosted hop makes it
+    the PRIMARY path for the client's brand hosts, so it had to be fixed
+    before that traffic arrives.
+
+    The split is the entire security property:
+      • GET (here) renders a one-button page and spends NOTHING.
+      • POST (below) is the ONLY place the token is exchanged.
+
+    Do NOT "simplify" this back into a GET that verifies.
+
+    Validation that only READS is still done here, so an already-dead link says
+    so immediately instead of showing a button that cannot work.
+    """
+    from fastapi.responses import HTMLResponse
+
+    if not token:
+        return _magic_link_expired_page()
+
+    result = await db.execute(
+        select(MagicLink).where(
+            MagicLink.token == token,
+            MagicLink.used_at.is_(None),
+            MagicLink.expires_at > datetime.utcnow(),
+        )
+    )
+    magic_link = result.scalar_one_or_none()
+    if not magic_link:
+        return _magic_link_expired_page()
+
+    return HTMLResponse(
+        content=_magic_link_interstitial_html(token, magic_link.redirect_url),
+        status_code=200,
+        headers={
+            "cache-control": "no-store",
+            # The one-time token is in this URL's query string. `no-referrer`
+            # keeps it out of any Referer header this page's own assets send.
+            "referrer-policy": "no-referrer",
+            "x-robots-tag": "noindex, nofollow",
+        },
+    )
+
+
+@router.post("/magic-link/callback")
+async def magic_link_callback(
+    token: Optional[str] = Form(default=None),
     req: Request = None,
     db: Session = Depends(get_db),
 ):
-    """Land a clicked magic link and forward to the product with a session.
+    """Spend the clicked magic link and forward to the product with a session.
+
+    The ONLY place the one-time token is exchanged — reached by the
+    interstitial's button, never by a scanner (see the GET above).
 
     A link in an email is a GET, and only Janua can trade the one-time magic
     token for a session — so without this route the whole passwordless flow
@@ -2579,18 +2790,19 @@ async def magic_link_callback(
     which no mail client can reach. Products (nauta's /portal/verify) expect
     to be handed the access token on the query string; that contract is why
     the token travels this way rather than in a body.
+
+    THE HOSTED HOP (J6). This route is also what makes estate SSO reachable
+    from a host OUTSIDE the cookie domain. The browser IS on auth.madfam.io
+    for this hop, so this is the one moment the issuer can set its own
+    first-party `janua_sso` cookie for a person signing in from
+    `map.creatumundo.mx` — a host that can never receive it by relay, because a
+    browser rejects a `.madfam.io` cookie from a `creatumundo.mx` page. The
+    forward below keeps `?token=` exactly as products expect.
     """
     from fastapi.responses import HTMLResponse, RedirectResponse
 
     def _expired_page() -> HTMLResponse:
-        return HTMLResponse(
-            content=_recovery_page_html(
-                '<h1>🔗 Link expired</h1>'
-                '<p class="lede">Magic links work once and expire after 15 minutes.</p>'
-                '<p>Request a new one from the page you were signing in to.</p>'
-            ),
-            status_code=400,
-        )
+        return _magic_link_expired_page()
 
     if not token:
         return _expired_page()

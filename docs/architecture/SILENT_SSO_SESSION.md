@@ -1,12 +1,14 @@
 # Silent SSO: where the browser session comes from
 
-**Status**: B1, B2, B6, R1 and J9 landed in Janua; B3/B4 are operator steps; B5
-lives in nauta and B7 in crea-map. **R1 chose option 3 of the security note
+**Status**: B1, B2, B6, R1, J9 and J6 landed in Janua; B3/B4 are operator steps;
+B5 lives in nauta and B7 in crea-map. **R1 chose option 3 of the security note
 below** — a separate HttpOnly estate cookie, `janua_sso`; see "R1 — the
 `janua_sso` estate cookie". **J9 makes that cookie outrank a stale
 `janua_access_token` at `/authorize`**; see "J9 — the estate session outranks a
 stale hosted-login cookie", which is the section to read first if silent SSO ever
-authenticates the wrong person again.
+authenticates the wrong person again. **J6 reaches the hosts that cookie can
+never be relayed to** — the client's own `creatumundo.mx` zone — by moving where
+the emailed link lands; see "J6 — the hosted hop".
 **Related**: `ADR-001_AUTH_FLOW.md`, ADR `2026-05-04-selva-unified-sso` (Phase 1
 = `prompt=none`, delivered earlier), `docs/guides/SSO_INTEGRATION_GUIDE.md`.
 
@@ -43,6 +45,7 @@ land, not a menu.
 | **R1s** | `@madfam/janua-next` relays `janua_sso` (and its deletion) | madfam-js `@madfam/janua-next@0.2.0` | landed |
 | **R1n** | nauta adds the same relay | nauta | in flight |
 | **J9** | `janua_sso` outranks `janua_access_token` at `/authorize` | Janua `routers/v1/oauth_provider.py` | landed |
+| **J6** | Magic links land on Janua first for hosts outside `COOKIE_DOMAIN`; the callback GET stops spending the token | Janua `auth/hosted_hop.py`, `services/email_service.py`, `routers/v1/auth.py` | landed |
 
 **B2 is a silent prerequisite of B1.** A magic-link session carries the audience
 of the product the link forwards to (`_session_audience_for_redirect`) —
@@ -372,3 +375,148 @@ reading an estate cookie.
 
 Adding a brand host is a deploy-only change (no migration): edit the three
 lists, then the normal staging → prod promote.
+
+## J6 — the hosted hop: SSO on a host outside the cookie domain
+
+R1 gave the estate one browser session. The section above states the limit it
+could not pass: `janua_sso` is scoped by `COOKIE_DOMAIN=.madfam.io`, and a
+cookie cannot cross a registrable-domain boundary, so on `map.creatumundo.mx`
+the relay in `@madfam/janua-next` can never fire. Not "is not configured yet" —
+*cannot*: a browser rejects a `.madfam.io` cookie from a `creatumundo.mx` page.
+Without the estate cookie the ERP's `prompt=none` answers `login_required`
+every time and the person is asked for a second email.
+
+J6 closes that by moving where the emailed link lands.
+
+### The rule: derived per host, not a flag
+
+`app/auth/hosted_hop.py` decides. `should_use_hosted_hop(redirect_url)` returns
+true exactly when the destination host is **not** covered by `COOKIE_DOMAIN` —
+i.e. exactly when the product could not receive the estate cookie by relay.
+
+`domain_covers_host` is the Python twin of `domainCoversHost` in
+`@madfam/janua-next` (`packages/janua-next/src/magic-verify.ts`), deliberately
+behaviour-identical. The two halves of the same question must agree: janua uses
+it to decide whether to mail a product link, the package uses it to decide
+whether the cookie may be relayed. If they disagreed, janua would mail a direct
+link for a host whose relay silently refuses — the live brand-host defect.
+
+Consequences worth stating:
+
+- **Nothing that works today changes.** `crea-map.madfam.io` and
+  `crea-erp.madfam.io` keep the byte-identical link they have now. The hop
+  lights up only for hosts that are provably broken.
+- **Cutover needs no deploy.** When `map.creatumundo.mx` goes live its links
+  take the hop automatically; a host that later moved under `madfam.io` would
+  revert automatically.
+- `hosted_hop: true|false` on `POST /api/v1/auth/magic-link` overrides the rule
+  in either direction. It is an escape hatch (a rehearsal host, a future tenant
+  zone), never the mechanism.
+- **An unset `COOKIE_DOMAIN` never hops.** The predicate answers "cannot
+  receive" for every host when no cookie domain is configured — truthfully,
+  since there is then no estate cookie for anyone to relay — but "estate SSO is
+  not configured here" is a different fact from "this host is outside the
+  estate", and only the second one is what the hop is for. Without the guard,
+  every magic link in an unconfigured deployment would move off the product host
+  onto janua's callback: the first-contact failure of 2026-08-15. Prod and
+  staging both set `COOKIE_DOMAIN=.madfam.io`, so the guard costs the brand
+  hosts nothing.
+
+### What the hop does not touch (J6 × J8 × J10)
+
+Branding (`resolve_branding`), Spanish register (`default_formality_for`),
+subject timestamp (`timezone_for`) and the From line (`email_sender.sender_for`)
+are all resolved from `redirect_url` — the **destination** — and the hop changes
+only where the link *lands*, never the destination itself. So a hop link to a CTM
+host still carries the Crea header, still reads «tu», is still stamped in CDMX
+and still comes from `Crea Tu Mundo <hola@creatumundo.mx>` once that domain is
+Resend-verified. Only `magic_url` differs.
+
+### The link, and the contract that did not change
+
+A hop link is
+`https://auth.madfam.io/api/v1/auth/magic-link/callback?token=…`. The
+destination is **not** in the URL — it is read from the `MagicLink` row, and
+re-validated against the allowlist at redemption, so the emailed link cannot be
+edited into forwarding somewhere else.
+
+The forward is still `<redirect_url>?token=<access_token>`, byte-for-byte the
+contract products already implement. Body branding still resolves from the
+destination host (`CTM_HOSTS`), so a CTM link keeps the Crea header: the hop
+changes the link's host, not whose email it is.
+
+### The callback is now scanner-proof (a latent bug, fixed here)
+
+`GET /api/v1/auth/magic-link/callback` used to **spend the one-time token on the
+GET**: it burned `used_at`, minted a session and redirected. Mail scanners GET
+every URL in an email, so a scanner consumed the link and the human's own click
+replayed a spent token. This estate has already hit that failure once (nauta
+portal, first real ceremony 2026-08-16); it is the reason
+`@madfam/janua-next` splits its own magic-link route.
+
+The route now splits the same way, and the split is the whole security property:
+
+- **GET** renders a branded one-button interstitial and **spends nothing**.
+  It still *reads* (a dead link says so immediately) but never mutates.
+- **POST** — the button's submit — is the **only** place the token is exchanged,
+  the session is minted, and `janua_sso` is set first-party.
+
+Do not "simplify" the GET back into a handler that verifies.
+
+Because the hop makes this route the primary path for the brand hosts, the fix
+had to land with it: shipping the hop without it would have shipped the
+2026-08-16 outage to the client's own domain.
+
+### Test recipe (both directions, both host pairs)
+
+Substitute `HOST_MAP` / `HOST_ERP` for the pair under test:
+`crea-map.madfam.io` / `crea-erp.madfam.io` today, `map.creatumundo.mx` /
+`erp.creatumundo.mx` after DNS Switch 1.
+
+**1. The hop fires only where it should** (no mail needed):
+
+```bash
+# Brand host → the link must be janua's callback.
+curl -sS -X POST https://auth.madfam.io/api/v1/auth/magic-link \
+  -H 'content-type: application/json' \
+  -d '{"email":"<addr>","redirect_url":"https://map.creatumundo.mx/api/auth/magic-verify"}'
+# Estate host → the link must stay on the product.
+curl -sS -X POST https://auth.madfam.io/api/v1/auth/magic-link \
+  -H 'content-type: application/json' \
+  -d '{"email":"<addr>","redirect_url":"https://crea-map.madfam.io/api/auth/magic-verify"}'
+```
+
+Both answer `{"message":"Magic link sent to email"}`; the emailed link's host is
+the assertion. Read it in the mailbox, not from the response.
+
+**2. The GET spends nothing** (the scanner test, and the one to never skip):
+
+```bash
+# GET the emailed link TWICE, then click through. Both GETs must return 200 with
+# a button, and the click must still sign in. Before J6 the first GET burned it.
+curl -sS -o /dev/null -w '%{http_code}\n' '<emailed link>'
+curl -sS -o /dev/null -w '%{http_code}\n' '<emailed link>'
+```
+
+**3. MAP → ERP, silent** (browser): sign in at `https://HOST_MAP`, then open
+`https://HOST_ERP`. Expect «Tablero de Crea» with no second email and no
+`?silent=fallido` in the final URL.
+
+**4. ERP → MAP, silent** (browser): with a fresh profile, sign in at
+`https://HOST_ERP` first, then open `https://HOST_MAP`. Expect the MAP to land
+signed in rather than showing the magic-link form.
+
+**5. The estate cookie exists** (browser devtools, after step 3 or 4): a
+`janua_sso` cookie on `auth.madfam.io`, `HttpOnly`, `Secure`, `SameSite=Lax`.
+On the brand hosts it is set by the hop; on the estate hosts by the relay.
+
+**6. Silent auth answers a code, not `login_required`**: with only that cookie,
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' \
+  --cookie 'janua_sso=<value>' \
+  'https://auth.madfam.io/api/v1/oauth/authorize?response_type=code&client_id=<client>&redirect_uri=<cb>&scope=openid+profile+email+madfam:silent_auth&audience=<aud>&prompt=none&state=x&nonce=y'
+```
+
+A 302 whose `redirect_url` carries `?code=` is the pass; `error=login_required`
+is the failure this lane exists to remove.
