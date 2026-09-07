@@ -178,6 +178,18 @@ spec:
                 secretKeyRef:
                   name: janua-secrets
                   key: resend-api-key
+            # Crea Tu Mundo's OWN Resend account (option B, 2026-09-07). The CTM
+            # sender binding (app/services/sender_binding.py) names this env var as
+            # its credential_ref; the value comes from Vault secret/janua
+            # #ctm_resend_api_key through the enclii-managed janua-secrets
+            # ExternalSecret. Optional: if the key is absent the mailer falls back
+            # to the platform sender (never a mixed From header).
+            - name: CTM_RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: janua-secrets
+                  key: ctm-resend-api-key
+                  optional: true
             # SMTP transport for the real mailer (email_service.py) — Resend's
             # SMTP interface with the SAME api key as password. No new secret:
             # this is what makes password-reset email physically send (PR#473;

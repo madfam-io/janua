@@ -18,6 +18,7 @@ directly and patch the transport with an AsyncMock rather than standing up a
 live provider.
 """
 
+import os
 from email.utils import formataddr
 from unittest.mock import AsyncMock, patch
 
@@ -34,6 +35,25 @@ from app.services.email_branding import (
 from app.services.email_service import EmailService, resolve_sender
 
 CTM_REDIRECT = "https://crea-map.madfam.io/portal/verify?next=/"
+
+#: The env var CTM's binding names, and a fake value that never leaves the
+#: process. Since 2026-09-07 CTM sends on its OWN Resend account, so this key's
+#: presence is what decides whether the branded From ships.
+CTM_CREDENTIAL_ENV = "CTM_RESEND_API_KEY"
+FAKE_CTM_KEY = "re_test_ctm_key_not_real"
+
+
+def with_ctm_credential(value: str = FAKE_CTM_KEY):
+    """Put CTM's own Resend key in the environment for a with-block."""
+    return patch.dict(os.environ, {CTM_CREDENTIAL_ENV: value})
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_ctm_credential():
+    """No test inherits a real CTM key from the developer's shell."""
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop(CTM_CREDENTIAL_ENV, None)
+        yield
 
 
 # --------------------------------------------------------------------------
@@ -129,23 +149,37 @@ class TestSenderUnderTheVerifiedDomainGate:
     """These used to pin "the sender NEVER changes" (Phase 1), then "the CTM
     NAME on the MADFAM address" (Phase 2, #603). Both are superseded.
 
-    2026-09-07: the display name follows the address. With the default
-    `RESEND_VERIFIED_DOMAINS=madfam.io` a CTM message is the PLATFORM sender
-    whole — `MADFAM <hola@madfam.io>` — so merging still moves no mail, and
-    the day `creatumundo.mx` joins that list the NAME and the ADDRESS move
-    together (`test_ctm_from_is_creatumundo_once_verified`). The intermediate
-    state this class used to assert, `Crea Tu Mundo <hola@madfam.io>`, reached
-    a real CTM inbox at 02:32:21 CDMX that morning and was rejected: only
-    MADFAM sends from `hola@madfam.io`.
+    2026-09-07: the display name follows the address. A CTM message that cannot
+    ship its branded address is the PLATFORM sender whole —
+    `MADFAM <hola@madfam.io>`. The intermediate state this class used to
+    assert, `Crea Tu Mundo <hola@madfam.io>`, reached a real CTM inbox at
+    02:32:21 CDMX that morning and was rejected: only MADFAM sends from
+    `hola@madfam.io`.
+
+    LATER THAT DAY THE TRIGGER MOVED. CTM went onto its OWN Resend account,
+    where `creatumundo.mx` is verified, so the deciding fact is no longer the
+    global `RESEND_VERIFIED_DOMAINS` (which describes MADFAM's account) but
+    whether this process holds CTM's key, env `CTM_RESEND_API_KEY`. Without it
+    the branded address would be presented to MADFAM's account, which has never
+    verified that domain, and Resend would reject the magic link outright — so
+    the send degrades to the platform sender instead. The tests below therefore
+    withhold or supply that env var where they used to edit a domain list.
 
     BODY branding is unaffected and still asserted below — the tenant header,
-    palette and voice render on both sides of the verification line.
+    palette and voice render on both sides of that line.
     """
 
-    def test_resolve_sender_is_the_platform_sender_before_verification(self):
-        """Default config: neither the unverified domain NOR the brand name."""
+    def test_resolve_sender_is_the_platform_sender_without_ctms_key(self):
+        """CTM's key absent: neither the unreachable account's address NOR the
+        brand name."""
         name, address = resolve_sender(CTM_REDIRECT)
         assert (name, address) == ("MADFAM", "hola@madfam.io")
+
+    def test_resolve_sender_is_the_brand_with_ctms_key(self):
+        """The enabled state, through the same one-line resolver the mailer
+        calls."""
+        with with_ctm_credential():
+            assert resolve_sender(CTM_REDIRECT) == ("Crea Tu Mundo", "hola@creatumundo.mx")
 
     def test_resolve_sender_is_madfam_without_a_tenant_signal(self):
         """No signal is still, and always, MADFAM."""
@@ -153,20 +187,22 @@ class TestSenderUnderTheVerifiedDomainGate:
         assert resolve_sender("https://example.test/go") == ("MADFAM", "hola@madfam.io")
 
     @pytest.mark.asyncio
-    async def test_ctm_magic_link_is_the_platform_sender_until_verified(self):
+    async def test_ctm_magic_link_is_the_platform_sender_without_ctms_key(self):
         """A CTM magic link is sent as `MADFAM <hola@madfam.io>` — the platform
-        sender whole — while `creatumundo.mx` is unverified.
+        sender whole — while CTM's own Resend key is absent.
 
-        This is the deliverability line: Resend REJECTS a send from an
-        unverified domain, so shipping the CTM address before verification
-        would break every CTM sign-in link. We drive the real send path and
-        read the From header off the Resend payload — which is precisely how
-        the 2026-09-07 production header would have been caught.
+        This is the deliverability line: Resend REJECTS a send from a domain
+        the SENDING ACCOUNT has not verified, so putting CTM's address on
+        MADFAM's account would break every CTM sign-in link. We drive the real
+        send path and read the From header AND the Authorization header off the
+        Resend call — which is precisely how the 2026-09-07 production header
+        would have been caught, and how an envelope/account mismatch would be.
         """
         captured = {}
 
         async def fake_post(url, headers=None, json=None):
             captured["from"] = json["from"]
+            captured["auth"] = (headers or {}).get("Authorization")
 
             class _Resp:
                 status_code = 200
@@ -188,18 +224,71 @@ class TestSenderUnderTheVerifiedDomainGate:
                 redirect_url=CTM_REDIRECT,
                 locale="es",
             )
+        # The link still goes out. #607's rule: a missing tenant credential
+        # degrades the From line, it never blocks a sign-in link.
         assert sent is True
-        # Neither the name nor the address is CTM's: the unverified-domain gate
+        # Neither the name nor the address is CTM's: the credential gate
         # returns the platform binding whole.
         assert captured["from"] == formataddr(("MADFAM", "hola@madfam.io"))
         assert captured["from"] != formataddr(("Crea Tu Mundo", "hola@madfam.io"))
+        # ...and it leaves on MADFAM's account, which is the account that
+        # verified `madfam.io`. Envelope and account agree.
+        assert captured["auth"] == "Bearer re_test_key"
+
+    @pytest.mark.asyncio
+    async def test_ctm_magic_link_leaves_on_ctms_own_account(self):
+        """The enabled state, end to end: the branded From AND the tenant's own
+        key on the same call.
+
+        This is the assertion that would have caught the bug this pair exists
+        for. `_send_via_resend` resolved the From through `sender_for` but sent
+        with `settings.RESEND_API_KEY` unconditionally, so a tenant-account
+        binding produced `Crea Tu Mundo <hola@creatumundo.mx>` presented to
+        MADFAM's account — a domain that account has never verified, and a hard
+        rejection on a magic link. The From line and the account that carries it
+        are one decision, and this pins them to the same call.
+        """
+        captured = {}
+
+        async def fake_post(url, headers=None, json=None):
+            captured.update(json)
+            captured["auth"] = (headers or {}).get("Authorization")
+
+            class _Resp:
+                status_code = 200
+                text = ""
+
+            return _Resp()
+
+        service = EmailService()
+        with (
+            patch.object(email_module.settings, "EMAIL_PROVIDER", "resend"),
+            patch.object(email_module.settings, "RESEND_API_KEY", "re_test_key"),
+            with_ctm_credential(),
+            patch("app.services.email_service.httpx.AsyncClient") as client_cls,
+        ):
+            client = client_cls.return_value.__aenter__.return_value
+            client.post = AsyncMock(side_effect=fake_post)
+            sent = await service.send_magic_link_email(
+                "ana@creatumundo.mx", "tok123", redirect_url=CTM_REDIRECT, locale="es"
+            )
+        assert sent is True
+        assert captured["from"] == formataddr(("Crea Tu Mundo", "hola@creatumundo.mx"))
+        # CTM's own key, NOT MADFAM's — the account that verified the domain.
+        assert captured["auth"] == f"Bearer {FAKE_CTM_KEY}"
+        assert captured["auth"] != "Bearer re_test_key"
 
     @pytest.mark.asyncio
     async def test_ctm_body_carries_the_brand_while_the_envelope_waits(self):
         """Same send: the BODY reads Crea Tu Mundo, the ENVELOPE is MADFAM's,
         whole. This is the split the 2026-09-07 rule draws — body branding is
         the tenant's presence in the message, the From line is a claim about
-        who owns the mailbox, and only the second one waits for verification."""
+        who owns the mailbox, and only the second one waits for an account we
+        can actually authenticate to.
+
+        Which is why a missing tenant credential is a DEGRADED send and not a
+        failed one: the recipient still gets a message that reads as Crea Tu
+        Mundo throughout, and can still sign in."""
         captured = {}
 
         async def fake_post(url, headers=None, json=None):
@@ -229,11 +318,17 @@ class TestSenderUnderTheVerifiedDomainGate:
         assert "Impulsado por" not in captured["html"]
 
     @pytest.mark.asyncio
-    async def test_ctm_from_is_creatumundo_once_verified(self):
-        """Add `creatumundo.mx` to RESEND_VERIFIED_DOMAINS and the SAME send
-        path puts the client's own address on the envelope, with a matching
-        Reply-To. This is the production cutover, exercised as a test so the
-        cutover is not also the first execution of this branch."""
+    async def test_ctm_from_is_creatumundo_once_the_key_is_in_place(self):
+        """Put CTM's own key in the environment and the SAME send path puts the
+        client's own address on the envelope, with a matching Reply-To. This is
+        the production cutover, exercised as a test so the cutover is not also
+        the first execution of this branch.
+
+        The global RESEND_VERIFIED_DOMAINS is patched to include
+        `creatumundo.mx` here only to prove it is IRRELEVANT to the outcome:
+        CTM's binding carries its own `verified_domains`, and the companion
+        test above reaches the same branded From with the global list left at
+        `madfam.io` alone."""
         captured = {}
 
         async def fake_post(url, headers=None, json=None):
@@ -252,6 +347,7 @@ class TestSenderUnderTheVerifiedDomainGate:
             patch.object(
                 sender_module.settings, "RESEND_VERIFIED_DOMAINS", "madfam.io,creatumundo.mx"
             ),
+            with_ctm_credential(),
             patch("app.services.email_service.httpx.AsyncClient") as client_cls,
         ):
             client = client_cls.return_value.__aenter__.return_value

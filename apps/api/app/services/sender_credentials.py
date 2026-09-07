@@ -32,6 +32,35 @@ Failures log the REFERENCE and the reason, which is enough to diagnose
 ("wrong path", "field missing") and never enough to leak. `has_credential`
 exists so an operator script can answer "is it there?" without the value ever
 crossing a process boundary.
+
+A MISSING TENANT CREDENTIAL MUST NOT BLOCK A SIGN-IN LINK (2026-09-07)
+
+`resolve_credential` still RAISES on a tenant-account binding whose key is
+absent — that is the loud, correct answer for a caller asking "give me the
+credential", and `--check-credential` reports NO off the same path. But the
+question the SEND path asks is different: "may this binding send as itself right
+now?". Answering that with an exception would mean a client's magic link is not
+sent at all when an operator has flipped a binding to their own account before
+writing the key, and the owner's rule (#607) orders those outcomes explicitly:
+mail from the platform address is a degraded outcome, mail nobody receives is an
+outage.
+
+So `tenant_credential_available` answers that second question with a BOOLEAN,
+and — crucially — it is SYNCHRONOUS, because the thing that has to agree with it
+is `email_sender.sender_for`, which is sync and is what every send path reads
+the From line from. If only the async send path knew the credential was missing,
+`sender_for` would keep returning the tenant's branded address while the message
+actually left on MADFAM's account: a From line of
+`Crea Tu Mundo <hola@creatumundo.mx>` sent on an account that has never verified
+that domain, which Resend REJECTS outright. One sync check, consulted by the
+resolution both paths share, is what keeps the envelope and the account from
+disagreeing.
+
+This is only possible because the credential in production is an ENV VAR
+(`CTM_RESEND_API_KEY`, delivered by the janua-secrets ExternalSecret): reading
+one is a dict lookup, not I/O. A Vault-path reference cannot be resolved
+synchronously, and `tenant_credential_available` says so — see its docstring for
+why that returns True rather than False.
 """
 
 from __future__ import annotations
@@ -84,6 +113,80 @@ def _split_vault_ref(credential_ref: str) -> tuple[str, str]:
     return credential_ref.strip(), "api_key"
 
 
+def _read_env_reference(ref: str) -> Optional[str]:
+    """Read an ENV-VAR credential reference synchronously. Never logs the value.
+
+    Split out of `_read_reference` so the sync availability check and the async
+    resolution read env references through the exact same two lookups, in the
+    same order. Two copies of "settings first, then os.environ" would be two
+    chances for the check and the send to disagree about whether a key is there.
+    """
+    if not ref:
+        return None
+    # `settings` first so a value supplied through the app's own config surface
+    # wins, then the raw environment.
+    from_settings = getattr(settings, ref, None)
+    if isinstance(from_settings, str) and from_settings.strip():
+        return from_settings.strip()
+    raw = os.environ.get(ref, "").strip()
+    return raw or None
+
+
+def tenant_credential_available(binding: SenderBinding) -> bool:
+    """May this binding send on its OWN account right now? Synchronous.
+
+    THE QUESTION THIS ANSWERS IS NOT `resolve_credential`'S. That one hands
+    back a secret and raises when it cannot, which is right for an operator
+    asking "is the key in place?" (`--check-credential` still reports NO off
+    it). This one is consulted by `email_sender.sender_for` to decide whether
+    the tenant's branded From line may go on the envelope at all, and its
+    answer has to be available in a SYNC function on every send path — see the
+    module docstring for why that matters.
+
+    True for a binding on MADFAM's own account: that binding is not asking for a
+    tenant credential, and the SDK/HTTP caller is already configured with the
+    platform key.
+
+    False ONLY for a tenant-account binding whose env-var credential is absent
+    or blank. That is the state that must degrade to the platform sender rather
+    than raise: an operator who flipped the binding before writing the key would
+    otherwise take a client's sign-in links offline.
+
+    True for a tenant-account binding on a VAULT reference, deliberately. A
+    Vault read is I/O and cannot happen in a sync function, so this check has
+    nothing to say about it and must not veto on ignorance — returning False
+    would silently downgrade every Vault-backed binding to the platform sender
+    forever. The async send path still resolves it properly and still falls back
+    if the read comes back empty, so the Vault case degrades one layer later
+    instead of never. Production does not use this shape today: janua-api runs
+    without VAULT_ADDR/VAULT_TOKEN (verified on the live pod 2026-09-07), which
+    is why CTM's `credential_ref` is the env var `CTM_RESEND_API_KEY`.
+    """
+    if not binding.is_on_tenant_account:
+        return True
+
+    ref = (binding.credential_ref or "").strip()
+    if not ref:
+        return False
+
+    if _is_vault_ref(ref):
+        # Not answerable synchronously; see the docstring. The async path owns
+        # this case.
+        return True
+
+    if _read_env_reference(ref):
+        return True
+
+    logger.warning(
+        "sender_credentials.tenant_credential_missing",
+        tenant=binding.tenant,
+        credential_ref=ref,  # a NAME, never a value
+        provider=binding.provider,
+        account=binding.account,
+    )
+    return False
+
+
 async def resolve_credential(binding: SenderBinding) -> Optional[str]:
     """The provider credential for `binding`, or None to use process defaults.
 
@@ -133,13 +236,7 @@ async def _read_reference(ref: str) -> Optional[str]:
         return None
 
     if not _is_vault_ref(ref):
-        # An env var name. `settings` first so a value supplied through the
-        # app's own config surface wins, then the raw environment.
-        from_settings = getattr(settings, ref, None)
-        if isinstance(from_settings, str) and from_settings.strip():
-            return from_settings.strip()
-        raw = os.environ.get(ref, "").strip()
-        return raw or None
+        return _read_env_reference(ref)
 
     path, field = _split_vault_ref(ref)
     try:

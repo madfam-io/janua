@@ -431,3 +431,104 @@ binding declaring it fails visibly at send rather than quietly leaving via
 Resend, which would be a lie about how the mail left. Implementing SMTP is the
 work the first client who asks for it will trigger — the interface is already
 the binding, so it stays a config change.
+
+## Phase 4 — CTM is live on its own Resend account (2026-09-07)
+
+Phase 3 built the portability. This is CTM using it: the first tenant-account
+binding in production.
+
+```
+tenant           ctm
+account          tenant                    (was: madfam)
+credential_ref   CTM_RESEND_API_KEY        (a NAME — an env var)
+verified_domains ("creatumundo.mx",)       (was: () — deferring to the global list)
+```
+
+CTM created its own Resend account and `creatumundo.mx` is **Verified** there
+(DKIM `resend._domainkey`, send MX/TXT published through Enclii and the
+Cloudflare dashboard). From that moment the global `RESEND_VERIFIED_DOMAINS` —
+which describes **MADFAM's** account — is the wrong authority for CTM, which is
+why `verified_domains` becomes non-empty at exactly the same commit as
+`account`.
+
+### The credential path, end to end
+
+```
+Vault  secret/janua#ctm_resend_api_key
+  ↓  (enclii-managed ExternalSecret)
+K8s Secret  janua-secrets, key `ctm-resend-api-key`
+  ↓  (env, marked optional in k8s/base/deployments/janua-api.yaml)
+Pod env  CTM_RESEND_API_KEY
+  ↓
+app/services/sender_credentials.py
+```
+
+**`credential_ref` names an ENV VAR, not a Vault path, and that is deliberate.**
+`sender_credentials` supports both shapes, but janua-api runs **without**
+`VAULT_ADDR` / `VAULT_TOKEN` (verified on the live pod, 2026-09-07), so a
+`path#field` reference can never resolve in production — it would fail every
+time, silently, and degrade CTM to the platform sender forever. The
+ExternalSecret is what bridges Vault to the pod; the env var is what the process
+can actually read. A Vault-path `credential_ref` remains valid for any future
+deployment that *does* carry a Vault token.
+
+The env entry is marked **optional** in the deployment: a missing key degrades
+the sender (below) instead of blocking the pod from starting.
+
+### A missing tenant credential degrades the sender — it never blocks a sign-in link
+
+This is the owner's rule from #607 applied one layer down. With CTM's binding on
+its own account, the key may legitimately be absent for a window — an operator
+flips the binding before writing the secret, or the ExternalSecret has not synced
+yet. In that window:
+
+- **The magic link still goes out.** From the PLATFORM sender,
+  `MADFAM <hola@madfam.io>`, whole. Never `Crea Tu Mundo <hola@madfam.io>` — a
+  degraded send is still subject to THE RULE.
+- **A warning is logged**, `sender_credentials.tenant_credential_missing`,
+  carrying the tenant and the credential **reference**. Never the value.
+- **The body is unaffected.** The message still reads as Crea Tu Mundo
+  throughout; what is withheld is the envelope claim.
+
+Why this is not merely nice-to-have: a tenant-account binding carries its own
+`verified_domains`, describing an account the process can only reach with that
+tenant's key. Without the key, the first two gates still *pass* — the domain IS
+verified, on an account we cannot authenticate to — and the branded address
+would leave on MADFAM's account, where `creatumundo.mx` is **not** verified.
+Resend rejects that outright. The failure mode is not a wrong-looking From; it
+is a client who cannot sign in.
+
+So `email_sender.sender_for` applies a **third gate**,
+`sender_credentials.tenant_credential_available`, after the vCTO gate and the
+verified-domain gate. It is **synchronous** on purpose: `sender_for` is the sync
+resolution *every* send path reads the From line from, and a check that lived
+only in the async send path would let the envelope and the account disagree.
+`resolve_credential` still **raises** for a caller asking for the secret itself,
+which is what `--check-credential` reports NO from; the send path asks the
+boolean question instead.
+
+### The account and the envelope are one decision
+
+Both Resend send paths now read the tenant's key when the binding calls for it:
+
+- `resend_email_service.py` swaps the SDK's module-global `resend.api_key`
+  under a lock for the duration of the call (the SDK exposes no per-call
+  credential).
+- `email_service.py::_send_via_resend` — the path the **magic link actually
+  takes** — sends the tenant key in its own `Authorization` header. This one
+  previously resolved the From through `sender_for` but sent with
+  `settings.RESEND_API_KEY` unconditionally, which for a tenant-account binding
+  means presenting `Crea Tu Mundo <hola@creatumundo.mx>` to an account that has
+  never verified that domain.
+
+Both paths fall back to the platform sender, whole, on the platform account if
+the credential does not resolve.
+
+### Rollback
+
+One field. Set CTM's `account` back to `madfam`, `credential_ref` to
+`RESEND_API_KEY`, `verified_domains` to `()` — or run
+`scripts/sender_binding_switch.py ctm --rollback` — and CTM sends on MADFAM's
+account again, gated by the global `RESEND_VERIFIED_DOMAINS` as in Phase 2.
+Deleting the secret alone is *not* a rollback: it degrades CTM to the platform
+sender rather than restoring the branded MADFAM-account send.

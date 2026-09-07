@@ -38,7 +38,8 @@ from app.services.email_i18n import (
     subject_for,
     template_candidates,
 )
-from app.services.email_sender import sender_for
+from app.services.email_sender import binding_for, sender_for
+from app.services.sender_credentials import SenderCredentialError, resolve_credential
 
 logger = structlog.get_logger()
 
@@ -700,6 +701,42 @@ class EmailService:
         disagreed. Nothing this service ever sent left the cluster.
         """
         name, address, reply_to = sender_for(redirect_url=redirect_url)
+
+        # WHICH ACCOUNT CARRIES IT. `sender_for` has already decided the From
+        # line, and since 2026-09-07 that decision includes whether the
+        # tenant's own provider key is present — so by the time we get here,
+        # a branded tenant address implies a resolvable tenant credential.
+        # Reading it is what makes the two agree in fact and not just in
+        # intent: this path used to send whatever `sender_for` returned with
+        # MADFAM's key unconditionally, which for a tenant-account binding
+        # means `Crea Tu Mundo <hola@creatumundo.mx>` presented to an account
+        # that has never verified that domain — a hard Resend rejection on a
+        # magic link.
+        api_key = settings.RESEND_API_KEY
+        binding = binding_for(redirect_url=redirect_url)
+        if binding.is_on_tenant_account and address == binding.from_address:
+            try:
+                tenant_key = await resolve_credential(binding)
+            except SenderCredentialError:
+                # Cannot happen while `sender_for`'s credential gate agrees
+                # with this one (the branded address would already have been
+                # downgraded), but a raise here must still not drop the mail:
+                # fall back to the platform sender, whole, on MADFAM's account.
+                tenant_key = None
+            if tenant_key:
+                api_key = tenant_key
+            else:
+                logger.error(
+                    "email.tenant_credential_unavailable_falling_back",
+                    tenant=binding.tenant,
+                    credential_ref=binding.credential_ref,  # a name, not a value
+                )
+                # The platform sender WHOLE — never the tenant's name on
+                # MADFAM's address (#607). Resolved with NO tenant signal,
+                # which is the module's own definition of "the platform
+                # sender", rather than reaching for a private helper.
+                name, address, reply_to = sender_for()
+
         payload: Dict[str, Any] = {
             "from": formataddr((name, address)),
             "to": [to_email],
@@ -719,7 +756,7 @@ class EmailService:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                headers={"Authorization": f"Bearer {api_key}"},
                 json=payload,
             )
 

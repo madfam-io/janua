@@ -367,3 +367,110 @@ SMTP es el trabajo pendiente para el primer cliente que lo pida.
   de comandos. El binding guarda referencias; Vault guarda valores.
 - No cambia la compuerta vCTO. Mudarse de cuenta y tener derecho a remitente de
   marca son decisiones independientes.
+
+---
+
+# Estado real: CTM en su propia cuenta (desde 2026-09-07)
+
+CTM es el primer inquilino que completó la mudanza. `creatumundo.mx` está
+**Verificado** en la cuenta de Resend de CTM (DKIM `resend._domainkey`, MX/TXT
+de envío publicados por Enclii y por el panel de Cloudflare).
+
+```
+tenant           ctm
+account          tenant                    (antes: madfam)
+credential_ref   CTM_RESEND_API_KEY        (un NOMBRE — una variable de entorno)
+verified_domains ("creatumundo.mx",)       (antes: () — delegaba en la lista global)
+```
+
+## La credencial es una VARIABLE DE ENTORNO, no una ruta de Vault
+
+Esta es la corrección importante al paso 3 de arriba, y hay que leerla antes de
+mudar al segundo inquilino.
+
+```
+Vault  secret/janua#ctm_resend_api_key
+  ↓  (ExternalSecret administrado por enclii)
+Secret de K8s  janua-secrets, llave `ctm-resend-api-key`
+  ↓  (env, marcada optional en k8s/base/deployments/janua-api.yaml)
+Env del pod  CTM_RESEND_API_KEY
+  ↓
+apps/api/app/services/sender_credentials.py
+```
+
+`sender_credentials` acepta las dos formas de referencia, pero **janua-api corre
+sin `VAULT_ADDR` / `VAULT_TOKEN`** (verificado en el pod en vivo, 2026-09-07).
+Una referencia `ruta#campo` por lo tanto **nunca puede resolverse en
+producción**: fallaría cada vez, en silencio, y dejaría a CTM en el remitente de
+plataforma para siempre. El ExternalSecret es lo que tiende el puente entre
+Vault y el pod; la variable de entorno es lo que el proceso sí puede leer.
+
+Por eso el `--credential-ref` del paso 3 para un despliegue como el actual es el
+**nombre de la variable**, y hay que declararla en el deployment:
+
+```bash
+python3 scripts/sender_binding_switch.py ctm --switch \
+    --credential-ref 'CTM_RESEND_API_KEY'
+```
+
+La entrada de env está marcada **optional** en el deployment a propósito: si la
+llave falta, el remitente degrada (abajo) en vez de impedir que arranque el pod.
+
+## Si falta la credencial, el correo SIGUE saliendo
+
+Regla del propietario (#607), aplicada una capa más abajo: **el enlace de acceso
+de un cliente nunca se bloquea por una credencial de inquilino faltante.**
+
+Hay una ventana legítima en la que falta: el operador voltea el binding antes de
+escribir el secreto, o el ExternalSecret aún no sincroniza. En esa ventana:
+
+- **El enlace mágico sale igual**, desde el remitente de plataforma,
+  `MADFAM <hola@madfam.io>`, **entero**. Nunca
+  `Crea Tu Mundo <hola@madfam.io>` — una degradación sigue sujeta a LA REGLA.
+- **Se registra una advertencia**, `sender_credentials.tenant_credential_missing`,
+  con el inquilino y la **referencia** de la credencial. Nunca el valor.
+- **El cuerpo no se toca**: el mensaje sigue leyéndose como Crea Tu Mundo. Lo
+  que se retiene es la afirmación del sobre, no la presencia del inquilino.
+
+Por qué esto no es un lujo: un binding en cuenta propia lleva su propia
+`verified_domains`, que describe una cuenta a la que el proceso sólo llega con
+la llave de ese inquilino. Sin la llave, las dos compuertas anteriores **pasan**
+— el dominio SÍ está verificado, en una cuenta a la que no nos podemos
+autenticar — y la dirección de marca saldría por la cuenta de MADFAM, donde
+`creatumundo.mx` **no** está verificado. Resend rechaza eso de tajo. La falla no
+es un `From` feo: es un cliente que no puede entrar.
+
+`email_sender.sender_for` aplica entonces una **tercera compuerta**,
+`sender_credentials.tenant_credential_available`, después de la vCTO y la de
+dominio verificado.
+
+> `--check-credential` sigue respondiendo **NO** en ese estado, y debe hacerlo:
+> es la pregunta del operador («¿ya está la llave?»), no la del envío. El camino
+> de envío hace la pregunta booleana y degrada; `resolve_credential` sigue
+> lanzando excepción para quien pide el secreto en sí.
+
+## Verificación después de desplegar
+
+```bash
+# 1. ¿La llave llegó al pod? (responde sí/no, nunca imprime el valor)
+python3 scripts/sender_binding_switch.py ctm --check-credential
+
+# 2. Pedir un enlace mágico desde un host de CTM y leer el encabezado real.
+#    Esperado: From: Crea Tu Mundo <hola@creatumundo.mx>
+#    Si se lee «MADFAM <hola@madfam.io>», buscar en los logs
+#    `sender_credentials.tenant_credential_missing` antes de tocar el binding:
+#    casi siempre es el ExternalSecret, no el código.
+```
+
+## Reversa desde este estado
+
+Borrar el secreto **no** es una reversa: degrada a CTM al remitente de
+plataforma, no restaura el envío de marca por la cuenta de MADFAM. La reversa
+real vuelve a poner los tres campos:
+
+```bash
+python3 scripts/sender_binding_switch.py ctm --rollback
+```
+
+y exige que `creatumundo.mx` siga en `RESEND_VERIFIED_DOMAINS` de la cuenta de
+MADFAM, o la dirección degradará a `hola@madfam.io` de todos modos.
