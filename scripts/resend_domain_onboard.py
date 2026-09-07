@@ -73,6 +73,11 @@ def _request(method: str, path: str, body: Optional[Dict[str, Any]] = None) -> A
         headers={
             "Authorization": f"Bearer {_api_key()}",
             "Content-Type": "application/json",
+            # api.resend.com sits behind Cloudflare, which rejects urllib's
+            # default User-Agent with HTTP 403 "error code: 1010" before the
+            # request reaches Resend (observed 2026-09-07 onboarding
+            # creatumundo.mx). Any descriptive UA passes.
+            "User-Agent": "janua-resend-domain-onboard/1.0 (+https://madfam.io)",
         },
     )
     try:
