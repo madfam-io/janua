@@ -18,14 +18,33 @@ link. So the code and the cutover are deliberately separated:
 
 | State | `RESEND_VERIFIED_DOMAINS` | A CTM magic link comes from |
 |---|---|---|
-| Today (code merged, domain not verified) | `madfam.io` | `Crea Tu Mundo <hola@madfam.io>` |
+| Today (code merged, domain not verified) | `madfam.io` | `MADFAM <hola@madfam.io>` |
 | After verification + manifest edit | `madfam.io,creatumundo.mx` | `Crea Tu Mundo <hola@creatumundo.mx>` |
 
-The display name moves as soon as the code ships; **only the address waits.**
+**The display name waits with the address.** They are one decision, keyed on
+whether the binding's own address domain is verified. There is no intermediate
+state.
+
+> **Corrected 2026-09-07.** This table previously read
+> `Crea Tu Mundo <hola@madfam.io>` in the first row, under the rule "the display
+> name moves as soon as the code ships; only the address waits". That behaviour
+> shipped in #603 and was **observed in production on 2026-09-07 at 02:32:21
+> CDMX** — the first magic link requested from `map.creatumundo.mx` arrived in
+> the CTM inbox with exactly that From — and was **rejected the same night**.
+> Only MADFAM sends from `hola@madfam.io`; a client's display name in front of
+> MADFAM's address is a claim the recipient cannot verify and is the shape of a
+> display-name spoof. See `docs/EMAIL_SENDER_POLICY.md`.
+
 Both states run the same code path, so the cutover is not also a first
 execution — `tests/unit/services/test_email_branding.py::
 TestSenderUnderTheVerifiedDomainGate::test_ctm_from_is_creatumundo_once_verified`
-exercises the post-verification state in CI.
+exercises the post-verification state in CI, and
+`tests/unit/services/test_email_sender.py::TestDisplayNameFollowsAddress` is the
+regression fence for the header above.
+
+**Body branding is not affected by any of this.** The tenant header, palette,
+voice (tú/usted) and CDMX clock render on both sides of the verification line —
+`email_branding.py` is a separate decision from the From line.
 
 ## Precondition: DNS must be ours
 
@@ -154,10 +173,11 @@ Remove the domain from the verified set and redeploy:
 RESEND_VERIFIED_DOMAINS=madfam.io
 ```
 
-CTM mail immediately reverts to `Crea Tu Mundo <hola@madfam.io>` — the display
-name is unaffected, only the address falls back, and delivery resumes on a
+CTM mail immediately reverts to `MADFAM <hola@madfam.io>` — the platform sender
+whole, name and address together (2026-09-07 rule) — and delivery resumes on a
 domain with four-plus months of reputation. No code change, no migration, no
-Resend change. The domain can stay registered in Resend while rolled back.
+Resend change. The domain can stay registered in Resend while rolled back. The
+tenant's BODY branding is untouched by a rollback.
 
 If instead the *default* sender is what broke, the fault is almost certainly a
 malformed `RESEND_VERIFIED_DOMAINS` (blank falls back to `madfam.io` by design;
@@ -219,22 +239,35 @@ decisión explícita del llamador, luego el caché de proceso, y si ninguna
 responde **no hay derecho**.
 
 «Falla cerrada» aquí significa que el correo **sí sale**, desde
-`hola@madfam.io`, conservando el nombre visible del cliente. Nunca significa
-que el enlace de acceso no llegue: un correo que nadie recibe es peor falla que
-un correo desde la dirección de la plataforma.
+`MADFAM <hola@madfam.io>` — el remitente de la plataforma completo. Nunca
+significa que el enlace de acceso no llegue: un correo que nadie recibe es peor
+falla que un correo desde la dirección de la plataforma.
 
 ## Matriz de respaldo (fallback)
 
 | vCTO | Dominio verificado en la cuenta que envía | Sale como |
 |---|---|---|
 | sí | sí | `Crea Tu Mundo <hola@creatumundo.mx>` |
-| sí | no | `Crea Tu Mundo <hola@madfam.io>` |
-| no | sí | `Crea Tu Mundo <hola@madfam.io>` |
-| no | no | `Crea Tu Mundo <hola@madfam.io>` |
+| sí | no | `MADFAM <hola@madfam.io>` |
+| no | sí | `MADFAM <hola@madfam.io>` |
+| no | no | `MADFAM <hola@madfam.io>` |
 | sin señal de inquilino | — | `MADFAM <hola@madfam.io>` |
 
-El degradado siempre es **parcial**: se conserva el nombre, se revierte la
-dirección. La marca es cosmética; la dirección es operativa.
+El degradado es **total**, no parcial: el nombre visible acompaña siempre a la
+dirección. `Crea Tu Mundo <hola@madfam.io>` **nunca** debe producirse — sólo
+MADFAM envía desde `hola@madfam.io`, y poner el nombre de un cliente delante de
+esa dirección es una afirmación que quien recibe no puede verificar.
+
+> **Corregido el 2026-09-07.** Esta matriz decía `Crea Tu Mundo <hola@madfam.io>`
+> en las tres filas de respaldo, bajo la regla «el degradado siempre es parcial:
+> la marca es cosmética, la dirección es operativa». Ese comportamiento se
+> observó en producción el 2026-09-07 a las 02:32:21 CDMX (primer enlace mágico
+> pedido desde `map.creatumundo.mx`) y fue rechazado esa misma noche. El nombre
+> visible es tan operativo como la dirección.
+
+La marca del cliente **sí** aparece en el **cuerpo** del mensaje en todos los
+casos: encabezado, colores, voz (tú/usted) y reloj CDMX no dependen de esta
+compuerta.
 
 ---
 

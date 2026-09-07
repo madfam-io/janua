@@ -9,16 +9,21 @@ message in spam, it is no message at all — and the message is a sign-in link.
 The load-bearing guarantees, each with a test that fails loudly if it breaks:
 
   * no tenant signal -> the MADFAM default, unchanged
-  * a CTM signal with `creatumundo.mx` UNVERIFIED -> CTM's NAME on MADFAM's
-    ADDRESS (the brand ships early, the deliverability risk never does)
+  * a CTM signal with `creatumundo.mx` UNVERIFIED -> the PLATFORM sender WHOLE,
+    `MADFAM <hola@madfam.io>` (reversed 2026-09-07: this used to be CTM's NAME
+    on MADFAM's ADDRESS, and that header reached a production inbox)
   * a CTM signal with `creatumundo.mx` VERIFIED -> CTM's own address + reply-to
-  * a caller-supplied `from_email` on an unverified domain is DISCARDED
+  * a caller-supplied `from_email` on an unverified domain is DISCARDED, and
+    since 2026-09-07 so is the `from_name` that came with it
+  * THE INVARIANT: no From line ever pairs a tenant display name with an
+    address on the platform's domain — see `TestDisplayNameFollowsAddress`
   * the sender host table cannot drift from the body-branding host table
 
 Style follows tests/unit/services/test_email_branding.py: patch settings on the
 module under test rather than standing up a live provider.
 """
 
+from email.utils import formataddr
 from unittest.mock import patch
 
 import pytest
@@ -112,12 +117,20 @@ class TestSenderFor:
             "erp.creatumundo.mx",
         ],
     )
-    def test_ctm_hosts_before_verification_keep_name_lose_address(self, host):
+    def test_ctm_hosts_before_verification_are_the_platform_sender_whole(self, host):
+        """The 2026-09-07 rule: the display name follows the address.
+
+        This test used to assert `("Crea Tu Mundo", "hola@madfam.io")` — the
+        deliberately partial downgrade #603 shipped. On 2026-09-07 02:32:21
+        CDMX the first magic link from `map.creatumundo.mx` arrived in the CTM
+        inbox with exactly that From, and it was rejected: only MADFAM sends
+        from `hola@madfam.io`, so a client's name must never sit in front of
+        it. Name and address are now one decision.
+        """
         with verified("madfam.io"):
-            name, address, reply_to = sender_for(host=host)
-        assert name == "Crea Tu Mundo"
-        assert address == "hola@madfam.io"
-        assert reply_to == "hola@madfam.io"
+            resolved = sender_for(host=host)
+        assert resolved == MADFAM
+        assert resolved[0] != "Crea Tu Mundo"
 
     @pytest.mark.parametrize("host", ["creatumundo.mx", "map.creatumundo.mx", "crea-map.madfam.io"])
     def test_ctm_hosts_after_verification_use_the_client_domain(self, host):
@@ -173,11 +186,16 @@ class TestSenderForAddress:
         assert address == "hola@madfam.io"
         assert name == "MADFAM"
 
-    def test_unverified_explicit_address_still_keeps_the_display_name(self):
-        """Naming yourself is harmless; claiming a domain is not."""
+    def test_unverified_explicit_address_loses_the_display_name_too(self):
+        """Reversed 2026-09-07. The old rule was "naming yourself is harmless;
+        claiming a domain is not", and it is what let a display name and an
+        address be assembled from two individually harmless halves into
+        `Crea Tu Mundo <hola@madfam.io>`. A display name is only harmless
+        while it names the party that owns the address underneath it, so it is
+        honoured exactly where the address is and nowhere else."""
         with verified("madfam.io"):
             name, address, _ = sender_for_address(from_email="x@attacker.test", from_name="Dhanam")
-        assert (name, address) == ("Dhanam", "hola@madfam.io")
+        assert (name, address) == ("MADFAM", "hola@madfam.io")
 
     def test_no_explicit_address_falls_through_to_the_tenant_rule(self):
         with verified("madfam.io", "creatumundo.mx"):
@@ -193,6 +211,95 @@ class TestSenderForAddress:
                 from_email=None, from_name="Crea Tu Mundo · Citas", host="creatumundo.mx"
             )
         assert (name, address) == ("Crea Tu Mundo · Citas", "hola@creatumundo.mx")
+
+
+# --------------------------------------------------------------------------
+# THE 2026-09-07 RULE: the display name follows the address.
+#
+# `Crea Tu Mundo <hola@madfam.io>` was produced in production on 2026-09-07 at
+# 02:32:21 CDMX, on the first magic link requested from `map.creatumundo.mx`.
+# Only MADFAM sends from `hola@madfam.io`; a brand name may appear only beside
+# that brand's own address. These tests are the regression fence.
+# --------------------------------------------------------------------------
+FORBIDDEN_FROM = "Crea Tu Mundo <hola@madfam.io>"
+
+
+class TestDisplayNameFollowsAddress:
+    @pytest.mark.parametrize(
+        "host",
+        ["map.creatumundo.mx", "creatumundo.mx", "erp.creatumundo.mx", "crea-map.madfam.io"],
+    )
+    def test_ctm_host_before_verification_is_exactly_the_platform_from(self, host):
+        """(a) RESEND_VERIFIED_DOMAINS=madfam.io, a CTM host -> the PLATFORM
+        From, verbatim, and never the observed production header."""
+        with verified("madfam.io"):
+            name, address, reply_to = sender_for(host=host)
+        assert (name, address, reply_to) == MADFAM
+        assert formataddr((name, address)) == "MADFAM <hola@madfam.io>"
+        assert formataddr((name, address)) != FORBIDDEN_FROM
+
+    def test_the_redirect_url_path_is_the_same(self):
+        """The auth mailer resolves off `redirect_url`, not `host` — the exact
+        path the production message took. It must reach the same answer."""
+        with verified("madfam.io"):
+            name, address, _ = sender_for(
+                redirect_url="https://map.creatumundo.mx/portal/verify?next=/"
+            )
+        assert formataddr((name, address)) == "MADFAM <hola@madfam.io>"
+
+    def test_ctm_after_verification_is_the_brand_on_the_brand_address(self):
+        """(b) RESEND_VERIFIED_DOMAINS=madfam.io,creatumundo.mx -> the display
+        name and the address move together, to the brand's own domain."""
+        with verified("madfam.io", "creatumundo.mx"):
+            name, address, reply_to = sender_for(host="map.creatumundo.mx")
+        assert formataddr((name, address)) == "Crea Tu Mundo <hola@creatumundo.mx>"
+        assert reply_to == "hola@creatumundo.mx"
+
+    def test_a_caller_cannot_reassemble_the_forbidden_header_from_a_name(self):
+        """The name-only door. A caller supplying `from_name` with no address
+        must not put a tenant name on the platform address either."""
+        with verified("madfam.io"):
+            name, address, _ = sender_for_address(
+                from_email=None, from_name="Crea Tu Mundo", host="map.creatumundo.mx"
+            )
+        assert formataddr((name, address)) != FORBIDDEN_FROM
+        assert (name, address) == ("MADFAM", "hola@madfam.io")
+
+    def test_the_vcto_gate_downgrade_also_takes_the_name(self):
+        """The other downgrade path. A tenant that fails the vCTO gate resolves
+        to the platform sender whole, not to its own name on our address."""
+        with verified("madfam.io", "creatumundo.mx"):
+            name, address, _ = sender_for(host="map.creatumundo.mx", vcto_entitled=False)
+        assert formataddr((name, address)) != FORBIDDEN_FROM
+        assert (name, address) == ("MADFAM", "hola@madfam.io")
+
+    @pytest.mark.parametrize("verified_domains", [("madfam.io",), ("madfam.io", "creatumundo.mx")])
+    def test_property_no_binding_ever_pairs_a_tenant_name_with_a_platform_address(
+        self, verified_domains
+    ):
+        """(c) The property, over EVERY binding in the registry and every
+        signal that reaches it, in both verification states: whenever the
+        resolved address is on the PLATFORM's domain, the resolved display
+        name is NOT the tenant's.
+
+        Written as a sweep rather than a CTM-specific assertion so that the
+        second client binding inherits the guarantee without a new test.
+        """
+        platform_domain = domain_of(sender_module._default_sender()[1])
+        with verified(*verified_domains):
+            for tenant, binding in sender_module.all_bindings().items():
+                signals = [{"org_id": binding.org_id}] if binding.org_id else []
+                signals += [{"host": h} for h in binding.hosts]
+                signals += [{"redirect_url": f"https://{h}/verify"} for h in binding.hosts]
+                for signal in signals:
+                    for entitled in (None, True, False):
+                        name, address, _ = sender_for(vcto_entitled=entitled, **signal)
+                        if domain_of(address) == platform_domain:
+                            assert name != binding.display_name, (
+                                f"{tenant} resolved to "
+                                f"{formataddr((name, address))!r} for {signal} — a tenant "
+                                "display name on the platform address"
+                            )
 
 
 # --------------------------------------------------------------------------
