@@ -20,7 +20,7 @@ import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlencode
 
 import structlog
@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.sso_cookie import (
     SSO_COOKIE_NAME,
     clear_sso_cookie,
-    resolve_sso_cookie_user,
+    resolve_sso_cookie_session,
     revoke_sso_cookie_session,
 )
 from app.config import settings
@@ -47,6 +47,7 @@ from app.core.url_security import (
 )
 from app.dependencies import get_current_user
 from app.models import OAuthClient, Organization, OrganizationMember, User
+from app.models import Session as UserSession
 from app.services.audit_logger import AuditEventType, AuditLogger
 from app.services.consent_service import ConsentService
 from app.services.entitlements_service import (
@@ -339,6 +340,48 @@ def _verify_own_access_token(token: str) -> Optional[dict]:
     return payload
 
 
+def _redacted(user_id: Any) -> str:
+    """An id prefix, for logs that must name *which* two people disagreed.
+
+    Eight characters of a UUID identify the row for an operator reading Janua's
+    own logs next to its own database, and are not an identifier that can be
+    presented anywhere. Full user ids never enter a log line here.
+    """
+    return f"{str(user_id)[:8]}…"
+
+
+def _session_started_at(session: Any) -> Optional[datetime]:
+    """When a `sessions` row began, for ordering two sessions by recency.
+
+    `created_at` is the birth of the session and never moves; `last_activity`
+    is a fallback for rows old enough (or mocked thin enough) to carry no
+    `created_at`. Deliberately NOT the other way round: "most recent login" is
+    the question, and a background token refresh on an old session must not be
+    able to make it look newer than a login that just happened.
+    """
+    started = getattr(session, "created_at", None)
+    if isinstance(started, datetime):
+        return started
+    activity = getattr(session, "last_activity", None)
+    return activity if isinstance(activity, datetime) else None
+
+
+async def _hosted_cookie_session(payload: dict[str, Any], db: AsyncSession) -> Optional[Any]:
+    """The `sessions` row a verified `janua_access_token` belongs to, if findable.
+
+    `AuthService.create_session` writes the access token's `jti` to
+    `sessions.access_token_jti`, so the row is one indexed lookup away. It is
+    genuinely optional: `refresh_tokens` rotates that column, so a cookie whose
+    session has since refreshed matches no row. A `None` here is "undatable",
+    never "invalid" — the caller treats it as such.
+    """
+    jti = payload.get("jti")
+    if not jti:
+        return None
+    result = await db.execute(select(UserSession).where(UserSession.access_token_jti == jti))
+    return result.scalar_one_or_none()
+
+
 async def get_user_from_cookie_or_header(
     request: Request,
     db: AsyncSession,
@@ -346,15 +389,15 @@ async def get_user_from_cookie_or_header(
     """
     Get authenticated user from either:
     1. Bearer token in Authorization header (API clients)
-    2. janua_access_token cookie (browser-based OAuth flow)
-    3. janua_sso cookie (the estate session — J5/R1)
+    2. janua_sso cookie (the estate session — J5/R1)
+    3. janua_access_token cookie (the hosted-login browser session)
 
     This enables the OAuth authorize endpoint to work with browser sessions
     after the user logs in via the login form, or after a magic link (B1).
-    Both paths accept any audience Janua minted — see
+    Both cookie paths accept any audience Janua minted — see
     `_verify_own_access_token`.
 
-    (3) is the case B1 could not reach. The MAP and the nauta ERP portal exchange
+    (2) is the case B1 could not reach. The MAP and the nauta ERP portal exchange
     the magic link server-to-server, so their browsers never receive
     `janua_access_token`; `@madfam/janua-next` relays `janua_sso` to the browser
     instead. A person arriving at `/authorize` from another product has ONLY that
@@ -364,6 +407,34 @@ async def get_user_from_cookie_or_header(
     parties) is enforced identically; this resolves *who* the person is, never
     *whether they may proceed*.
 
+    ## Why the estate cookie outranks the hosted one (J9)
+
+    Until J9 the order was Bearer → `janua_access_token` → `janua_sso`, and in
+    production that silently sent the wrong person through the ERP's silent SSO.
+    A browser that had ever completed a hosted login on `auth.madfam.io` keeps
+    `janua_access_token` for that person; `/signout` does not clear it (only the
+    OIDC `end_session` endpoint does), and **no other host in the estate can**:
+    `crea-map.madfam.io` cannot delete a cookie scoped to the issuer host. So a
+    fresh MAP magic-link login, whose only browser-visible trace is the relayed
+    `janua_sso`, lost to a stale hosted cookie for whoever last used the hosted
+    form on that machine, and `/authorize` issued a code for the wrong user with
+    nothing wrong in the happy path. Ordering at this seam is the only fix that
+    does not depend on a cookie one origin cannot reach.
+
+    The estate cookie is also the safer thing to rank first: it is the only one
+    of the three whose validity is re-read from the `sessions` row on every use,
+    so revoking that row stops it immediately, while a `janua_access_token`
+    remains valid until its own `exp` regardless of the session's fate.
+
+    ### When both cookies are valid and name different people
+
+    Take the **newer session**, and say so in the log. The estate row's
+    `created_at` comes back with resolution; the hosted cookie's row is looked up
+    by its `jti` (`_hosted_cookie_session`) and may legitimately not be found,
+    because refresh rotation moves `access_token_jti`. An undatable hosted
+    session cannot be shown to be newer, so the estate session keeps precedence —
+    as it does on an exact tie. Same user in both cookies: no contest.
+
     This function is the ONLY reader of `janua_sso`, and its only callers are the
     authorize flow (`GET /authorize`) and its consent continuation
     (`POST /consent`). The cookie is never a bearer substitute: it carries
@@ -371,7 +442,9 @@ async def get_user_from_cookie_or_header(
     `_verify_own_access_token` above — verifies `token_type="access"`, so
     presenting it as `Authorization: Bearer …` fails verification.
     """
-    # First, try to get user from Authorization header via dependency
+    # First, the Authorization header. Unchanged and still first: an API client
+    # that attaches a bearer token is naming the identity it means to act as,
+    # explicitly, per request — nothing ambient can be staler than that.
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
@@ -385,32 +458,65 @@ async def get_user_from_cookie_or_header(
         except Exception:
             pass  # Intentionally ignoring - JWT verification failure handled by trying cookie auth next
 
-    # Second, try to get user from cookie
+    # Second, the estate cookie — see the docstring for why it outranks the
+    # hosted one. Unlike the header above this is not a token the holder could
+    # spend anywhere: resolution re-reads the `sessions` row it references, so a
+    # revoked session stops authenticating it immediately.
+    estate_user: Optional[User] = None
+    estate_session: Optional[Any] = None
+    sso_cookie = request.cookies.get(SSO_COOKIE_NAME)
+    if sso_cookie:
+        try:
+            estate_user, estate_session = await resolve_sso_cookie_session(sso_cookie, db)
+        except Exception:
+            logger.warning("janua_sso cookie resolution failed", exc_info=True)
+
+    # Third, the hosted-login cookie. Resolved even when the estate cookie
+    # already answered, but only so a disagreement can be detected and decided
+    # deliberately — never so it can win by arriving second.
+    hosted_user: Optional[User] = None
+    hosted_payload: Optional[dict[str, Any]] = None
     access_token = request.cookies.get("janua_access_token")
     if access_token:
         try:
             payload = _verify_own_access_token(access_token)
             if payload and payload.get("sub"):
                 result = await db.execute(select(User).where(User.id == payload.get("sub")))
-                user = result.scalar_one_or_none()
-                if user:
-                    return user
+                hosted_user = result.scalar_one_or_none()
+                if hosted_user is not None:
+                    hosted_payload = payload
         except Exception:
             pass  # Intentionally ignoring - cookie JWT verification failure means user is not authenticated
 
-    # Third, the estate cookie. Unlike the two above this is not a token the
-    # holder could spend anywhere: resolution re-reads the `sessions` row it
-    # references, so a revoked session stops authenticating it immediately.
-    sso_cookie = request.cookies.get(SSO_COOKIE_NAME)
-    if sso_cookie:
-        try:
-            user = await resolve_sso_cookie_user(sso_cookie, db)
-            if user:
-                return user
-        except Exception:
-            logger.warning("janua_sso cookie resolution failed", exc_info=True)
+    if estate_user is None:
+        return hosted_user
+    if hosted_user is None or str(hosted_user.id) == str(estate_user.id):
+        return estate_user
 
-    return None
+    # Two valid cookies, two different people. Prefer the newer session.
+    hosted_started: Optional[datetime] = None
+    try:
+        hosted_session = (
+            await _hosted_cookie_session(hosted_payload, db) if hosted_payload else None
+        )
+        if hosted_session is not None:
+            hosted_started = _session_started_at(hosted_session)
+    except Exception:
+        logger.warning("Could not date the janua_access_token session", exc_info=True)
+
+    estate_started = _session_started_at(estate_session)
+    hosted_wins = (
+        hosted_started is not None and estate_started is not None and hosted_started > estate_started
+    )
+    logger.info(
+        "Session cookies name different users; preferring the newer session",
+        estate_user=_redacted(estate_user.id),
+        hosted_user=_redacted(hosted_user.id),
+        estate_session_started=estate_started.isoformat() if estate_started else None,
+        hosted_session_started=hosted_started.isoformat() if hosted_started else None,
+        winner="janua_access_token" if hosted_wins else SSO_COOKIE_NAME,
+    )
+    return hosted_user if hosted_wins else estate_user
 
 
 # ============================================================================
@@ -972,9 +1078,13 @@ async def authorize_get(
     If user is not authenticated, redirect to login page.
     If user is authenticated, show consent screen or auto-approve.
 
-    Authentication is checked from both:
+    Authentication is checked, in this order (see
+    `get_user_from_cookie_or_header`, which owns the rule):
     - Authorization header (Bearer token)
-    - janua_access_token cookie (set by login form)
+    - janua_sso cookie (the estate session — preferred over the one below since
+      J9, because a stale hosted-login cookie no host in the estate can delete
+      must not outrank the login that just happened)
+    - janua_access_token cookie (set by the hosted login form)
 
     OIDC `prompt=none` (silent auth, ADR 2026-05-04-selva-unified-sso):
         - Valid session present → issue code immediately, skip consent UI.

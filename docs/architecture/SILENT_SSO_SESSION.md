@@ -1,9 +1,12 @@
 # Silent SSO: where the browser session comes from
 
-**Status**: B1, B2, B6 and R1 landed in Janua; B3/B4 are operator steps; B5 lives
-in nauta and B7 in crea-map. **R1 chose option 3 of the security note below** —
-a separate HttpOnly estate cookie, `janua_sso`; see "R1 — the `janua_sso` estate
-cookie".
+**Status**: B1, B2, B6, R1 and J9 landed in Janua; B3/B4 are operator steps; B5
+lives in nauta and B7 in crea-map. **R1 chose option 3 of the security note
+below** — a separate HttpOnly estate cookie, `janua_sso`; see "R1 — the
+`janua_sso` estate cookie". **J9 makes that cookie outrank a stale
+`janua_access_token` at `/authorize`**; see "J9 — the estate session outranks a
+stale hosted-login cookie", which is the section to read first if silent SSO ever
+authenticates the wrong person again.
 **Related**: `ADR-001_AUTH_FLOW.md`, ADR `2026-05-04-selva-unified-sso` (Phase 1
 = `prompt=none`, delivered earlier), `docs/guides/SSO_INTEGRATION_GUIDE.md`.
 
@@ -39,6 +42,7 @@ land, not a menu.
 | **R1** | `janua_sso`: an HttpOnly estate cookie the SDK can relay to the browser | Janua `auth/sso_cookie.py`, `routers/v1/auth.py`, `routers/v1/oauth_provider.py` | landed |
 | **R1s** | `@madfam/janua-next` relays `janua_sso` (and its deletion) | madfam-js `@madfam/janua-next@0.2.0` | landed |
 | **R1n** | nauta adds the same relay | nauta | in flight |
+| **J9** | `janua_sso` outranks `janua_access_token` at `/authorize` | Janua `routers/v1/oauth_provider.py` | landed |
 
 **B2 is a silent prerequisite of B1.** A magic-link session carries the audience
 of the product the link forwards to (`_session_audience_for_redirect`) —
@@ -215,6 +219,88 @@ Within `/authorize` the cookie authenticates the person for **both** `prompt=non
 and the interactive flow — a valid estate session skipping the login page is what
 SSO means. It resolves *who* the person is and never *whether they may proceed*:
 email verification, MFA and third-party consent are enforced exactly as before.
+
+## J9 — the estate session outranks a stale hosted-login cookie
+
+### The failure (production, 2026-09-07)
+
+A person signed into the MAP by magic link. The MAP's verify exchange is
+server-to-server, so the only browser-visible trace of that login was the relayed
+`janua_sso` on `.madfam.io`. The ERP then ran its silent hop
+(`/oauth/authorize?…&prompt=none`) and Janua issued a code for **a different
+person**: the same browser still held a `janua_access_token` from an unrelated
+hosted login on `auth.madfam.io` — an operator's `enclii login` 43 minutes
+earlier — and resolution read that cookie **before** `janua_sso`. nauta logged
+`portal.silent_sso not_a_member` twice. Membership data was correct; the identity
+was not.
+
+This defeats R1 outright. Any prior hosted login on `auth.madfam.io` in the same
+browser silently changed who the ERP saw, with nothing wrong anywhere in the
+happy path.
+
+### Why precedence is the fix, and not cookie hygiene
+
+The obvious-looking repairs do not close it:
+
+- **crea-map cannot clear the stale cookie.** `janua_access_token` is scoped to
+  the issuer host; a subdomain app cannot delete a cookie on `auth.madfam.io`.
+- **Re-setting `janua_access_token` whenever `janua_sso` is set does not help
+  either.** The login that establishes the estate session is a server-to-server
+  verify call, and the SDK relays only the cookie *named* `janua_sso` — a hosted
+  cookie minted on that response is dropped by Node like every other header, so
+  it never reaches the browser to overwrite anything.
+- **`/signout` does not clear it.** Only the OIDC `end_session` endpoint clears
+  `janua_access_token`; a person who signs out through the SDK's logout route
+  keeps it.
+
+Ordering at the one seam that reads both cookies is the only fix that does not
+depend on a cookie one origin cannot reach.
+
+### The rule
+
+`get_user_from_cookie_or_header` (`routers/v1/oauth_provider.py`), whose only
+callers are `GET /authorize` and `POST /consent`, resolves in this order:
+
+1. **`Authorization: Bearer`** — unchanged, still first. An API client attaching
+   a token is naming the identity it means to act as, explicitly, per request;
+   nothing ambient can be staler than that.
+2. **`janua_sso`** — the estate session. Preferred because it is by construction
+   the most recent estate login (the only way it reaches a browser is a relay
+   from a login that just happened) and because it is the only one of the three
+   whose validity is re-read from `sessions` on every use, hence revocable — a
+   `janua_access_token` stays valid until its own `exp` no matter what happens to
+   its session.
+3. **`janua_access_token`** — the hosted-login session, used when no valid estate
+   session exists. The hosted password form is unaffected.
+
+**Both valid, different people → the newer session wins.** The estate row's
+`created_at` comes back with resolution; the hosted cookie's row is looked up by
+`sessions.access_token_jti == jti`. That column is rotated by
+`AuthService.refresh_tokens`, so the row may legitimately not be found — an
+undatable hosted session cannot be shown to be newer, so the estate session keeps
+precedence, as it does on an exact tie. The disagreement is logged at `info` with
+both user ids **redacted to an 8-character prefix** and both session start times,
+so an operator can see it happened without full ids entering a log line. Same
+user in both cookies: no contest, nothing logged.
+
+Recency is read from `created_at`, falling back to `last_activity` only when a
+row carries no `created_at` — deliberately not the other way round, since a
+background token refresh on an old session must not be able to make it look newer
+than a login that just happened.
+
+### What J9 does not change
+
+Every security property of R1 stands. `janua_sso` is still resolved in exactly
+one function with exactly two callers; the `sso_session` token type still makes
+its value useless as a bearer credential everywhere; a forged cookie still cannot
+revoke someone else's session, because the signature is verified before anything
+is revoked; and precedence is still only about *who* the person is — email
+verification, MFA and third-party consent are enforced downstream exactly as
+before, which is why a revoked estate session falls back to the hosted cookie
+rather than short-circuiting the request.
+
+**No migration.** J9 adds no table, no column and no alembic revision; it reads
+`sessions.created_at`, which has always been there.
 
 ### Logout
 

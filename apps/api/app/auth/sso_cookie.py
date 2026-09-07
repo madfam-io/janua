@@ -49,6 +49,16 @@ cookie too, for free.
 Refresh rotation mutates `refresh_token_jti` on that same row and leaves
 `session.id` alone, so a rotation does not invalidate the cookie and nothing has
 to be re-issued on the `/authorize` response.
+
+## Precedence at `/authorize` (J9)
+
+This cookie is resolved **before** `janua_access_token`, not after it. A browser
+that once completed a hosted login on the issuer host keeps that cookie, no other
+host in the estate can delete it, and `/signout` does not clear it — so ranking
+it first meant a stale hosted login silently outranked the estate login that had
+just happened, and the ERP's silent hop got a code for the wrong person. See
+`get_user_from_cookie_or_header` in `routers/v1/oauth_provider.py` for the rule
+and how a disagreement between two valid cookies is decided.
 """
 
 from __future__ import annotations
@@ -200,8 +210,10 @@ def _session_is_live(session: Any) -> bool:
     return True
 
 
-async def resolve_sso_cookie_user(cookie_value: str, db: AsyncSession) -> Optional[User]:
-    """Resolve the person behind a `janua_sso` cookie, or `None`.
+async def resolve_sso_cookie_session(
+    cookie_value: str, db: AsyncSession
+) -> tuple[Optional[User], Optional[Any]]:
+    """Resolve the person behind a `janua_sso` cookie **and the row it names**.
 
     Signature, issuer and expiry are enforced by `verify_token`; the token type
     gate means an access or refresh token presented here is refused. Audience
@@ -211,51 +223,68 @@ async def resolve_sso_cookie_user(cookie_value: str, db: AsyncSession) -> Option
 
     Everything after signature verification is a live read of the `sessions` row,
     which is what makes the cookie revocable.
+
+    Returns `(user, session_row)` — both `None` when the cookie does not
+    authenticate. The row comes back because `/authorize` needs its `created_at`
+    to break a disagreement with a stale `janua_access_token` (J9); it is the
+    row this function already loaded, not a second query. `resolve_sso_cookie_user`
+    is the historical, user-only face of exactly this logic.
     """
     payload = jwt_manager.verify_token(
         cookie_value, token_type=SSO_TOKEN_TYPE, verify_audience=False
     )
     if not payload:
-        return None
+        return None, None
 
     user_id = payload.get("sub")
     session_id = payload.get("sid")
     if not user_id or not session_id:
         logger.warning("janua_sso cookie missing sub/sid")
-        return None
+        return None, None
 
     try:
         session_uuid = UUID(str(session_id))
     except (ValueError, AttributeError, TypeError):
         logger.warning("janua_sso cookie carries an unparseable sid")
-        return None
+        return None, None
 
     result = await db.execute(select(UserSession).where(UserSession.id == session_uuid))
     session = result.scalar_one_or_none()
     if session is None:
         logger.info("janua_sso cookie references an unknown session")
-        return None
+        return None, None
 
     if not _session_is_live(session):
         logger.info("janua_sso cookie references a revoked or expired session")
-        return None
+        return None, None
 
     if str(getattr(session, "user_id", "")) != str(user_id):
         # The signature makes this unreachable short of a key compromise; refuse
         # rather than trust the claim over the row.
         logger.warning("janua_sso cookie sub does not match its session row")
-        return None
+        return None, None
 
     user_result = await db.execute(select(User).where(User.id == session.user_id))
     user: Optional[User] = user_result.scalar_one_or_none()
     if user is None:
-        return None
+        return None, None
 
     status = getattr(user, "status", None)
     if status is not None and status != UserStatus.ACTIVE:
         logger.info("janua_sso cookie references a non-active user")
-        return None
+        return None, None
 
+    return user, session
+
+
+async def resolve_sso_cookie_user(cookie_value: str, db: AsyncSession) -> Optional[User]:
+    """Resolve the person behind a `janua_sso` cookie, or `None`.
+
+    The user-only face of `resolve_sso_cookie_session`; every rule and every
+    refusal lives there. Kept because it is the published shape callers and tests
+    address.
+    """
+    user, _session = await resolve_sso_cookie_session(cookie_value, db)
     return user
 
 
