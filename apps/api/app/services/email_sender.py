@@ -24,17 +24,24 @@ consulted on its own — every candidate address is checked against
 default `madfam.io`) and an address on an unverified domain is DOWNGRADED, not
 sent. See `_fallback_for`.
 
-The downgrade is deliberately partial: the tenant's DISPLAY NAME survives, only
-the address reverts.
+THE DOWNGRADE IS TOTAL, NOT PARTIAL (reversed 2026-09-07). It used to keep the
+tenant's DISPLAY NAME and revert only the address. That shipped, and the first
+CTM magic link arrived as `Crea Tu Mundo <hola@madfam.io>` — a From line naming
+one party over another party's mailbox. Only MADFAM sends from `hola@madfam.io`,
+so the brand name may only appear beside the BRAND'S address. Display name and
+address are now one decision:
 
-    creatumundo.mx NOT yet verified -> Crea Tu Mundo <hola@madfam.io>
+    creatumundo.mx NOT yet verified -> MADFAM <hola@madfam.io>
     creatumundo.mx verified         -> Crea Tu Mundo <hola@creatumundo.mx>
 
-That means merging this branch changes nothing about deliverability, and the
-production cutover is a one-line manifest edit (add `creatumundo.mx` to
-`RESEND_VERIFIED_DOMAINS`) with a one-line rollback (remove it). The code path
-that runs before and after verification is the same code path, so the cutover
-is not also a first execution.
+Body branding is untouched: `email_branding.py` still renders the tenant header,
+palette, voice and clock on both sides of that line. What waits for verification
+is the envelope claim, not the tenant's presence in the message.
+
+The production cutover is still a one-line manifest edit (add `creatumundo.mx`
+to `RESEND_VERIFIED_DOMAINS`) with a one-line rollback (remove it), and the code
+path that runs before and after verification is still the same code path, so the
+cutover is not also a first execution.
 
 WHY THE SIGNAL IS THE REDIRECT HOST. Same reason as `email_branding.py`: the
 auth mailer runs inside FastAPI BackgroundTasks with no DB session, so the
@@ -72,6 +79,7 @@ from urllib.parse import urlparse
 
 from app.config import settings
 from app.services.sender_binding import (
+    PLATFORM_BINDING,
     SenderBinding,
     all_bindings,
     resolve_binding,
@@ -90,10 +98,13 @@ from app.services.sender_policy import is_vcto_entitled
 # --------------------------------------------------------------------------
 Sender = Tuple[str, str, str]
 
-# The MADFAM default. Reads from settings so an operator can still move the
-# platform sender with env alone, exactly as before this module existed.
-DEFAULT_SENDER_NAME = "MADFAM"
-DEFAULT_SENDER_ADDRESS = "hola@madfam.io"
+# The MADFAM default. DERIVED from the platform binding rather than restated,
+# so there is exactly one place that decides what "the platform sender" is —
+# and so the downgrade in `_fallback_for` cannot ship a display name the
+# platform binding does not actually carry. Settings still override at
+# resolution time, so an operator can move the platform sender with env alone.
+DEFAULT_SENDER_NAME = PLATFORM_BINDING.display_name
+DEFAULT_SENDER_ADDRESS = PLATFORM_BINDING.from_address
 
 
 def _as_triple(binding: SenderBinding) -> Sender:
@@ -126,7 +137,14 @@ SENDER_HOSTS: Dict[str, Tuple[str, ...]] = {
 
 
 def _default_sender() -> Sender:
-    """`MADFAM <hola@madfam.io>`, or whatever env overrides it to."""
+    """The PLATFORM binding: `MADFAM <hola@madfam.io>`, or whatever env says.
+
+    Since 2026-09-07 this is also what every downgrade returns — see
+    `_fallback_for`. The two were separate functions producing different
+    answers (this one whole, that one name-swapped), which is how
+    `Crea Tu Mundo <hola@madfam.io>` reached a production inbox. They now
+    return the same triple and `_fallback_for` delegates here.
+    """
     name = settings.FROM_NAME or settings.EMAIL_FROM_NAME or DEFAULT_SENDER_NAME
     address = settings.FROM_EMAIL or settings.EMAIL_FROM_ADDRESS or DEFAULT_SENDER_ADDRESS
     return name, address, address
@@ -180,23 +198,50 @@ def _tenant_for_org_id(org_id: Optional[object]) -> Optional[str]:
     return _binding_tenant_for_org_id(org_id)
 
 
-def _fallback_for(sender: Sender) -> Sender:
-    """Downgrade a sender whose domain Resend has not verified.
+def _fallback_for(_sender: Optional[Sender] = None) -> Sender:
+    """The PLATFORM sender, verbatim — name and address together.
 
-    Keeps the tenant's DISPLAY NAME and reverts only the address, so a CTM
-    recipient still sees "Crea Tu Mundo" in their inbox list before the domain
-    is verified — the brand arrives early, the deliverability risk never does.
-    Reply-to follows the address it can actually be sent from.
+    THIS IS THE 2026-09-07 REVERSAL. Until this commit the downgrade was
+    deliberately partial: it kept the tenant's DISPLAY NAME and reverted only
+    the address, on the theory that "the brand arrives early, the
+    deliverability risk never does". Production disproved the theory. The first
+    magic link requested from `map.creatumundo.mx` arrived in the CTM inbox at
+    2026-09-07 02:32:21 CDMX as:
+
+        From: Crea Tu Mundo <hola@madfam.io>
+
+    That header is a claim about two different parties at once. `hola@madfam.io`
+    is MADFAM's mailbox and only MADFAM sends from it; putting a client's name
+    in front of it tells the recipient that Crea Tu Mundo sends from MADFAM's
+    address, which is not true, is not something a recipient can verify, and is
+    the exact shape of a display-name spoof that mail clients teach people to
+    distrust. Owner directive the same night: that From must NEVER be produced.
+
+    So the display name and the address are now ONE decision keyed on a single
+    fact — is the binding's own address domain verified for the account that
+    will send it. Verified: the tenant's name AND the tenant's address.
+    Not verified: the platform binding, verbatim, with the platform's own
+    display name. There is no state in between, because the in-between state is
+    the header above.
+
+        creatumundo.mx NOT yet verified -> MADFAM <hola@madfam.io>
+        creatumundo.mx verified         -> Crea Tu Mundo <hola@creatumundo.mx>
+
+    The argument is accepted and ignored: callers pass the sender they were
+    downgrading, and keeping the parameter means the reversal is one function
+    body rather than a change at every call site. Nothing about the tenant
+    survives the downgrade by design — that is the whole point.
+
+    BODY BRANDING IS UNAFFECTED. `email_branding.py` still renders the tenant's
+    header, palette, voice and clock. What is being withheld is the ENVELOPE
+    claim, not the tenant's presence in the message.
     """
-    name, _address, _reply_to = sender
-    _dname, default_address, default_reply = _default_sender()
-    if not is_verified_domain(default_address):
-        # The platform's OWN address is unverified. That is a misconfiguration
-        # of RESEND_VERIFIED_DOMAINS, not a tenant problem — return it anyway
-        # rather than inventing a third address, so the operator sees the real
-        # rejection from Resend instead of mail silently coming from elsewhere.
-        return name, default_address, default_reply
-    return name, default_address, default_reply
+    # No verified-domain check on the platform address itself: if MADFAM's own
+    # domain is missing from RESEND_VERIFIED_DOMAINS that is an operator
+    # misconfiguration, and returning it anyway means the operator sees the
+    # real rejection from Resend rather than mail silently coming from a third
+    # address this function invented.
+    return _default_sender()
 
 
 def tenant_for(
@@ -257,16 +302,18 @@ def sender_for(
 
       * **The vCTO gate** (`sender_policy.is_vcto_entitled`). A branded From
         line is reserved for clients whose infrastructure MADFAM operates —
-        owner directive 2026-09-06. A tenant that does not pass keeps its
-        DISPLAY NAME and reverts to the platform address, which is the same
-        partial downgrade the verification gate performs, for the same reason:
-        the brand is cosmetic, the address is operational. `vcto_entitled`
-        lets a caller holding a DB session supply the authoritative answer;
-        without one the policy module's cache decides and fails closed.
+        owner directive 2026-09-06. `vcto_entitled` lets a caller holding a DB
+        session supply the authoritative answer; without one the policy
+        module's cache decides and fails closed.
 
-      * **The verified-domain gate**, now evaluated against the ACCOUNT the
-        binding names (see `is_verified_domain`). An unverified domain is
-        downgraded to the default address, keeping the tenant display name.
+      * **The verified-domain gate**, evaluated against the ACCOUNT the binding
+        names (see `is_verified_domain`).
+
+    EITHER GATE FAILING RETURNS THE PLATFORM BINDING WHOLE — name and address
+    together (owner directive 2026-09-07; see `_fallback_for`). It used to
+    return the tenant's display name on the platform address, which produced
+    `Crea Tu Mundo <hola@madfam.io>` in a real inbox. The display name now
+    follows the address it is entitled to, always.
 
     Neither gate is bypassable from a caller: passing `vcto_entitled=True` for
     a tenant whose domain is unverified still downgrades, because the second
@@ -281,7 +328,9 @@ def sender_for(
     sender = _as_triple(binding)
 
     if not is_vcto_entitled(tenant, vcto_entitled=vcto_entitled):
-        # Not a vCTO client: the name ships, the domain does not.
+        # Not a vCTO client: neither the name nor the domain ships. A branded
+        # display name on the platform address is the header this whole module
+        # was reversed on 2026-09-07 to stop producing.
         return _fallback_for(sender)
 
     if not is_verified_domain(sender[1], binding=binding):
@@ -308,8 +357,16 @@ def sender_for_address(
 
     So: an explicit address is used when its domain is in
     `RESEND_VERIFIED_DOMAINS`, and otherwise the caller's From is DISCARDED and
-    the host rule decides. A caller's display name is still honoured in the
-    fallback — naming yourself is harmless, claiming a domain is not.
+    the host rule decides.
+
+    2026-09-07: THE CALLER'S DISPLAY NAME IS DISCARDED WITH IT. It used to
+    survive — "naming yourself is harmless, claiming a domain is not" — and
+    that reasoning is what let `Crea Tu Mundo <hola@madfam.io>` be assembled
+    from two individually harmless halves. A display name is only harmless
+    while it names the party that owns the address underneath it. So the name
+    is honoured exactly where the address is: on a verified address the caller
+    was allowed to claim, and nowhere else. Once the host rule has fallen back
+    to the platform binding, the From is the platform's, whole.
 
     THE vCTO GATE APPLIES HERE TOO, and it has to. If an explicit `from_email`
     could reach a tenant domain without passing the gate, then "restrict
@@ -332,7 +389,13 @@ def sender_for_address(
         org_id=org_id,
         vcto_entitled=vcto_entitled,
     )
-    if from_name:
+    # `from_name` is applied only when the resolved address is one the caller
+    # would have been entitled to claim outright — i.e. the tenant's own
+    # branded address survived both gates. On the platform address it is
+    # dropped: see the 2026-09-07 note above. Without this check a caller could
+    # pass `from_name="Crea Tu Mundo"` with no address at all and reassemble
+    # the exact header the reversal forbids.
+    if from_name and address != _default_sender()[1]:
         name = from_name
     return name, address, reply_to
 

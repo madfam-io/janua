@@ -64,13 +64,20 @@ def resolve_sender(redirect_url: str | None = None) -> tuple[str, str]:
 
         no tenant signal          -> MADFAM <hola@madfam.io>
         a CTM host, domain verified   -> Crea Tu Mundo <hola@creatumundo.mx>
-        a CTM host, NOT yet verified  -> Crea Tu Mundo <hola@madfam.io>
+        a CTM host, NOT yet verified  -> MADFAM <hola@madfam.io>
 
     WHY THE THIRD LINE EXISTS. Resend rejects a send from a domain it has not
     verified — an unverified sender means the sign-in link does not arrive at
-    all, which is strictly worse than the wrong brand on the envelope. So the
-    address is gated on `RESEND_VERIFIED_DOMAINS` while the display name is
-    not; see `app/services/email_sender.py` and `docs/EMAIL_SENDER_POLICY.md`.
+    all, which is strictly worse than the platform brand on the envelope. So
+    the address is gated on `RESEND_VERIFIED_DOMAINS`.
+
+    WHY THE THIRD LINE IS THE PLATFORM SENDER WHOLE. It used to read
+    `Crea Tu Mundo <hola@madfam.io>` — the display name shipped while the
+    address waited. That reached a CTM inbox on 2026-09-07 and was rejected:
+    only MADFAM sends from `hola@madfam.io`, so a client's name may not sit in
+    front of it. Display name and address are one decision now; see
+    `app/services/email_sender.py::_fallback_for` and
+    `docs/EMAIL_SENDER_POLICY.md`.
 
     WHY THE ORIGINAL PHASE-1 REASONING STILL HOLDS FOR EVERYONE ELSE. A client
     who has no domain of their own meets several MADFAM platforms over an

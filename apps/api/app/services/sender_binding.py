@@ -120,8 +120,12 @@ class SenderBinding:
     #: never be CTM-branded in the body and someone else on the envelope.
     tenant: str
 
-    #: The From display name. Survives every downgrade: naming yourself is
-    #: harmless, claiming a domain is not (see `email_sender.sender_for_address`).
+    #: The From display name. It does NOT survive a downgrade (reversed
+    #: 2026-09-07): a display name is only meaningful beside the address whose
+    #: owner it names, and `Crea Tu Mundo <hola@madfam.io>` — which the old
+    #: "the name always survives" rule produced in a real inbox — names one
+    #: party over another's mailbox. Name and address move together; see
+    #: `email_sender._fallback_for`.
     display_name: str
 
     #: The From address a fully-enabled binding sends from.

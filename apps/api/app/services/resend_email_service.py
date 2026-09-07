@@ -149,10 +149,13 @@ class ResendEmailService:
 
             # Production mode: Resend API
             # Phase 2: the From line follows the tenant when that tenant's
-            # domain is Resend-verified, and falls back to the MADFAM address
-            # (keeping the tenant's display name) when it is not. This used to
-            # be an unconditional f-string over settings, which meant a CTM
-            # message went out as MADFAM no matter what the caller asked for.
+            # domain is Resend-verified, and falls back to the PLATFORM sender
+            # WHOLE — `MADFAM <hola@madfam.io>`, name and address — when it is
+            # not (owner directive 2026-09-07; the earlier partial downgrade
+            # put the tenant's name on MADFAM's address and reached a real
+            # inbox). This used to be an unconditional f-string over settings,
+            # which meant a CTM message went out as MADFAM no matter what the
+            # caller asked for.
             sender_name, sender_address, sender_reply_to = sender_for_address(
                 from_email=from_email,
                 from_name=from_name,
@@ -205,9 +208,15 @@ class ResendEmailService:
                         credential_ref=binding.credential_ref,  # a name, not a value
                         error=str(exc),
                     )
+                    # `from_name` is deliberately NOT carried over. Passing
+                    # the tenant's resolved display name here would rebuild
+                    # `Crea Tu Mundo <hola@madfam.io>` on the one path that
+                    # skips the gates — the credential failure — which is the
+                    # header the 2026-09-07 reversal forbids. A fallback to the
+                    # platform account sends as the platform, whole.
                     sender_name, sender_address, sender_reply_to = sender_for_address(
                         from_email=None,
-                        from_name=sender_name,
+                        from_name=None,
                         redirect_url=None,
                         org_id=None,
                     )

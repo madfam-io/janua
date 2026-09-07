@@ -4,6 +4,48 @@
 every new engagement; Phase 2 begins per-client, when MADFAM takes over
 managing that client's web presence.
 
+## THE RULE (2026-09-07) — the display name follows the address
+
+> A From header pairing a client's display name with an address on MADFAM's
+> domain — `Crea Tu Mundo <hola@madfam.io>` — must **never** be produced.
+
+Only MADFAM sends from `hola@madfam.io`. A brand display name may appear only
+beside **that brand's own address** (`hola@creatumundo.mx`), which is allowed
+only once `creatumundo.mx` is in `RESEND_VERIFIED_DOMAINS`. Until then every
+message for that tenant is sent as the platform sender, whole:
+`MADFAM <hola@madfam.io>`.
+
+Display name and address are **one decision**, keyed on a single fact: is the
+binding's own address domain verified for the account that will send it. Both
+move together or neither moves. There is no intermediate state.
+
+**Why.** A display name is a claim about who owns the mailbox beside it. The
+recipient cannot verify it, and a name that does not match its address is the
+exact shape of the display-name spoof mail clients teach people to distrust.
+Withholding the address while shipping the name does not deliver "half the
+brand" — it delivers a false statement.
+
+**This reverses the earlier rule, and the reversal is evidence-driven.** #603
+deliberately shipped the opposite ("the display name moves as soon as the code
+ships; only the address waits"). That behaviour was **observed in production on
+2026-09-07**: the first magic link requested from `map.creatumundo.mx` arrived
+in the CTM inbox at 02:32:21 CDMX as `Crea Tu Mundo <hola@madfam.io>`, subject
+`Tu enlace de acceso | 2026-09-07 02:32:21`. Owner directive the same night
+rejected it. Everything below that describes a partial downgrade is superseded
+by this section.
+
+**Body branding is unaffected.** `email_branding.py` still renders the tenant's
+header wordmark, palette, voice (tú/usted) and CDMX clock on both sides of the
+verification line, and the hosted-hop interstitial still carries the tenant
+title. What waits for verification is the **envelope claim**, not the tenant's
+presence in the message.
+
+Enforced in `app/services/email_sender.py::_fallback_for`, fenced by
+`tests/unit/services/test_email_sender.py::TestDisplayNameFollowsAddress`
+(including a property-style sweep asserting that no binding, under any signal
+or gate state, ever pairs a tenant display name with an address on the platform
+domain).
+
 ## Phase 1 — MADFAM sends, the platform is credited
 
 Applies from first contact until we manage the client's domain.
@@ -78,17 +120,20 @@ by Resend** and never sent at all.
 has verified. `app/services/email_sender.py::sender_for()` resolves the tenant
 from the redirect host (or an explicit `org_id`) and then checks the resolved
 address against that list. An address on an unverified domain is **downgraded,
-not sent** — and the downgrade is partial:
+not sent** — and since 2026-09-07 the downgrade is **total**: the display name
+goes back with the address.
 
 | `RESEND_VERIFIED_DOMAINS` | A CTM message comes from |
 |---|---|
-| `madfam.io` | `Crea Tu Mundo <hola@madfam.io>` |
+| `madfam.io` | `MADFAM <hola@madfam.io>` |
 | `madfam.io,creatumundo.mx` | `Crea Tu Mundo <hola@creatumundo.mx>` |
 
-The tenant's **display name** ships immediately; only the **address** waits for
-verification. So merging Phase 2 moves no mail, and the production cutover is
-one env edit with a one-env-edit rollback — over the same code path that was
-already running, which is why the cutover is not also a first execution.
+The tenant's **display name waits with the address** — see [THE RULE](#the-rule-2026-09-07--the-display-name-follows-the-address).
+This table previously showed `Crea Tu Mundo <hola@madfam.io>` in the first row;
+that state was observed in production on 2026-09-07 and rejected. Merging still
+moves no mail, and the production cutover is still one env edit with a
+one-env-edit rollback — over the same code path that was already running, which
+is why the cutover is not also a first execution.
 
 The step-by-step is [`runbooks/resend-domain-onboarding.md`](./runbooks/resend-domain-onboarding.md);
 `scripts/resend_domain_onboard.py` creates the domain and prints the exact DNS
@@ -100,8 +145,15 @@ path) as `enclii providers cloudflare dns-apply` lines.
 `POST /api/v1/email/send` accepts `from_email` / `from_name` from other MADFAM
 services. These used to be ignored outright. They are now honoured **under the
 same gate**: an explicit address is used only when its domain is verified, and
-otherwise discarded in favour of the tenant/host rule. A caller's display name
-is always honoured — naming yourself is harmless, claiming a domain is not.
+otherwise discarded in favour of the tenant/host rule.
+
+**2026-09-07: the caller's display name is discarded with it.** The earlier
+rule — "a caller's display name is always honoured; naming yourself is
+harmless, claiming a domain is not" — is what allowed the forbidden header to
+be assembled from two individually harmless halves, including by a caller
+passing `from_name` alone with no address at all. A display name is honoured
+exactly where the address is: on a verified address the caller was entitled to
+claim, and nowhere else.
 
 ## Phase 1, refined — MADFAM sends, the BODY is the tenant's
 
@@ -345,8 +397,9 @@ the send path. `sender_policy.is_vcto_entitled` consults, in order: an explicit
 decision from a caller that DOES hold a session, then a process cache refreshed
 by the admin endpoints, then **not entitled**.
 
-"Fail closed" means the message still goes out — from `hola@madfam.io`, keeping
-the tenant's display name. It never means a sign-in link fails to arrive. That
+"Fail closed" means the message still goes out — as `MADFAM <hola@madfam.io>`,
+the platform sender whole (2026-09-07: it used to keep the tenant's display
+name; see THE RULE). It never means a sign-in link fails to arrive. That
 ordering is the same one the verified-domain gate was built on.
 
 CTM is **seeded** entitled in code, because a cold process has an empty cache

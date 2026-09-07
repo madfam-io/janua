@@ -126,18 +126,26 @@ class TestResolveBranding:
 # The From line — Phase 2, gated on the sending domain being verified
 # --------------------------------------------------------------------------
 class TestSenderUnderTheVerifiedDomainGate:
-    """These used to pin "the sender NEVER changes" (Phase 1). It changes now
-    — but only as far as the verified-domain gate allows. With the default
-    `RESEND_VERIFIED_DOMAINS=madfam.io`, a CTM message carries the CTM display
-    name on the MADFAM address, so merging Phase 2 moves no mail. The address
-    moves the day `creatumundo.mx` is added to that list, which is what
-    `test_ctm_from_is_creatumundo_once_verified` covers.
+    """These used to pin "the sender NEVER changes" (Phase 1), then "the CTM
+    NAME on the MADFAM address" (Phase 2, #603). Both are superseded.
+
+    2026-09-07: the display name follows the address. With the default
+    `RESEND_VERIFIED_DOMAINS=madfam.io` a CTM message is the PLATFORM sender
+    whole — `MADFAM <hola@madfam.io>` — so merging still moves no mail, and
+    the day `creatumundo.mx` joins that list the NAME and the ADDRESS move
+    together (`test_ctm_from_is_creatumundo_once_verified`). The intermediate
+    state this class used to assert, `Crea Tu Mundo <hola@madfam.io>`, reached
+    a real CTM inbox at 02:32:21 CDMX that morning and was rejected: only
+    MADFAM sends from `hola@madfam.io`.
+
+    BODY branding is unaffected and still asserted below — the tenant header,
+    palette and voice render on both sides of the verification line.
     """
 
-    def test_resolve_sender_carries_ctm_name_on_madfam_address_before_verification(self):
-        """Default config: the brand arrives, the unverified domain does not."""
+    def test_resolve_sender_is_the_platform_sender_before_verification(self):
+        """Default config: neither the unverified domain NOR the brand name."""
         name, address = resolve_sender(CTM_REDIRECT)
-        assert (name, address) == ("Crea Tu Mundo", "hola@madfam.io")
+        assert (name, address) == ("MADFAM", "hola@madfam.io")
 
     def test_resolve_sender_is_madfam_without_a_tenant_signal(self):
         """No signal is still, and always, MADFAM."""
@@ -145,14 +153,15 @@ class TestSenderUnderTheVerifiedDomainGate:
         assert resolve_sender("https://example.test/go") == ("MADFAM", "hola@madfam.io")
 
     @pytest.mark.asyncio
-    async def test_ctm_magic_link_address_stays_madfam_until_verified(self):
-        """A CTM magic link is sent from the MADFAM ADDRESS while
-        `creatumundo.mx` is unverified — with the CTM name on it.
+    async def test_ctm_magic_link_is_the_platform_sender_until_verified(self):
+        """A CTM magic link is sent as `MADFAM <hola@madfam.io>` — the platform
+        sender whole — while `creatumundo.mx` is unverified.
 
         This is the deliverability line: Resend REJECTS a send from an
         unverified domain, so shipping the CTM address before verification
         would break every CTM sign-in link. We drive the real send path and
-        read the From header off the Resend payload.
+        read the From header off the Resend payload — which is precisely how
+        the 2026-09-07 production header would have been caught.
         """
         captured = {}
 
@@ -180,13 +189,17 @@ class TestSenderUnderTheVerifiedDomainGate:
                 locale="es",
             )
         assert sent is True
-        # Name is CTM's, address is still MADFAM's (unverified domain gate).
-        assert captured["from"] == formataddr(("Crea Tu Mundo", "hola@madfam.io"))
+        # Neither the name nor the address is CTM's: the unverified-domain gate
+        # returns the platform binding whole.
+        assert captured["from"] == formataddr(("MADFAM", "hola@madfam.io"))
+        assert captured["from"] != formataddr(("Crea Tu Mundo", "hola@madfam.io"))
 
     @pytest.mark.asyncio
-    async def test_ctm_body_and_from_both_carry_the_brand(self):
-        """Same send: body and From both read Crea Tu Mundo; only the ADDRESS
-        is still MADFAM's, and only because the domain is not yet verified."""
+    async def test_ctm_body_carries_the_brand_while_the_envelope_waits(self):
+        """Same send: the BODY reads Crea Tu Mundo, the ENVELOPE is MADFAM's,
+        whole. This is the split the 2026-09-07 rule draws — body branding is
+        the tenant's presence in the message, the From line is a claim about
+        who owns the mailbox, and only the second one waits for verification."""
         captured = {}
 
         async def fake_post(url, headers=None, json=None):
@@ -209,7 +222,8 @@ class TestSenderUnderTheVerifiedDomainGate:
             await service.send_magic_link_email(
                 "ana@creatumundo.mx", "tok123", redirect_url=CTM_REDIRECT, locale="es"
             )
-        assert captured["from"] == formataddr(("Crea Tu Mundo", "hola@madfam.io"))
+        assert captured["from"] == formataddr(("MADFAM", "hola@madfam.io"))
+        # The brand is in the BODY, which is what was never gated.
         assert "Crea Tu Mundo" in captured["html"]
         assert "Con tecnología de" in captured["html"]
         assert "Impulsado por" not in captured["html"]

@@ -310,23 +310,26 @@ class TestSenderUnderTheVctoGate:
                 "hola@creatumundo.mx",
             )
 
-    def test_a_non_vcto_tenant_keeps_the_name_and_loses_the_domain(self):
-        """The brand is cosmetic, the address is operational — so the downgrade
-        is partial, exactly as under the verification gate."""
+    def test_a_non_vcto_tenant_loses_the_name_with_the_domain(self):
+        """Reversed 2026-09-07. The downgrade used to be partial — "the brand
+        is cosmetic, the address is operational" — and that produced
+        `Crea Tu Mundo <hola@madfam.io>` in a production inbox. A display name
+        is a claim about who owns the address beside it, so it is exactly as
+        operational as the address: both gates now return the platform binding
+        whole."""
         with verified("madfam.io", "creatumundo.mx"):
             name, address, reply_to = sender_module.sender_for(
                 host="creatumundo.mx", vcto_entitled=False
             )
-        assert name == "Crea Tu Mundo"
-        assert address == "hola@madfam.io"
-        assert reply_to == "hola@madfam.io"
+        assert (name, address, reply_to) == MADFAM
 
     def test_the_gate_does_not_rescue_an_unverified_domain(self):
         """Both gates apply. Being a vCTO client does not make Resend accept a
-        send from a domain it has not verified."""
+        send from a domain it has not verified — and since 2026-09-07 the
+        failed gate takes the display name with it."""
         with verified("madfam.io"):
             name, address, _ = sender_module.sender_for(host="creatumundo.mx", vcto_entitled=True)
-        assert (name, address) == ("Crea Tu Mundo", "hola@madfam.io")
+        assert (name, address) == ("MADFAM", "hola@madfam.io")
 
     def test_revocation_through_the_cache_moves_the_sender(self):
         with verified("madfam.io", "creatumundo.mx"):
@@ -344,14 +347,16 @@ class TestCallerSuppliedAddressIsGated:
     """The internal door must not be a way around the vCTO restriction."""
 
     def test_a_clients_domain_from_an_unentitled_caller_is_discarded(self):
+        """The address is discarded, and since 2026-09-07 so is the name that
+        came with it: a caller who may not claim the domain may not claim to
+        be its owner over MADFAM's address either."""
         with verified("madfam.io", "creatumundo.mx"):
             name, address, _ = sender_module.sender_for_address(
                 from_email="facturas@creatumundo.mx",
                 from_name="Facturación",
                 vcto_entitled=False,
             )
-        assert address == "hola@madfam.io"
-        assert name == "Facturación"
+        assert (name, address) == ("MADFAM", "hola@madfam.io")
 
     def test_a_clients_domain_from_an_entitled_caller_is_honoured(self):
         with verified("madfam.io", "creatumundo.mx"):
