@@ -63,6 +63,54 @@ class TestDynamicCORSMiddlewareDefaults:
         assert middleware.allow_headers == expected
 
 
+class TestDynamicCORSWildcardBoundary:
+    """A `*.domain` CORS entry must only match on a dot boundary.
+
+    The pre-fix implementation used a bare `origin_domain.endswith(domain)`,
+    which accepted `evilmadfam.io` for `*.madfam.io` — an attacker who
+    registers a lookalike domain would get credentialed CORS access to the
+    Janua API. `core/url_security.py::_host_matches_pattern` already enforced
+    the dot boundary; this pins the CORS middleware to the same rule.
+    """
+
+    def _middleware(self, allowed):
+        from app.middleware.dynamic_cors import DynamicCORSMiddleware
+
+        async def homepage(request):
+            return PlainTextResponse("OK")
+
+        app = Starlette(routes=[Route("/", homepage)])
+        with patch("app.middleware.dynamic_cors.settings") as mock_settings:
+            mock_settings.cors_origins_list = list(allowed)
+            return DynamicCORSMiddleware(app, enable_database_origins=False)
+
+    def test_subdomain_still_matches(self):
+        mw = self._middleware(["*.madfam.io"])
+        allowed = {"*.madfam.io"}
+        assert mw._is_origin_allowed("https://crea-map.madfam.io", allowed)
+        assert mw._is_origin_allowed("https://auth.madfam.io", allowed)
+
+    def test_base_domain_still_matches(self):
+        mw = self._middleware(["*.madfam.io"])
+        assert mw._is_origin_allowed("https://madfam.io", {"*.madfam.io"})
+
+    def test_lookalike_domain_is_rejected(self):
+        """REGRESSION: fails on the pre-fix bare endswith()."""
+        mw = self._middleware(["*.madfam.io"])
+        allowed = {"*.madfam.io"}
+        assert not mw._is_origin_allowed("https://evilmadfam.io", allowed)
+        assert not mw._is_origin_allowed("https://notmadfam.io", allowed)
+        assert not mw._is_origin_allowed("https://app.evilmadfam.io", allowed)
+
+    def test_unrelated_domain_is_rejected(self):
+        mw = self._middleware(["*.madfam.io"])
+        assert not mw._is_origin_allowed("https://evil.com", {"*.madfam.io"})
+
+    def test_exact_origin_match_unaffected(self):
+        mw = self._middleware(["https://madfam.io"])
+        assert mw._is_origin_allowed("https://madfam.io", {"https://madfam.io"})
+
+
 class TestMiddleware:
     """Test middleware functionality"""
 
