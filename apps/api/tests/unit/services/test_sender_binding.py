@@ -29,7 +29,6 @@ from unittest.mock import patch
 import pytest
 
 from app.services import email_sender as sender_module
-from app.services import sender_policy
 from app.services.email_branding import CTM_HOSTS
 from app.services.sender_binding import (
     ACCOUNT_MADFAM,
@@ -505,9 +504,17 @@ class TestInvariants:
             assert sender_module.SENDER_HOSTS[tenant] is binding.hosts
 
     def test_no_binding_sends_from_a_third_party_domain(self):
+        """Every sender address is on a domain MADFAM or the client owns.
+
+        Exact match or a DOT-BOUNDARY suffix, never a bare `endswith`: a plain
+        suffix test would accept `evilmadfam.io` and `notcreatumundo.mx`, which
+        is the same lookalike hole `_host_matches` exists to close on the host
+        side. (Flagged by CodeQL py/incomplete-url-substring-sanitization.)
+        """
+        owned = ("madfam.io", "creatumundo.mx")
         for _tenant, binding in all_bindings().items():
             domain = binding.from_address.rsplit("@", 1)[1].lower()
-            assert domain.endswith("creatumundo.mx") or domain.endswith("madfam.io")
+            assert any(domain == o or domain.endswith("." + o) for o in owned), domain
 
     def test_every_binding_has_a_credential_reference_not_a_value(self):
         """A binding is versioned configuration in git. A value here would be a
